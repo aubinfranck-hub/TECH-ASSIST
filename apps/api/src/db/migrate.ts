@@ -3,11 +3,18 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from './pool.js';
+import { extractSearchPathSchema } from '../utils/dbSchema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(__dirname, '..', '..', 'migrations');
 
 async function run() {
+  const schema = extractSearchPathSchema(process.env.DATABASE_URL!);
+  if (schema) {
+    console.log(`Base partagée détectée : création du schéma "${schema}" si absent...`);
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name TEXT PRIMARY KEY,
