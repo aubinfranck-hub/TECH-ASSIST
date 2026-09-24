@@ -1,0 +1,19 @@
+{
+  "name": "Tech Assist",
+  "short_name": "Tech Assist",
+  "description": "Assistance informatique à distance pour particuliers et PME en Côte d'Ivoire.",
+  "lang": "fr-CI",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#dc2626",
+  "icons": [
+    {
+      "src": "/logo-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
