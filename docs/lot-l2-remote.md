@@ -85,6 +85,25 @@ C'est un parcours honnête et fonctionnel, mais avec une étape manuelle
 (configuration réseau + copie d'ID/mot de passe) qui n'est pas encore au
 niveau "sans réglage" attendu par RF-10.
 
+## Distribution : miroir du client officiel
+
+`.github/workflows/mirror-rustdesk-client.yml` republie chaque semaine (ou à
+la demande) la dernière release officielle de RustDesk (Windows + Android)
+comme release de ce dépôt, avec empreinte SHA-256, et met à jour
+`apps/web/public/downloads-manifest.json`. Le portail affiche alors un lien
+de téléchargement sur notre propre domaine plutôt que vers GitHub
+directement, avec l'empreinte visible — ce que demande le cahier des charges
+en section Distribution, sans attendre le client personnalisé.
+
+`.github/workflows/build-custom-client.yml` est un squelette documenté (non
+fonctionnel) pour le futur client Windows personnalisé et signé — voir les
+`TODO` dans le fichier pour ce qu'il reste à faire (toolchain Rust/Flutter,
+injection de la config serveur au build, certificat de signature de code).
+
+Aucun des deux workflows n'a été exécuté ni vérifié depuis cet environnement
+(pas d'accès à GitHub Actions ici) : à tester au premier déclenchement
+manuel après le push.
+
 ## Ce qui reste (au-delà de ce lot)
 
 - **Client Windows sur mesure** (RF-10, RF-15) : construire un client

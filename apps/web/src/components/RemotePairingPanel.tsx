@@ -7,9 +7,16 @@ interface Props {
   onPaired: () => void;
 }
 
+interface DownloadsManifest {
+  windows: { version: string; sha256: string; filename: string };
+  android: { version: string; sha256: string; filename: string };
+  publishedAt: string;
+}
+
 export function RemotePairingPanel({ sessionId, alreadyPaired, onPaired }: Props) {
   const [config, setConfig] = useState<RemoteConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [manifest, setManifest] = useState<DownloadsManifest | null>(null);
   const [peerId, setPeerId] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -20,6 +27,12 @@ export function RemotePairingPanel({ sessionId, alreadyPaired, onPaired }: Props
       .get<RemoteConfig>('/api/remote-config')
       .then(setConfig)
       .catch(() => setConfigError("Le service d'assistance à distance n'est pas encore configuré. Réessayez plus tard."));
+    // Manifeste publié par .github/workflows/mirror-rustdesk-client.yml ; absent
+    // tant que ce workflow n'a pas tourné une première fois (pas d'erreur bloquante).
+    fetch('/downloads-manifest.json')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setManifest(data))
+      .catch(() => setManifest(null));
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -53,16 +66,36 @@ export function RemotePairingPanel({ sessionId, alreadyPaired, onPaired }: Props
       <h2 className="font-semibold">Installer et appairer l'outil</h2>
       <ol className="list-decimal pl-5 text-sm text-slate-600 space-y-2">
         <li>
-          Téléchargez le client RustDesk portable officiel (
-          <a
-            href="https://github.com/rustdesk/rustdesk/releases"
-            target="_blank"
-            rel="noreferrer"
-            className="text-brand-600 hover:underline"
-          >
-            page des versions
-          </a>
-          ) — aucune installation permanente n'est nécessaire.
+          Téléchargez le client RustDesk portable{' '}
+          {manifest ? (
+            <>
+              (
+              <a
+                href={`https://github.com/aubinfranck-hub/TECH-ASSIST/releases/tag/rustdesk-mirror-${manifest.windows.version}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-600 hover:underline"
+              >
+                version {manifest.windows.version}, hébergée par Tech Assist
+              </a>
+              , empreinte SHA-256 :{' '}
+              <code className="text-xs break-all">{manifest.windows.sha256}</code>)
+            </>
+          ) : (
+            <>
+              officiel (
+              <a
+                href="https://github.com/rustdesk/rustdesk/releases"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-600 hover:underline"
+              >
+                page des versions
+              </a>
+              )
+            </>
+          )}{' '}
+          — aucune installation permanente n'est nécessaire.
         </li>
         {config && (
           <li>

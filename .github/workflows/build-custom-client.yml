@@ -1,0 +1,80 @@
+name: Build client Windows personnalisé (squelette — non fonctionnel)
+
+# Squelette documenté pour un futur pipeline construisant un client RustDesk
+# Windows personnalisé (serveur/clé pré-configurés, mot de passe à usage
+# unique généré par notre API, signé) — voir docs/lot-l2-remote.md.
+#
+# NE PAS ACTIVER TEL QUEL : chaque étape ci-dessous nécessite du travail
+# supplémentaire non fait ici (voir commentaires). Ce fichier existe pour que
+# l'infrastructure soit visible et prête à être complétée, pas pour tourner
+# en l'état — désactivé par défaut (déclenchement manuel uniquement, aucune
+# publication tant que les TODO ne sont pas levés).
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # TODO : cloner le fork RustDesk (ou télécharger les sources de la
+      # version cible) — voir github.com/rustdesk/rustdesk. La compilation
+      # complète nécessite Rust (toolchain MSVC) + Flutter + vcpkg
+      # (dépendances natives). Prévoir un cache agressif : un build complet
+      # prend couramment 30-60 minutes sur un runner GitHub standard.
+      - name: TODO — installer la chaîne de compilation (Rust, Flutter, vcpkg)
+        run: |
+          echo "Non implémenté : voir la doc officielle self-build de RustDesk."
+          exit 1
+
+      # TODO : injecter notre configuration serveur par défaut (ID/relais/clé,
+      # voir RUSTDESK_ID_SERVER etc. dans .env.example) dans le binaire au
+      # moment de la compilation, selon le mécanisme de personnalisation
+      # documenté par RustDesk (variables d'environnement de build ou fichier
+      # de config compilé en dur — à confirmer selon la version ciblée).
+      - name: TODO — configurer le serveur par défaut dans le build
+        run: exit 1
+
+      # TODO : signature de code. Nécessite un certificat OV/EV valide
+      # (achat + validation, hors de portée de cet environnement) stocké en
+      # secret GitHub (ex: WINDOWS_CODESIGN_PFX + WINDOWS_CODESIGN_PASSWORD),
+      # puis signtool.exe sur le binaire produit. Sans cette étape,
+      # SmartScreen affichera un avertissement à chaque installation (RF-15).
+      - name: TODO — signer le binaire produit
+        run: exit 1
+
+      # TODO : publier l'artefact signé (release GitHub ou upload direct vers
+      # le stockage servant apps/web, avec mise à jour du manifeste de
+      # téléchargement comme dans mirror-rustdesk-client.yml).
+      - name: TODO — publier l'artefact
+        run: exit 1
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # TODO : cloner les sources RustDesk, installer Flutter + le NDK
+      # Android, et construire l'APK (flutter build apk). Décision D4 à
+      # trancher avant d'investir ici : livrer d'abord un client guidage seul
+      # (plus simple, pas de service d'accessibilité) ou le contrôle complet.
+      - name: TODO — installer la chaîne de compilation (Flutter, NDK)
+        run: exit 1
+
+      # TODO : configurer le serveur par défaut (ID/relais/clé) dans le build,
+      # comme pour Windows.
+      - name: TODO — configurer le serveur par défaut dans le build
+        run: exit 1
+
+      # TODO : keystore de production. Un seul keystore doit être utilisé pour
+      # toutes les versions (sinon plus aucune mise à jour possible) : à créer
+      # une fois, sauvegarder hors ligne en deux endroits, stocker en secret
+      # GitHub (ANDROID_KEYSTORE_BASE64 + ANDROID_KEYSTORE_PASSWORD), avec un
+      # versionCode strictement croissant à chaque build.
+      - name: TODO — signer l'APK (v2/v3) avec le keystore de production
+        run: exit 1
+
+      - name: TODO — publier l'artefact
+        run: exit 1
