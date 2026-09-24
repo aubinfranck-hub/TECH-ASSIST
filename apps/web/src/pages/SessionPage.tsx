@@ -115,6 +115,7 @@ export function SessionPage() {
         <div className="mt-6">
           <RemotePairingPanel
             sessionId={session.id}
+            sessionCode={code}
             alreadyPaired={Boolean(session.remote_paired_at)}
             onPaired={() => refresh(code)}
           />
