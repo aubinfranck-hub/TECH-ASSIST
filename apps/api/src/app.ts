@@ -22,9 +22,15 @@ export function createApp() {
 
   app.disable('x-powered-by');
   app.use(helmet());
+  // CORS_ORIGIN='*' doit rester une vraie autorisation universelle : passer
+  // ['*'] (résultat de .split(',')) à la bibliothèque cors ne fait PAS ça —
+  // elle compare l'en-tête Origin littéralement à la chaîne "*", qu'aucun
+  // navigateur n'envoie jamais, donc tout serait bloqué silencieusement.
+  const corsOriginEnv = process.env.CORS_ORIGIN;
+  const corsOrigin = !corsOriginEnv || corsOriginEnv === '*' ? '*' : corsOriginEnv.split(',');
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN?.split(',') ?? '*',
+      origin: corsOrigin,
       credentials: false,
     }),
   );
