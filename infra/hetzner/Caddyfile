@@ -1,4 +1,17 @@
-techassist.ci, www.techassist.ci {
+# Pas encore de nom de domaine : Caddy sert en HTTP simple sur l'IP du
+# serveur (":80" ne déclenche pas la demande automatique de certificat TLS,
+# contrairement à un nom d'hôte réel). Dès qu'un domaine pointe vers ce
+# serveur, remplacer le bloc ci-dessous par :
+#
+#   techassist.example (remplacer par le vrai domaine) {
+#     encode gzip
+#     handle /api/* { reverse_proxy api:4000 }
+#     handle { reverse_proxy web:80 }
+#   }
+#
+# Caddy demandera alors seul un certificat Let's Encrypt (HTTPS automatique).
+
+:80 {
   encode gzip
   handle /api/* { reverse_proxy api:4000 }
   handle { reverse_proxy web:80 }

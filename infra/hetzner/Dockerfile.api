@@ -14,5 +14,10 @@ COPY --from=build /app/package*.json ./
 COPY --from=build /app/apps/api/package*.json apps/api/
 RUN npm ci --omit=dev
 COPY --from=build /app/apps/api/dist apps/api/dist
+COPY --from=build /app/apps/api/migrations apps/api/migrations
 EXPOSE 4000
-CMD ["node","apps/api/dist/index.js"]
+# Applique les migrations avant de démarrer : sur un Postgres tout neuf
+# (première mise en route du conteneur), le serveur ne trouverait aucune
+# table sans cette étape, alors qu'elle fait partie de la commande de build
+# côté Render (npm run migrate --workspace apps/api).
+CMD ["sh", "-c", "node apps/api/dist/db/migrate.js && node apps/api/dist/index.js"]

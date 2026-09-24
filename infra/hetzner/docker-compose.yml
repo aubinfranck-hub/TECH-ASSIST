@@ -22,8 +22,9 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-techassist}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-techassist}
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://techassist.ci,https://www.techassist.ci}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SESSION_SECRETS_KEY: ${SESSION_SECRETS_KEY:?SESSION_SECRETS_KEY is required}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       RUSTDESK_ID_SERVER: ${RUSTDESK_ID_SERVER:-remote.techassist.ci}
       RUSTDESK_RELAY_SERVER: ${RUSTDESK_RELAY_SERVER:-remote.techassist.ci}
