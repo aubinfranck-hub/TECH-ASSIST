@@ -1,0 +1,5 @@
+techassist.ci, www.techassist.ci {
+  encode gzip
+  handle /api/* { reverse_proxy api:4000 }
+  handle { reverse_proxy web:80 }
+}
