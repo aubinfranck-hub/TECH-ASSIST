@@ -2,11 +2,16 @@ import { Link, Outlet } from 'react-router-dom';
 
 function Brand({ dark = false }: { dark?: boolean }) {
   return (
-    <img
-      src={dark ? '/logo-white.svg' : '/logo.svg'}
-      alt="Tech Assist"
-      className="h-9 w-auto object-contain sm:h-10"
-    />
+    <span className="inline-flex items-center gap-2.5" aria-label="Tech Assist">
+      <img
+        src="/logo-mark.svg"
+        alt=""
+        className="h-9 w-9 shrink-0 rounded-[10px] object-contain sm:h-10 sm:w-10"
+      />
+      <span className={`text-[17px] font-black tracking-[-0.04em] sm:text-[19px] ${dark ? 'text-white' : 'text-slate-950'}`}>
+        TECH <span className="text-brand-600">ASSIST</span>
+      </span>
+    </span>
   );
 }
 
