@@ -1,3 +1,47 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  ::selection {
+    @apply bg-brand-100 text-brand-900;
+  }
+}
+
+@layer components {
+  .ta-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .ta-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-card;
+  }
+
+  .ta-button {
+    @apply inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold transition duration-200;
+  }
+
+  .ta-button-primary {
+    @apply ta-button bg-brand-600 text-white shadow-sm hover:bg-brand-700 hover:shadow-md;
+  }
+
+  .ta-button-secondary {
+    @apply ta-button border border-slate-200 bg-white text-slate-800 hover:border-brand-200 hover:bg-brand-50;
+  }
+}
