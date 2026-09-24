@@ -1,9 +1,21 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { validateBody } from '../middleware/validate.js';
 
 export const leadsRouter = Router();
+
+// Posé directement sur chaque route (pas au niveau du montage app.use('/api', ...))
+// : ce préfixe est partagé par d'autres routers, donc un limiteur monté là-bas
+// s'exécuterait pour toute requête /api/*, pas seulement celles-ci (voir app.ts).
+const leadsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
 
 const phoneSchema = z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide');
 
@@ -15,7 +27,7 @@ const technicianApplicationSchema = z.object({
   skills: z.string().max(1000).optional(),
 });
 
-leadsRouter.post('/technicians/apply', validateBody(technicianApplicationSchema), async (req, res) => {
+leadsRouter.post('/technicians/apply', leadsLimiter, validateBody(technicianApplicationSchema), async (req, res) => {
   const { fullName, phone, idDocumentRef, skills } = req.body as z.infer<typeof technicianApplicationSchema>;
   const { rows } = await pool.query(
     `INSERT INTO technician_applications (full_name, phone, id_document_ref, skills)
@@ -35,7 +47,7 @@ const pmeRequestSchema = z.object({
   message: z.string().max(2000).optional(),
 });
 
-leadsRouter.post('/pme/requests', validateBody(pmeRequestSchema), async (req, res) => {
+leadsRouter.post('/pme/requests', leadsLimiter, validateBody(pmeRequestSchema), async (req, res) => {
   const body = req.body as z.infer<typeof pmeRequestSchema>;
   const { rows } = await pool.query(
     `INSERT INTO pme_requests (company_name, contact_name, phone, email, computers_count, message)
@@ -54,7 +66,7 @@ const visitRequestSchema = z.object({
   description: z.string().min(5).max(2000),
 });
 
-leadsRouter.post('/visits/requests', validateBody(visitRequestSchema), async (req, res) => {
+leadsRouter.post('/visits/requests', leadsLimiter, validateBody(visitRequestSchema), async (req, res) => {
   const body = req.body as z.infer<typeof visitRequestSchema>;
   const { rows } = await pool.query(
     `INSERT INTO visit_requests (full_name, phone, address, zone, description)

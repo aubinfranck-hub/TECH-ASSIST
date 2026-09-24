@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { logAudit } from '../utils/audit.js';
@@ -6,6 +7,17 @@ import { validateBody } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const ordersRouter = Router();
+
+// Limite dédiée à la création de commande (action publique, non
+// authentifiée) — n'affecte pas les GET authentifiés du même router,
+// interrogés régulièrement par la console technicien (voir app.ts).
+const createOrderLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
 
 const createOrderSchema = z.object({
   clientPhone: z
@@ -17,7 +29,7 @@ const createOrderSchema = z.object({
 });
 
 /** RF-02 : commande sans création de compte lourde (téléphone suffit). */
-ordersRouter.post('/', validateBody(createOrderSchema), async (req, res) => {
+ordersRouter.post('/', createOrderLimiter, validateBody(createOrderSchema), async (req, res) => {
   const { clientPhone, clientName, planId, platform } = req.body as z.infer<typeof createOrderSchema>;
 
   const planResult = await pool.query(

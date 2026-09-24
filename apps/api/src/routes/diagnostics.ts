@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { runDiagnostic } from '../diagnostics/index.js';
@@ -6,6 +7,17 @@ import { validateBody } from '../middleware/validate.js';
 import { logAudit } from '../utils/audit.js';
 
 export const diagnosticsRouter = Router();
+
+// Posé directement sur la route (pas au niveau du montage app.use('/api', ...))
+// : ce préfixe est partagé par d'autres routers, donc un limiteur monté là-bas
+// s'exécuterait pour toute requête /api/*, pas seulement celles-ci (voir app.ts).
+const diagnosticLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
 
 const diagnosticSchema = z.object({
   platform: z.enum(['windows', 'android']),
@@ -19,6 +31,7 @@ const diagnosticSchema = z.object({
  */
 diagnosticsRouter.post(
   '/orders/:orderId/diagnostic',
+  diagnosticLimiter,
   validateBody(diagnosticSchema),
   async (req, res) => {
     const { orderId } = req.params;

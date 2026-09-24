@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { validateBody } from '../middleware/validate.js';
@@ -8,6 +9,19 @@ import { logAudit } from '../utils/audit.js';
 import { buildOtpauthUri, generateTotpSecret, verifyTotpCode } from '../utils/totp.js';
 
 export const technicianAuthRouter = Router();
+
+// Posé directement sur chaque route sensible (pas au niveau du montage
+// app.use('/api/auth', ...)) pour ne jamais partager de quota avec des
+// requêtes authentifiées et fréquentes d'un autre router (voir app.ts).
+// Protège contre le bruteforce (login, code TOTP) sans jamais pouvoir être
+// épuisé par autre chose.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
 
 const bootstrapAdminSchema = z.object({
   fullName: z.string().min(2).max(120),
@@ -25,6 +39,7 @@ const bootstrapAdminSchema = z.object({
  */
 technicianAuthRouter.post(
   '/technician/bootstrap-admin',
+  authLimiter,
   validateBody(bootstrapAdminSchema),
   async (req, res) => {
     const body = req.body as z.infer<typeof bootstrapAdminSchema>;
@@ -67,6 +82,7 @@ const bootstrapTeamSchema = z.object({
  */
 technicianAuthRouter.post(
   '/technician/bootstrap-team',
+  authLimiter,
   validateBody(bootstrapTeamSchema),
   async (req, res) => {
     const { admin, technician } = req.body as z.infer<typeof bootstrapTeamSchema>;
@@ -129,7 +145,7 @@ const loginSchema = z.object({
 });
 
 /** RS-08 : comptes techniciens nominatifs. Si la 2FA est activée, un second appel est requis. */
-technicianAuthRouter.post('/technician/login', validateBody(loginSchema), async (req, res) => {
+technicianAuthRouter.post('/technician/login', authLimiter, validateBody(loginSchema), async (req, res) => {
   const { username, password } = req.body as z.infer<typeof loginSchema>;
 
   const { rows } = await pool.query(
@@ -160,7 +176,7 @@ const totpLoginSchema = z.object({
 });
 
 /** RS-08 : second facteur — complète la connexion après /technician/login. */
-technicianAuthRouter.post('/technician/login/totp', validateBody(totpLoginSchema), async (req, res) => {
+technicianAuthRouter.post('/technician/login/totp', authLimiter, validateBody(totpLoginSchema), async (req, res) => {
   const { preAuthToken, code } = req.body as z.infer<typeof totpLoginSchema>;
 
   let technicianId: string;
@@ -200,6 +216,7 @@ const totpCodeSchema = z.object({ code: z.string().length(6) });
 /** RS-08 : confirme l'activation avec un code généré à partir du secret en attente. */
 technicianAuthRouter.post(
   '/technician/2fa/enable',
+  authLimiter,
   requireAuth('technician', 'admin'),
   validateBody(totpCodeSchema),
   async (req, res) => {
@@ -224,6 +241,7 @@ technicianAuthRouter.post(
 /** RS-08 : désactivation par le titulaire du compte, avec un dernier code valide. */
 technicianAuthRouter.post(
   '/technician/2fa/disable',
+  authLimiter,
   requireAuth('technician', 'admin'),
   validateBody(totpCodeSchema),
   async (req, res) => {
