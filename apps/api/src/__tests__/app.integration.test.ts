@@ -185,10 +185,28 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
       await request(app).post(`/api/orders/${orderId}/confirm-payment`).set('Authorization', `Bearer ${techToken}`);
       const sessionRes = await request(app).post(`/api/orders/${orderId}/session`).send({ platform: 'windows' });
       const sessionId = sessionRes.body.session.id;
+      const sessionCode = sessionRes.body.session.session_code as string;
       await request(app)
         .patch(`/api/technician/sessions/${sessionId}/claim`)
         .set('Authorization', `Bearer ${techToken}`);
-      return sessionId;
+      return { sessionId, sessionCode };
+    }
+
+    async function getBootstrapToken(sessionCode: string): Promise<string> {
+      const originalId = process.env.RUSTDESK_ID_SERVER;
+      const originalRelay = process.env.RUSTDESK_RELAY_SERVER;
+      const originalKey = process.env.RUSTDESK_PUBLIC_KEY;
+      process.env.RUSTDESK_ID_SERVER = 'id.test.local';
+      process.env.RUSTDESK_RELAY_SERVER = 'relay.test.local';
+      process.env.RUSTDESK_PUBLIC_KEY = 'test-public-key';
+      try {
+        const res = await request(app).get(`/api/sessions/${sessionCode}/remote-bootstrap`);
+        return res.body.bootstrapToken as string;
+      } finally {
+        process.env.RUSTDESK_ID_SERVER = originalId;
+        process.env.RUSTDESK_RELAY_SERVER = originalRelay;
+        process.env.RUSTDESK_PUBLIC_KEY = originalKey;
+      }
     }
 
     it('renvoie 503 si le serveur RustDesk n\'est pas configuré', async () => {
@@ -198,11 +216,13 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
 
     it('refuse de livrer les identifiants tant que le client n\'a pas consenti au contrôle', async () => {
       const techToken = await createAdmin();
-      const sessionId = await createActiveSession(techToken);
+      const { sessionId, sessionCode } = await createActiveSession(techToken);
+      const bootstrapToken = await getBootstrapToken(sessionCode);
 
       await request(app).post(`/api/sessions/${sessionId}/pair`).send({
         remotePeerId: '123456789',
         remotePassword: 'motdepasse-temp',
+        bootstrapToken,
       });
 
       const blocked = await request(app)
@@ -224,11 +244,13 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
     it('interdit à un technicien non assigné de voir les identifiants', async () => {
       const adminToken = await createAdmin();
       const otherTechToken = await createTechnician();
-      const sessionId = await createActiveSession(adminToken);
+      const { sessionId, sessionCode } = await createActiveSession(adminToken);
+      const bootstrapToken = await getBootstrapToken(sessionCode);
 
       await request(app).post(`/api/sessions/${sessionId}/pair`).send({
         remotePeerId: '999999999',
         remotePassword: 'secret',
+        bootstrapToken,
       });
       await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen' });
       await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
@@ -241,10 +263,12 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
 
     it('purge le mot de passe de connexion à distance quand la session est arrêtée (RS-10)', async () => {
       const techToken = await createAdmin();
-      const sessionId = await createActiveSession(techToken);
+      const { sessionId, sessionCode } = await createActiveSession(techToken);
+      const bootstrapToken = await getBootstrapToken(sessionCode);
       await request(app).post(`/api/sessions/${sessionId}/pair`).send({
         remotePeerId: '111111111',
         remotePassword: 'secret',
+        bootstrapToken,
       });
       await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen' });
       await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
