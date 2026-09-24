@@ -22,6 +22,40 @@ adminRouter.get('/orders', async (req, res) => {
   res.json({ orders: rows });
 });
 
+const createTechnicianSchema = z.object({
+  fullName: z.string().min(2).max(120),
+  phone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide'),
+  username: z.string().min(3).max(60),
+  password: z.string().min(8).max(200),
+  role: z.enum(['technician', 'admin']).default('technician'),
+});
+
+/** Création de comptes technicien/admin en continu, au-delà de l'amorçage initial. */
+adminRouter.post('/technicians', validateBody(createTechnicianSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof createTechnicianSchema>;
+  const passwordHash = await bcrypt.hash(body.password, 12);
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO technicians (full_name, phone, username, password_hash, role)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id, username, role`,
+      [body.fullName, body.phone, body.username, passwordHash, body.role],
+    );
+    await logAudit(pool, {
+      actorType: 'admin',
+      actorId: req.auth!.sub,
+      action: 'technician.created',
+      details: { createdTechnicianId: rows[0].id, role: body.role },
+    });
+    res.status(201).json({ technician: rows[0] });
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') {
+      return res.status(409).json({ error: 'Cet identifiant de connexion est déjà utilisé' });
+    }
+    throw err;
+  }
+});
+
 const refundSchema = z.object({ reason: z.string().min(3).max(500) });
 
 /** RF-42 : remboursements et litiges journalisés. */

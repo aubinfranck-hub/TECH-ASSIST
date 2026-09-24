@@ -47,6 +47,82 @@ technicianAuthRouter.post(
   },
 );
 
+const bootstrapIdentitySchema = z.object({
+  fullName: z.string().min(2).max(120),
+  phone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide'),
+  username: z.string().min(3).max(60),
+  password: z.string().min(8).max(200),
+});
+
+const bootstrapTeamSchema = z.object({
+  admin: bootstrapIdentitySchema,
+  technician: bootstrapIdentitySchema,
+});
+
+/**
+ * Amorçage combiné : crée le premier compte admin ET un premier compte
+ * technicien en un seul appel, dans la même transaction, sous la même garde
+ * qu'un seul compte existant désactive définitivement (409). Utile pour
+ * démarrer une instance fraîchement déployée sans accès direct à la base.
+ */
+technicianAuthRouter.post(
+  '/technician/bootstrap-team',
+  validateBody(bootstrapTeamSchema),
+  async (req, res) => {
+    const { admin, technician } = req.body as z.infer<typeof bootstrapTeamSchema>;
+
+    if (admin.username === technician.username) {
+      return res.status(400).json({ error: 'Les deux comptes doivent avoir des identifiants différents' });
+    }
+
+    const [adminHash, technicianHash] = await Promise.all([
+      bcrypt.hash(admin.password, 12),
+      bcrypt.hash(technician.password, 12),
+    ]);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const adminResult = await client.query(
+        `INSERT INTO technicians (full_name, phone, username, password_hash, role)
+         SELECT $1, $2, $3, $4, 'admin'
+         WHERE NOT EXISTS (SELECT 1 FROM technicians)
+         RETURNING id, username, role`,
+        [admin.fullName, admin.phone, admin.username, adminHash],
+      );
+
+      if (adminResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Un compte existe déjà — ce point d\'amorçage est désactivé' });
+      }
+
+      const technicianResult = await client.query(
+        `INSERT INTO technicians (full_name, phone, username, password_hash, role)
+         VALUES ($1, $2, $3, $4, 'technician')
+         RETURNING id, username, role`,
+        [technician.fullName, technician.phone, technician.username, technicianHash],
+      );
+
+      await client.query('COMMIT');
+
+      await logAudit(pool, {
+        actorType: 'system',
+        actorId: adminResult.rows[0].id,
+        action: 'auth.bootstrap_team_created',
+        details: { technicianId: technicianResult.rows[0].id },
+      });
+
+      res.status(201).json({ admin: adminResult.rows[0], technician: technicianResult.rows[0] });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+);
+
 const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
