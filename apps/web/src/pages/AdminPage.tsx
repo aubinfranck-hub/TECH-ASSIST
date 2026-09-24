@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
+import { CreateCompanyForm } from '../components/CreateCompanyForm.js';
+import { TechnicianLoginForm } from '../components/TechnicianLoginForm.js';
 import { api, ApiError, type PricingPlan } from '../lib/api.js';
+
+interface Company {
+  id: string;
+  name: string;
+  phone: string;
+  subscription_status: string;
+  plan_name: string | null;
+  assigned_technician_name: string | null;
+  created_at: string;
+}
 
 interface Application {
   id: string;
@@ -29,26 +41,26 @@ interface AuditLog {
 
 export function AdminPage() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('tech_assist_token'));
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState<string | null>(null);
   const [plans, setPlans] = useState<PricingPlan[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [pmeRequests, setPmeRequests] = useState<PmeRequest[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [pricing, apps, pme, logs] = await Promise.all([
+      const [pricing, apps, pme, companiesRes, logs] = await Promise.all([
         api.get<{ plans: PricingPlan[] }>('/api/pricing'),
         api.get<{ applications: Application[] }>('/api/admin/technician-applications'),
         api.get<{ requests: PmeRequest[] }>('/api/admin/pme-requests'),
+        api.get<{ companies: Company[] }>('/api/admin/companies'),
         api.get<{ logs: AuditLog[] }>('/api/admin/audit-logs'),
       ]);
       setPlans(pricing.plans);
       setApplications(apps.applications);
       setPmeRequests(pme.requests);
+      setCompanies(companiesRes.companies);
       setAuditLogs(logs.logs);
       setError(null);
     } catch (err) {
@@ -67,16 +79,9 @@ export function AdminPage() {
     if (token) refresh();
   }, [token, refresh]);
 
-  async function login(e: React.FormEvent) {
-    e.preventDefault();
-    setLoginError(null);
-    try {
-      const res = await api.post<{ token: string }>('/api/auth/technician/login', { username, password });
-      localStorage.setItem('tech_assist_token', res.token);
-      setToken(res.token);
-    } catch (err) {
-      setLoginError(err instanceof ApiError ? err.message : 'Erreur de connexion.');
-    }
+  function handleLoggedIn(newToken: string) {
+    localStorage.setItem('tech_assist_token', newToken);
+    setToken(newToken);
   }
 
   async function updatePlan(plan: PricingPlan, priceFcfa: number) {
@@ -96,27 +101,7 @@ export function AdminPage() {
     return (
       <div className="mx-auto max-w-sm px-4 py-14">
         <h1 className="text-2xl font-bold mb-4">Administration</h1>
-        <form onSubmit={login} className="space-y-3">
-          <input
-            required
-            placeholder="Identifiant admin"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-          <input
-            required
-            type="password"
-            placeholder="Mot de passe"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-          {loginError && <p className="text-sm text-red-600">{loginError}</p>}
-          <button type="submit" className="w-full rounded-lg bg-brand-600 px-4 py-3 text-white font-medium hover:bg-brand-700">
-            Se connecter
-          </button>
-        </form>
+        <TechnicianLoginForm onLoggedIn={handleLoggedIn} />
       </div>
     );
   }
@@ -166,6 +151,20 @@ export function AdminPage() {
           ))}
           {pmeRequests.length === 0 && <p className="text-slate-500">Aucune demande.</p>}
         </ul>
+      </section>
+
+      <section>
+        <h2 className="font-semibold mb-3">Entreprises PME (RP-01)</h2>
+        <ul className="space-y-1 text-sm mb-4">
+          {companies.map((c) => (
+            <li key={c.id} className="rounded border bg-white p-2">
+              {c.name} · {c.phone} · {c.plan_name ?? 'sans formule'} · {c.subscription_status}
+              {c.assigned_technician_name && ` · technicien : ${c.assigned_technician_name}`}
+            </li>
+          ))}
+          {companies.length === 0 && <p className="text-slate-500">Aucune entreprise pour l'instant.</p>}
+        </ul>
+        <CreateCompanyForm pmePlans={plans.filter((p) => p.segment === 'pme')} onCreated={refresh} />
       </section>
 
       <section>

@@ -9,41 +9,52 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('tech_assist_token');
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+// Deux espaces d'authentification distincts (technicien/admin vs entreprise) :
+// des clés localStorage séparées évitent qu'un jeton de l'un fuite vers l'autre.
+const TECHNICIAN_TOKEN_KEY = 'tech_assist_token';
+const COMPANY_TOKEN_KEY = 'tech_assist_company_token';
 
-  const body = res.status === 204 ? null : await res.json().catch(() => null);
+function makeClient(tokenKey: string) {
+  async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const token = localStorage.getItem(tokenKey);
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
 
-  if (!res.ok) {
-    const message = body?.error ?? `Erreur ${res.status}`;
-    throw new ApiError(message, res.status);
+    const body = res.status === 204 ? null : await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const message = body?.error ?? `Erreur ${res.status}`;
+      throw new ApiError(message, res.status);
+    }
+
+    return body as T;
   }
 
-  return body as T;
+  return {
+    get: <T>(path: string) => request<T>(path),
+    post: <T>(path: string, data?: unknown) =>
+      request<T>(path, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+    put: <T>(path: string, data?: unknown) =>
+      request<T>(path, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
+    patch: <T>(path: string, data?: unknown) =>
+      request<T>(path, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
+  };
 }
 
-export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, data?: unknown) =>
-    request<T>(path, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
-  put: <T>(path: string, data?: unknown) =>
-    request<T>(path, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
-  patch: <T>(path: string, data?: unknown) =>
-    request<T>(path, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
-};
+export const api = makeClient(TECHNICIAN_TOKEN_KEY);
+export const companyApi = makeClient(COMPANY_TOKEN_KEY);
+export { TECHNICIAN_TOKEN_KEY, COMPANY_TOKEN_KEY };
 
 export interface PricingPlan {
   id: string;
   name: string;
-  segment: 'particulier' | 'pme';
+  segment: 'particulier' | 'pme' | 'visite';
   price_fcfa: number;
   duration_minutes: number | null;
   description: string;

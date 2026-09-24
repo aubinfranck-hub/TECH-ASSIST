@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActiveSessionCard, type MySession } from '../components/ActiveSessionCard.js';
+import { TechnicianLoginForm } from '../components/TechnicianLoginForm.js';
+import { TwoFactorSettings } from '../components/TwoFactorSettings.js';
 import { api, ApiError } from '../lib/api.js';
 
 interface QueueItem {
@@ -24,9 +26,6 @@ interface TechOrder {
 
 export function TechnicianPage() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('tech_assist_token'));
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState<string | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [pendingOrders, setPendingOrders] = useState<TechOrder[]>([]);
   const [mySessions, setMySessions] = useState<MySession[]>([]);
@@ -60,16 +59,9 @@ export function TechnicianPage() {
     return () => clearInterval(interval);
   }, [token, refresh]);
 
-  async function login(e: React.FormEvent) {
-    e.preventDefault();
-    setLoginError(null);
-    try {
-      const res = await api.post<{ token: string }>('/api/auth/technician/login', { username, password });
-      localStorage.setItem('tech_assist_token', res.token);
-      setToken(res.token);
-    } catch (err) {
-      setLoginError(err instanceof ApiError ? err.message : 'Erreur de connexion.');
-    }
+  function handleLoggedIn(newToken: string) {
+    localStorage.setItem('tech_assist_token', newToken);
+    setToken(newToken);
   }
 
   function logout() {
@@ -91,27 +83,7 @@ export function TechnicianPage() {
     return (
       <div className="mx-auto max-w-sm px-4 py-14">
         <h1 className="text-2xl font-bold mb-4">Espace technicien</h1>
-        <form onSubmit={login} className="space-y-3">
-          <input
-            required
-            placeholder="Identifiant"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-          <input
-            required
-            type="password"
-            placeholder="Mot de passe"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-          {loginError && <p className="text-sm text-red-600">{loginError}</p>}
-          <button type="submit" className="w-full rounded-lg bg-brand-600 px-4 py-3 text-white font-medium hover:bg-brand-700">
-            Se connecter
-          </button>
-        </form>
+        <TechnicianLoginForm onLoggedIn={handleLoggedIn} />
       </div>
     );
   }
@@ -160,6 +132,11 @@ export function TechnicianPage() {
             <ActiveSessionCard key={s.id} session={s} />
           ))}
         </ul>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="font-semibold mb-3">Sécurité du compte</h2>
+        <TwoFactorSettings />
       </section>
 
       <section>

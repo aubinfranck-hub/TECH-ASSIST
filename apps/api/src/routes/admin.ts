@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -74,6 +75,128 @@ adminRouter.put('/pricing/:id', validateBody(planUpsertSchema), async (req, res)
   });
 
   res.json({ plan: rows[0] });
+});
+
+/** RS-08 : récupération de compte — un admin peut réinitialiser la 2FA d'un technicien bloqué. */
+adminRouter.post('/technicians/:id/2fa/reset', async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE technicians SET totp_secret = NULL, totp_enabled = FALSE, totp_pending_secret = NULL
+     WHERE id = $1 RETURNING id, username`,
+    [req.params.id],
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'Technicien introuvable' });
+
+  await logAudit(pool, {
+    actorType: 'admin',
+    actorId: req.auth!.sub,
+    action: 'auth.totp_reset_by_admin',
+    details: { technicianId: req.params.id },
+  });
+
+  res.json({ technician: rows[0] });
+});
+
+/** RP-01 : liste des entreprises PME, pour suivi commercial et support. */
+adminRouter.get('/companies', async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT c.id, c.name, c.phone, c.subscription_status, c.subscription_plan_id,
+            p.name AS plan_name, t.full_name AS assigned_technician_name, c.created_at
+     FROM companies c
+     LEFT JOIN pricing_plans p ON p.id = c.subscription_plan_id
+     LEFT JOIN technicians t ON t.id = c.assigned_technician_id
+     ORDER BY c.created_at DESC`,
+  );
+  res.json({ companies: rows });
+});
+
+const createCompanySchema = z.object({
+  name: z.string().min(2).max(200),
+  phone: z.string().regex(/^\+?[0-9]{8,15}$/),
+  email: z.string().email().optional(),
+  subscriptionPlanId: z.string().min(1),
+  adminFullName: z.string().min(2).max(120),
+  adminPhone: z.string().regex(/^\+?[0-9]{8,15}$/),
+  adminUsername: z.string().min(3).max(60),
+});
+
+/**
+ * RP-01 : conversion d'une demande PME en espace entreprise — crée
+ * l'entreprise et son premier compte administrateur (mot de passe généré,
+ * affiché une seule fois, jamais stocké en clair).
+ */
+adminRouter.post('/companies', validateBody(createCompanySchema), async (req, res) => {
+  const body = req.body as z.infer<typeof createCompanySchema>;
+
+  const planCheck = await pool.query(
+    `SELECT id FROM pricing_plans WHERE id = $1 AND segment = 'pme' AND active = TRUE`,
+    [body.subscriptionPlanId],
+  );
+  if (planCheck.rows.length === 0) {
+    return res.status(404).json({ error: 'Formule PME inconnue ou inactive' });
+  }
+
+  const password = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  // Transaction : l'entreprise et son premier compte admin sont créés
+  // ensemble, ou pas du tout (pas d'entreprise orpheline sans compte).
+  const client = await pool.connect();
+  let companyId: string;
+  try {
+    await client.query('BEGIN');
+    const companyResult = await client.query(
+      `INSERT INTO companies (name, phone, email, subscription_plan_id, subscription_status)
+       VALUES ($1, $2, $3, $4, 'trial') RETURNING id`,
+      [body.name, body.phone, body.email ?? null, body.subscriptionPlanId],
+    );
+    companyId = companyResult.rows[0].id;
+
+    await client.query(
+      `INSERT INTO company_users (company_id, full_name, phone, username, password_hash, role)
+       VALUES ($1, $2, $3, $4, $5, 'admin')`,
+      [companyId, body.adminFullName, body.adminPhone, body.adminUsername, passwordHash],
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if ((err as { code?: string }).code === '23505') {
+      return res.status(409).json({ error: 'Cet identifiant de connexion est déjà utilisé' });
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  await logAudit(pool, { actorType: 'admin', actorId: req.auth!.sub, action: 'company.created', details: { companyId } });
+
+  res.status(201).json({ companyId, adminUsername: body.adminUsername, adminPassword: password });
+});
+
+const updateCompanySchema = z.object({
+  subscriptionPlanId: z.string().min(1).optional(),
+  subscriptionStatus: z.enum(['trial', 'active', 'suspended', 'cancelled']).optional(),
+  assignedTechnicianId: z.string().uuid().nullable().optional(),
+});
+
+adminRouter.patch('/companies/:id', validateBody(updateCompanySchema), async (req, res) => {
+  const body = req.body as z.infer<typeof updateCompanySchema>;
+  const { rows } = await pool.query(
+    `UPDATE companies SET
+       subscription_plan_id = COALESCE($2, subscription_plan_id),
+       subscription_status = COALESCE($3, subscription_status),
+       assigned_technician_id = CASE WHEN $4::boolean THEN $5::uuid ELSE assigned_technician_id END
+     WHERE id = $1
+     RETURNING id, subscription_plan_id, subscription_status, assigned_technician_id`,
+    [
+      req.params.id,
+      body.subscriptionPlanId ?? null,
+      body.subscriptionStatus ?? null,
+      'assignedTechnicianId' in body,
+      body.assignedTechnicianId ?? null,
+    ],
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'Entreprise introuvable' });
+  res.json({ company: rows[0] });
 });
 
 adminRouter.get('/technician-applications', async (_req, res) => {

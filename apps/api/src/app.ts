@@ -6,6 +6,8 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 
 import { adminRouter } from './routes/admin.js';
+import { companyRouter } from './routes/company.js';
+import { companyAuthRouter } from './routes/companyAuth.js';
 import { diagnosticsRouter } from './routes/diagnostics.js';
 import { healthRouter } from './routes/health.js';
 import { leadsRouter } from './routes/leads.js';
@@ -55,8 +57,10 @@ export function createApp() {
   app.use('/api', sessionsRouter);
   app.use('/api', remoteRouter);
   app.use('/api/auth', strictLimiter, technicianAuthRouter);
+  app.use('/api/auth', strictLimiter, companyAuthRouter);
   app.use('/api', strictLimiter, leadsRouter);
   app.use('/api/admin', adminRouter);
+  app.use('/api/company', companyRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'Ressource introuvable' });

@@ -18,16 +18,30 @@ export function Layout() {
             <Link to="/technicien" className="hover:text-brand-600">
               Espace technicien
             </Link>
+            <Link to="/entreprise" className="hover:text-brand-600">
+              Espace entreprise
+            </Link>
           </nav>
         </div>
       </header>
       <main className="flex-1">
         <Outlet />
       </main>
-      <footer className="border-t bg-white py-8 text-center text-sm text-slate-500">
+      <footer className="border-t bg-white py-8 text-center text-sm text-slate-500 space-y-2">
         <p>Tech Assist — Assistance informatique à distance. Paiement Mobile Money.</p>
-        <p className="mt-1">
+        <p>
           En Côte d'Ivoire, vos données sont traitées conformément à la loi n° 2013-450.
+        </p>
+        <p className="flex justify-center gap-4">
+          <Link to="/cgu" className="hover:text-brand-600 hover:underline">
+            CGU
+          </Link>
+          <Link to="/confidentialite" className="hover:text-brand-600 hover:underline">
+            Politique de confidentialité
+          </Link>
+          <Link to="/mentions-legales" className="hover:text-brand-600 hover:underline">
+            Mentions légales
+          </Link>
         </p>
       </footer>
     </div>

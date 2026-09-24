@@ -3,7 +3,9 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { validateBody } from '../middleware/validate.js';
-import { signAuthToken } from '../middleware/auth.js';
+import { requireAuth, signAuthToken, signPreAuthToken, verifyPreAuthToken } from '../middleware/auth.js';
+import { logAudit } from '../utils/audit.js';
+import { buildOtpauthUri, generateTotpSecret, verifyTotpCode } from '../utils/totp.js';
 
 export const technicianAuthRouter = Router();
 
@@ -12,15 +14,12 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-/**
- * RS-08 : comptes techniciens nominatifs (plus de mot de passe partagé).
- * TA[MANQUANT][RS-08] : 2FA (TOTP) pas encore branché sur ce endpoint.
- */
+/** RS-08 : comptes techniciens nominatifs. Si la 2FA est activée, un second appel est requis. */
 technicianAuthRouter.post('/technician/login', validateBody(loginSchema), async (req, res) => {
   const { username, password } = req.body as z.infer<typeof loginSchema>;
 
   const { rows } = await pool.query(
-    `SELECT id, username, password_hash, role, is_active FROM technicians WHERE username = $1`,
+    `SELECT id, username, password_hash, role, is_active, totp_enabled FROM technicians WHERE username = $1`,
     [username],
   );
   const technician = rows[0];
@@ -33,6 +32,100 @@ technicianAuthRouter.post('/technician/login', validateBody(loginSchema), async 
     return res.status(401).json({ error: 'Identifiants incorrects' });
   }
 
+  if (technician.totp_enabled) {
+    return res.json({ requiresTotp: true, preAuthToken: signPreAuthToken(technician.id) });
+  }
+
   const token = signAuthToken({ sub: technician.id, role: technician.role, username: technician.username });
   res.json({ token, technician: { id: technician.id, username: technician.username, role: technician.role } });
 });
+
+const totpLoginSchema = z.object({
+  preAuthToken: z.string().min(1),
+  code: z.string().length(6),
+});
+
+/** RS-08 : second facteur — complète la connexion après /technician/login. */
+technicianAuthRouter.post('/technician/login/totp', validateBody(totpLoginSchema), async (req, res) => {
+  const { preAuthToken, code } = req.body as z.infer<typeof totpLoginSchema>;
+
+  let technicianId: string;
+  try {
+    technicianId = verifyPreAuthToken(preAuthToken).sub;
+  } catch {
+    return res.status(401).json({ error: 'Jeton de connexion invalide ou expiré, reconnectez-vous' });
+  }
+
+  const { rows } = await pool.query(
+    `SELECT id, username, role, is_active, totp_enabled, totp_secret FROM technicians WHERE id = $1`,
+    [technicianId],
+  );
+  const technician = rows[0];
+  if (!technician || !technician.is_active || !technician.totp_enabled || !technician.totp_secret) {
+    return res.status(401).json({ error: 'Compte introuvable ou 2FA non active' });
+  }
+
+  if (!verifyTotpCode(technician.totp_secret, code)) {
+    await logAudit(pool, { actorType: 'technician', actorId: technician.id, action: 'auth.totp_failed' });
+    return res.status(401).json({ error: 'Code incorrect' });
+  }
+
+  const token = signAuthToken({ sub: technician.id, role: technician.role, username: technician.username });
+  res.json({ token, technician: { id: technician.id, username: technician.username, role: technician.role } });
+});
+
+/** RS-08 : démarrage de l'activation — génère un secret en attente de confirmation. */
+technicianAuthRouter.post('/technician/2fa/setup', requireAuth('technician', 'admin'), async (req, res) => {
+  const secret = generateTotpSecret();
+  await pool.query('UPDATE technicians SET totp_pending_secret = $2 WHERE id = $1', [req.auth!.sub, secret]);
+  res.json({ secret, otpauthUri: buildOtpauthUri(secret, req.auth!.username) });
+});
+
+const totpCodeSchema = z.object({ code: z.string().length(6) });
+
+/** RS-08 : confirme l'activation avec un code généré à partir du secret en attente. */
+technicianAuthRouter.post(
+  '/technician/2fa/enable',
+  requireAuth('technician', 'admin'),
+  validateBody(totpCodeSchema),
+  async (req, res) => {
+    const { rows } = await pool.query('SELECT totp_pending_secret FROM technicians WHERE id = $1', [req.auth!.sub]);
+    const pendingSecret = rows[0]?.totp_pending_secret as string | null;
+    if (!pendingSecret) {
+      return res.status(409).json({ error: 'Aucune activation en cours — relancez /2fa/setup' });
+    }
+    if (!verifyTotpCode(pendingSecret, req.body.code)) {
+      return res.status(401).json({ error: 'Code incorrect' });
+    }
+
+    await pool.query(
+      `UPDATE technicians SET totp_secret = $2, totp_enabled = TRUE, totp_pending_secret = NULL WHERE id = $1`,
+      [req.auth!.sub, pendingSecret],
+    );
+    await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, action: 'auth.totp_enabled' });
+    res.json({ enabled: true });
+  },
+);
+
+/** RS-08 : désactivation par le titulaire du compte, avec un dernier code valide. */
+technicianAuthRouter.post(
+  '/technician/2fa/disable',
+  requireAuth('technician', 'admin'),
+  validateBody(totpCodeSchema),
+  async (req, res) => {
+    const { rows } = await pool.query('SELECT totp_secret, totp_enabled FROM technicians WHERE id = $1', [
+      req.auth!.sub,
+    ]);
+    const technician = rows[0];
+    if (!technician?.totp_enabled || !verifyTotpCode(technician.totp_secret, req.body.code)) {
+      return res.status(401).json({ error: 'Code incorrect' });
+    }
+
+    await pool.query(
+      `UPDATE technicians SET totp_secret = NULL, totp_enabled = FALSE, totp_pending_secret = NULL WHERE id = $1`,
+      [req.auth!.sub],
+    );
+    await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, action: 'auth.totp_disabled' });
+    res.json({ enabled: false });
+  },
+);
