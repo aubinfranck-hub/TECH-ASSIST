@@ -42,13 +42,13 @@ export function HomePage() {
       <section className="relative overflow-hidden bg-slate-950">
         <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-600/20 blur-3xl" />
         <div className="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-brand-500/10 blur-3xl" />
-        <div className="ta-container relative grid gap-10 py-16 sm:py-20 lg:grid-cols-[1.15fr_.85fr] lg:items-center lg:py-24">
+        <div className="ta-container relative grid gap-10 py-12 sm:py-20 lg:grid-cols-[1.15fr_.85fr] lg:items-center lg:py-24">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300">
               <span className="h-2 w-2 rounded-full bg-brand-500" />
               Assistance informatique à distance
             </div>
-            <h1 className="mt-6 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
+            <h1 className="mt-6 max-w-3xl text-[2.35rem] font-black leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
               Votre problème informatique.
               <span className="block text-brand-500">Notre assistance.</span>
             </h1>
@@ -56,7 +56,7 @@ export function HomePage() {
               Diagnostic, accompagnement et prise en main à distance avec un parcours simple,
               sécurisé et pensé pour les particuliers comme pour les PME.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row">
               <Link to="/diagnostic" className="ta-button-primary">
                 Démarrer mon diagnostic
               </Link>
@@ -64,7 +64,7 @@ export function HomePage() {
                 Voir les tarifs
               </a>
             </div>
-            <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-xs font-medium text-slate-400">
+            <div className="mt-7 grid grid-cols-1 gap-2 sm:mt-8 sm:flex sm:flex-wrap sm:gap-x-6 sm:gap-y-2 text-xs font-medium text-slate-400">
               <span>✓ Parcours guidé</span>
               <span>✓ Consentement avant contrôle</span>
               <span>✓ Arrêt de session à tout moment</span>
@@ -114,7 +114,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="ta-container py-14 sm:py-16">
+      <section className="ta-container ta-section">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {SERVICES.map((service) => (
             <div key={service.title} className="ta-card p-5 transition hover:-translate-y-0.5 hover:shadow-soft">
@@ -128,7 +128,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="bg-white py-16" id="tarifs">
+      <section className="bg-white py-14 sm:py-16 lg:py-20" id="tarifs">
         <div className="ta-container">
           <div className="mx-auto max-w-2xl text-center">
             <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Tarifs particuliers</span>
@@ -141,7 +141,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="ta-container py-16">
+      <section className="ta-container ta-section">
         <div className="grid gap-10 lg:grid-cols-[.8fr_1.2fr] lg:items-start">
           <div>
             <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Simple</span>
@@ -162,7 +162,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="bg-slate-100 py-16" id="pme">
+      <section className="bg-slate-100 py-14 sm:py-16 lg:py-20" id="pme">
         <div className="ta-container grid gap-10 lg:grid-cols-2 lg:items-start">
           <div>
             <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">PME</span>
@@ -185,7 +185,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section id="technicien" className="ta-container py-16">
+      <section id="technicien" className="ta-container ta-section">
         <div className="ta-card overflow-hidden">
           <div className="grid lg:grid-cols-2">
             <div className="bg-slate-950 p-7 sm:p-10">
@@ -202,7 +202,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section id="visite" className="bg-white py-16">
+      <section id="visite" className="bg-white ta-section">
         <div className="ta-container grid gap-10 lg:grid-cols-2">
           <div>
             <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Sur place</span>
@@ -217,7 +217,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="ta-container py-16">
+      <section className="ta-container ta-section">
         <div className="mx-auto max-w-3xl">
           <div className="text-center">
             <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">FAQ</span>
