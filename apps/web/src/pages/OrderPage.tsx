@@ -85,14 +85,14 @@ export function OrderPage() {
   const isDiagnosticPlan = order.duration_minutes == null;
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-14">
-      <h1 className="text-2xl font-bold mb-2">Votre commande</h1>
-      <p className="text-slate-600 mb-6">
+    <div className="ta-container max-w-xl py-14">
+      <p className="ta-eyebrow mb-2">Votre commande</p>
+      <h1 className="mb-2 text-2xl font-bold sm:text-3xl">
         {order.plan_name} — {order.amount_fcfa.toLocaleString('fr-FR')} FCFA
-      </p>
+      </h1>
 
       {order.status === 'pending_payment' && (
-        <div className="rounded-lg border bg-amber-50 p-5">
+        <div className="ta-card mt-6 border-amber-200 bg-amber-50 p-6">
           <h2 className="font-semibold text-amber-900">En attente de paiement</h2>
           <p className="mt-2 text-sm text-amber-800">
             Réglez {order.amount_fcfa.toLocaleString('fr-FR')} FCFA par Mobile Money, puis un
@@ -104,23 +104,23 @@ export function OrderPage() {
       )}
 
       {order.status === 'paid' && isDiagnosticPlan && !diagnostic && (
-        <form onSubmit={submitDiagnostic} className="space-y-4">
-          <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">Paiement confirmé ✓</p>
-          <label className="block text-sm font-medium">Décrivez votre problème</label>
+        <form onSubmit={submitDiagnostic} className="ta-card mt-6 space-y-4 p-6 sm:p-8">
+          <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">Paiement confirmé ✓</p>
+          <label className="block text-sm font-medium text-slate-700">Décrivez votre problème</label>
           <textarea
             required
             minLength={5}
             rows={4}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2"
+            className="ta-input"
             placeholder="Ex : mon ordinateur est très lent depuis quelques jours..."
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-lg bg-brand-600 px-4 py-3 text-white font-medium hover:bg-brand-700 disabled:opacity-50"
+            className="ta-button-primary w-full disabled:opacity-50"
           >
             {submitting ? 'Analyse en cours…' : 'Obtenir mon diagnostic'}
           </button>
@@ -128,7 +128,7 @@ export function OrderPage() {
       )}
 
       {diagnostic && (
-        <div className="rounded-lg border bg-white p-5 space-y-3">
+        <div className="ta-card mt-6 space-y-3 p-6 sm:p-8">
           <p className="text-xs uppercase tracking-wide text-slate-400">
             {diagnostic.source === 'gemini' ? 'Diagnostic IA' : 'Diagnostic (moteur de secours)'} ·
             confiance {diagnostic.ai_result.confidence}%
@@ -163,12 +163,12 @@ export function OrderPage() {
       )}
 
       {order.status === 'paid' && !isDiagnosticPlan && (
-        <div className="space-y-4">
-          <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">Paiement confirmé ✓</p>
+        <div className="ta-card mt-6 space-y-4 p-6 sm:p-8">
+          <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">Paiement confirmé ✓</p>
           <button
             onClick={createSession}
             disabled={submitting}
-            className="w-full rounded-lg bg-brand-600 px-4 py-3 text-white font-medium hover:bg-brand-700 disabled:opacity-50"
+            className="ta-button-primary w-full disabled:opacity-50"
           >
             {submitting ? 'Création…' : 'Démarrer ma session'}
           </button>
@@ -176,7 +176,7 @@ export function OrderPage() {
       )}
 
       {order.status === 'refunded' && (
-        <p className="rounded-lg bg-slate-100 p-4 text-slate-600">Cette commande a été remboursée.</p>
+        <p className="ta-card mt-6 p-6 text-slate-600">Cette commande a été remboursée.</p>
       )}
     </div>
   );

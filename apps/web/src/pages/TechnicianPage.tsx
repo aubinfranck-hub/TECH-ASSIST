@@ -81,15 +81,18 @@ export function TechnicianPage() {
 
   if (!token) {
     return (
-      <div className="mx-auto max-w-sm px-4 py-14">
-        <h1 className="text-2xl font-bold mb-4">Espace technicien</h1>
-        <TechnicianLoginForm onLoggedIn={handleLoggedIn} />
+      <div className="ta-container flex min-h-[70vh] max-w-md items-center py-14">
+        <div className="ta-card w-full p-8">
+          <p className="ta-eyebrow mb-2">Console technicien</p>
+          <h1 className="mb-6 text-2xl font-bold">Espace technicien</h1>
+          <TechnicianLoginForm onLoggedIn={handleLoggedIn} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-14">
+    <div className="ta-container max-w-3xl py-14">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Console technicien</h1>
         <button onClick={logout} className="text-sm text-slate-500 hover:underline">

@@ -56,49 +56,53 @@ export function SessionPage() {
 
   if (!code) {
     return (
-      <div className="mx-auto max-w-md px-4 py-14">
-        <h1 className="text-2xl font-bold mb-4">Rejoindre ma session</h1>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setCode(inputCode.trim());
-          }}
-          className="space-y-3"
-        >
-          <input
-            required
-            placeholder="Code à 9 chiffres"
-            value={inputCode}
-            onChange={(e) => setInputCode(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2 text-center text-lg tracking-widest"
-          />
-          <button type="submit" className="w-full rounded-lg bg-brand-600 px-4 py-3 text-white font-medium hover:bg-brand-700">
-            Rejoindre
-          </button>
-        </form>
+      <div className="ta-container flex min-h-[70vh] max-w-md items-center py-14">
+        <div className="ta-card w-full p-8">
+          <p className="ta-eyebrow mb-2">Ma session</p>
+          <h1 className="mb-6 text-2xl font-bold">Rejoindre ma session</h1>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setCode(inputCode.trim());
+            }}
+            className="space-y-4"
+          >
+            <input
+              required
+              placeholder="Code à 9 chiffres"
+              value={inputCode}
+              onChange={(e) => setInputCode(e.target.value)}
+              className="ta-input text-center text-lg tracking-widest"
+            />
+            <button type="submit" className="ta-button-primary w-full">
+              Rejoindre
+            </button>
+          </form>
+        </div>
       </div>
     );
   }
 
-  if (error) return <p className="mx-auto max-w-md px-4 py-14 text-red-600">{error}</p>;
-  if (!session) return <p className="mx-auto max-w-md px-4 py-14 text-slate-500">Chargement…</p>;
+  if (error) return <p className="ta-container max-w-md py-14 text-red-600">{error}</p>;
+  if (!session) return <p className="ta-container max-w-md py-14 text-slate-500">Chargement…</p>;
 
   const remaining = session.ends_at ? new Date(session.ends_at).getTime() - now : null;
   const codeRemaining = new Date(session.code_expires_at).getTime() - now;
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-14">
-      <h1 className="text-2xl font-bold mb-1">Session {session.session_code}</h1>
-      <p className="text-slate-500 mb-6">Statut : {session.status}</p>
+    <div className="ta-container max-w-xl py-14">
+      <p className="ta-eyebrow mb-2">Ma session</p>
+      <h1 className="mb-1 text-2xl font-bold sm:text-3xl">Session {session.session_code}</h1>
+      <p className="mb-6 text-slate-500">Statut : {session.status}</p>
 
       {session.status === 'created' && (
-        <p className="rounded-lg bg-amber-50 p-4 text-amber-800 text-sm">
+        <p className="ta-card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           En attente d'un technicien. Ce code expire dans {formatRemaining(codeRemaining)}.
         </p>
       )}
 
       {session.status === 'active' && remaining !== null && (
-        <div className="rounded-lg border bg-white p-5">
+        <div className="ta-card p-6">
           <p className="text-sm text-slate-500">Temps restant</p>
           <p className="text-3xl font-bold text-brand-700">{formatRemaining(remaining)}</p>
           {remaining < 5 * 60 * 1000 && (
@@ -122,7 +126,7 @@ export function SessionPage() {
           {!session.consent_screen_at && (
             <button
               onClick={() => giveConsent('screen')}
-              className="w-full rounded-lg border border-brand-600 text-brand-700 px-4 py-3 font-medium hover:bg-brand-50"
+              className="w-full rounded-xl border border-brand-600 px-4 py-3 font-medium text-brand-700 transition hover:bg-brand-50"
             >
               J'autorise le partage d'écran
             </button>
@@ -130,13 +134,13 @@ export function SessionPage() {
           {session.consent_screen_at && !session.consent_control_at && (
             <button
               onClick={() => giveConsent('control')}
-              className="w-full rounded-lg border border-brand-600 text-brand-700 px-4 py-3 font-medium hover:bg-brand-50"
+              className="w-full rounded-xl border border-brand-600 px-4 py-3 font-medium text-brand-700 transition hover:bg-brand-50"
             >
               J'autorise le technicien à prendre le contrôle
             </button>
           )}
           {session.consent_control_at && (
-            <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
+            <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">
               Partage d'écran et contrôle autorisés.
             </p>
           )}
@@ -146,14 +150,14 @@ export function SessionPage() {
       {(session.status === 'created' || session.status === 'active' || session.status === 'waiting_technician') && (
         <button
           onClick={stopSession}
-          className="mt-8 w-full rounded-lg bg-red-600 px-4 py-3 text-white font-medium hover:bg-red-700"
+          className="mt-8 w-full rounded-xl bg-red-600 px-4 py-3 font-medium text-white transition hover:bg-red-700"
         >
           Arrêter la session maintenant
         </button>
       )}
 
       {session.status === 'completed' && (
-        <p className="rounded-lg bg-slate-100 p-4 text-slate-600">
+        <p className="ta-card p-4 text-slate-600">
           Cette session est terminée. Merci d'avoir utilisé Tech Assist.
         </p>
       )}

@@ -135,29 +135,32 @@ export function CompanyPage() {
 
   if (!token) {
     return (
-      <div className="mx-auto max-w-sm px-4 py-14">
-        <h1 className="text-2xl font-bold mb-4">Espace entreprise</h1>
-        <form onSubmit={login} className="space-y-3">
-          <input
-            required
-            placeholder="Identifiant"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-          <input
-            required
-            type="password"
-            placeholder="Mot de passe"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-          {loginError && <p className="text-sm text-red-600">{loginError}</p>}
-          <button type="submit" className="w-full rounded-lg bg-brand-600 px-4 py-3 text-white font-medium hover:bg-brand-700">
-            Se connecter
-          </button>
-        </form>
+      <div className="ta-container flex min-h-[70vh] max-w-md items-center py-14">
+        <div className="ta-card w-full p-8">
+          <p className="ta-eyebrow mb-2">Espace entreprise</p>
+          <h1 className="mb-6 text-2xl font-bold">Connexion</h1>
+          <form onSubmit={login} className="space-y-4">
+            <input
+              required
+              placeholder="Identifiant"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="ta-input"
+            />
+            <input
+              required
+              type="password"
+              placeholder="Mot de passe"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="ta-input"
+            />
+            {loginError && <p className="text-sm text-red-600">{loginError}</p>}
+            <button type="submit" className="ta-button-primary w-full">
+              Se connecter
+            </button>
+          </form>
+        </div>
       </div>
     );
   }
