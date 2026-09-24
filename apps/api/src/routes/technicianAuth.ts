@@ -9,6 +9,44 @@ import { buildOtpauthUri, generateTotpSecret, verifyTotpCode } from '../utils/to
 
 export const technicianAuthRouter = Router();
 
+const bootstrapAdminSchema = z.object({
+  fullName: z.string().min(2).max(120),
+  phone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide'),
+  username: z.string().min(3).max(60),
+  password: z.string().min(8).max(200),
+});
+
+/**
+ * Crée le tout premier compte admin d'un déploiement — uniquement tant
+ * qu'aucun technicien n'existe encore. S'éteint définitivement (409) dès
+ * qu'un compte existe : pas de porte dérobée permanente. Évite de dépendre
+ * d'un accès direct à la base ou à un shell sur l'hébergeur pour amorcer une
+ * instance fraîchement déployée.
+ */
+technicianAuthRouter.post(
+  '/technician/bootstrap-admin',
+  validateBody(bootstrapAdminSchema),
+  async (req, res) => {
+    const body = req.body as z.infer<typeof bootstrapAdminSchema>;
+    const passwordHash = await bcrypt.hash(body.password, 12);
+
+    const { rows } = await pool.query(
+      `INSERT INTO technicians (full_name, phone, username, password_hash, role)
+       SELECT $1, $2, $3, $4, 'admin'
+       WHERE NOT EXISTS (SELECT 1 FROM technicians)
+       RETURNING id, username, role`,
+      [body.fullName, body.phone, body.username, passwordHash],
+    );
+
+    if (rows.length === 0) {
+      return res.status(409).json({ error: 'Un compte existe déjà — ce point d\'amorçage est désactivé' });
+    }
+
+    await logAudit(pool, { actorType: 'system', actorId: rows[0].id, action: 'auth.bootstrap_admin_created' });
+    res.status(201).json({ technician: rows[0] });
+  },
+);
+
 const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
