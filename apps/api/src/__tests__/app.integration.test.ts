@@ -175,4 +175,86 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
     const res = await request(app).get('/api/admin/orders').set('Authorization', `Bearer ${techToken}`);
     expect(res.status).toBe(403);
   });
+
+  describe('Appairage RustDesk (Lot L2)', () => {
+    async function createActiveSession(techToken: string) {
+      const orderRes = await request(app)
+        .post('/api/orders')
+        .send({ clientPhone: '+2250700000008', planId: 'assistance_rapide', platform: 'windows' });
+      const orderId = orderRes.body.order.id;
+      await request(app).post(`/api/orders/${orderId}/confirm-payment`).set('Authorization', `Bearer ${techToken}`);
+      const sessionRes = await request(app).post(`/api/orders/${orderId}/session`).send({ platform: 'windows' });
+      const sessionId = sessionRes.body.session.id;
+      await request(app)
+        .patch(`/api/technician/sessions/${sessionId}/claim`)
+        .set('Authorization', `Bearer ${techToken}`);
+      return sessionId;
+    }
+
+    it('renvoie 503 si le serveur RustDesk n\'est pas configuré', async () => {
+      const res = await request(app).get('/api/remote-config');
+      expect(res.status).toBe(503);
+    });
+
+    it('refuse de livrer les identifiants tant que le client n\'a pas consenti au contrôle', async () => {
+      const techToken = await createAdmin();
+      const sessionId = await createActiveSession(techToken);
+
+      await request(app).post(`/api/sessions/${sessionId}/pair`).send({
+        remotePeerId: '123456789',
+        remotePassword: 'motdepasse-temp',
+      });
+
+      const blocked = await request(app)
+        .get(`/api/technician/sessions/${sessionId}/remote-credentials`)
+        .set('Authorization', `Bearer ${techToken}`);
+      expect(blocked.status).toBe(403);
+
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen' });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
+
+      const allowed = await request(app)
+        .get(`/api/technician/sessions/${sessionId}/remote-credentials`)
+        .set('Authorization', `Bearer ${techToken}`);
+      expect(allowed.status).toBe(200);
+      expect(allowed.body.remotePeerId).toBe('123456789');
+      expect(allowed.body.remotePassword).toBe('motdepasse-temp');
+    });
+
+    it('interdit à un technicien non assigné de voir les identifiants', async () => {
+      const adminToken = await createAdmin();
+      const otherTechToken = await createTechnician();
+      const sessionId = await createActiveSession(adminToken);
+
+      await request(app).post(`/api/sessions/${sessionId}/pair`).send({
+        remotePeerId: '999999999',
+        remotePassword: 'secret',
+      });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen' });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
+
+      const res = await request(app)
+        .get(`/api/technician/sessions/${sessionId}/remote-credentials`)
+        .set('Authorization', `Bearer ${otherTechToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('purge le mot de passe de connexion à distance quand la session est arrêtée (RS-10)', async () => {
+      const techToken = await createAdmin();
+      const sessionId = await createActiveSession(techToken);
+      await request(app).post(`/api/sessions/${sessionId}/pair`).send({
+        remotePeerId: '111111111',
+        remotePassword: 'secret',
+      });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen' });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
+
+      await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client' });
+
+      const res = await request(app)
+        .get(`/api/technician/sessions/${sessionId}/remote-credentials`)
+        .set('Authorization', `Bearer ${techToken}`);
+      expect(res.status).toBe(409);
+    });
+  });
 });

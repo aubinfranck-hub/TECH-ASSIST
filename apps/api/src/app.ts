@@ -11,6 +11,7 @@ import { healthRouter } from './routes/health.js';
 import { leadsRouter } from './routes/leads.js';
 import { ordersRouter } from './routes/orders.js';
 import { pricingRouter } from './routes/pricing.js';
+import { remoteRouter } from './routes/remote.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { technicianAuthRouter } from './routes/technicianAuth.js';
 
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api/orders', strictLimiter, ordersRouter);
   app.use('/api', strictLimiter, diagnosticsRouter);
   app.use('/api', sessionsRouter);
+  app.use('/api', remoteRouter);
   app.use('/api/auth', strictLimiter, technicianAuthRouter);
   app.use('/api', strictLimiter, leadsRouter);
   app.use('/api/admin', adminRouter);

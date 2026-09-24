@@ -4,18 +4,20 @@ Plateforme d'assistance informatique à distance pour particuliers et PME
 (Côte d'Ivoire) : diagnostic IA, commande et paiement Mobile Money, sessions
 assistées avec un technicien, console technicien et administration.
 
-Ce dépôt contient le **Lot L1 — le portail** : site public, API et base de
-données. Le contrôle à distance effectif (partage d'écran/contrôle réel via
-WebRTC, clients Windows/Android) est un lot ultérieur (L2/L3) : les sessions
-créées ici gèrent déjà le code d'appairage, le consentement en deux étapes,
-le minuteur et l'arrêt immédiat, mais le flux vidéo lui-même reste à
-brancher.
+Ce dépôt contient le **Lot L1 — le portail** (site, API, base de données) et
+le début du **Lot L2 — service Remote**, qui s'appuie sur RustDesk
+auto-hébergé (décision D1, voir `docs/lot-l2-remote.md`) plutôt que de
+réinventer WebRTC/capture d'écran/injection d'entrées. Le parcours
+d'appairage (code de session, consentement, identifiants chiffrés) est
+implémenté ; le client Windows sur mesure et signé reste à construire.
 
 ## Structure
 
 ```
-apps/api   API Node.js/Express + TypeScript, PostgreSQL
-apps/web   Site React + TypeScript + Vite + Tailwind
+apps/api        API Node.js/Express + TypeScript, PostgreSQL
+apps/web        Site React + TypeScript + Vite + Tailwind
+infra/rustdesk  Docker Compose du serveur RustDesk auto-hébergé (Lot L2)
+docs/           Notes d'architecture par lot
 ```
 
 ## Démarrage local
@@ -67,10 +69,20 @@ Les tests d'intégration utilisent une base PostgreSQL dédiée
 - Sécurité de base : Helmet, CORS, rate-limiting, validation stricte (zod),
   secrets hors dépôt.
 
+## Ce qui est fait (début du Lot L2)
+
+- Décision D1 tranchée : RustDesk auto-hébergé (`infra/rustdesk/`) plutôt
+  qu'un développement maison de WebRTC/capture d'écran/injection d'entrées.
+- Appairage session ↔ RustDesk : le client saisit son ID/mot de passe
+  RustDesk, chiffrés au repos (RS-10) et purgés à l'arrêt de la session.
+- Les identifiants de connexion ne sont révélés au technicien qu'après prise
+  en charge de la session ET consentement contrôle explicite du client.
+- Détails, limites et prochaines étapes : `docs/lot-l2-remote.md`.
+
 ## Ce qui reste (lots suivants, voir cahier des charges)
 
-- L2 : service Remote (flux WebRTC + TURN, injection souris/clavier réelle,
-  client Windows).
+- L2 : client Windows RustDesk personnalisé et signé (actuellement : client
+  portable officiel + configuration manuelle par le client).
 - L3 : client Android signé (partage d'écran, guidage, puis contrôle par
   accessibilité).
 - L4 : paiement Mobile Money automatisé (webhook signé) — décision D3.

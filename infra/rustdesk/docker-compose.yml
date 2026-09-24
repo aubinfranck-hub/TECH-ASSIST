@@ -1,0 +1,43 @@
+# Lot L2 — serveur RustDesk auto-hébergé (décision D1 : base ouverte plutôt
+# que réinventer WebRTC/capture d'écran/injection d'entrées).
+#
+# hbbs = serveur d'ID / rendez-vous (appairage) — hbbr = serveur de relais.
+# Configuration reprise du docker-compose officiel du projet
+# (github.com/rustdesk/rustdesk-server), adaptée avec le nom de domaine réel.
+#
+# Déploiement : remplacer RUSTDESK_RELAY_HOST par le domaine public du relais
+# (ex: remote.techassist.ci), ouvrir les ports listés ci-dessous, et monter
+# ./data en volume persistant (il contient la paire de clés id_ed25519 /
+# id_ed25519.pub générée au premier démarrage — NE JAMAIS la perdre : tous
+# les clients déjà déployés en dépendent pour s'appairer).
+
+services:
+  hbbs:
+    container_name: hbbs
+    image: rustdesk/rustdesk-server:latest
+    command: hbbs -r ${RUSTDESK_RELAY_HOST:?définir RUSTDESK_RELAY_HOST}:21117
+    volumes:
+      - ./data:/root
+    ports:
+      - "21115:21115" # test du type de NAT
+      - "21116:21116/tcp" # appairage (TCP)
+      - "21116:21116/udp" # appairage (UDP)
+      - "21118:21118" # appairage via WebSocket (client web éventuel)
+    restart: unless-stopped
+    networks: [rustdesk-net]
+    depends_on: [hbbr]
+
+  hbbr:
+    container_name: hbbr
+    image: rustdesk/rustdesk-server:latest
+    command: hbbr
+    volumes:
+      - ./data:/root
+    ports:
+      - "21117:21117" # relais
+      - "21119:21119" # relais via WebSocket
+    restart: unless-stopped
+    networks: [rustdesk-net]
+
+networks:
+  rustdesk-net:

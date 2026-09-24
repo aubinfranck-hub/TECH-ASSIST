@@ -70,4 +70,12 @@ export interface SessionInfo {
   ends_at?: string | null;
   consent_screen_at?: string | null;
   consent_control_at?: string | null;
+  remote_peer_id?: string | null;
+  remote_paired_at?: string | null;
+}
+
+export interface RemoteConfig {
+  idServer: string;
+  relayServer: string;
+  key: string;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { RemotePairingPanel } from '../components/RemotePairingPanel.js';
 import { api, ApiError, type SessionInfo } from '../lib/api.js';
 
 function formatRemaining(ms: number): string {
@@ -103,6 +104,16 @@ export function SessionPage() {
           {remaining < 5 * 60 * 1000 && (
             <p className="mt-1 text-sm text-amber-700">Moins de 5 minutes restantes.</p>
           )}
+        </div>
+      )}
+
+      {(session.status === 'created' || session.status === 'active') && (
+        <div className="mt-6">
+          <RemotePairingPanel
+            sessionId={session.id}
+            alreadyPaired={Boolean(session.remote_paired_at)}
+            onPaired={() => refresh(code)}
+          />
         </div>
       )}
 

@@ -67,7 +67,8 @@ sessionsRouter.post(
 sessionsRouter.get('/sessions/:code', async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, session_code, status, code_expires_at, duration_minutes,
-            started_at, ends_at, consent_screen_at, consent_control_at, technician_id
+            started_at, ends_at, consent_screen_at, consent_control_at, technician_id,
+            remote_peer_id, remote_paired_at
      FROM sessions WHERE session_code = $1`,
     [req.params.code],
   );
@@ -99,8 +100,10 @@ const stopSchema = z.object({ stoppedBy: z.enum(['client', 'technician', 'system
 
 /** RS-02 : bouton d'arrêt immédiat, effectif quel que soit qui l'actionne. */
 sessionsRouter.post('/sessions/:id/stop', validateBody(stopSchema), async (req, res) => {
+  // RS-10 : le mot de passe de connexion à distance ne survit pas à la session.
   const { rows } = await pool.query(
-    `UPDATE sessions SET status = 'completed', stopped_at = now(), stopped_by = $2
+    `UPDATE sessions
+     SET status = 'completed', stopped_at = now(), stopped_by = $2, remote_password_encrypted = NULL
      WHERE id = $1 AND status IN ('created', 'waiting_technician', 'active')
      RETURNING id, status, stopped_at`,
     [req.params.id, req.body.stoppedBy],
@@ -129,6 +132,20 @@ sessionsRouter.get('/technician/queue', requireAuth('technician', 'admin'), asyn
      ORDER BY s.created_at ASC`,
   );
   res.json({ queue: rows });
+});
+
+/** Sessions actives assignées au technicien connecté (console, après prise en charge). */
+sessionsRouter.get('/technician/my-sessions', requireAuth('technician', 'admin'), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT s.id, s.session_code, s.platform, s.status, s.ends_at,
+            s.consent_screen_at, s.consent_control_at,
+            o.client_phone, o.client_name
+     FROM sessions s JOIN orders o ON o.id = s.order_id
+     WHERE s.technician_id = $1 AND s.status = 'active'
+     ORDER BY s.started_at ASC`,
+    [req.auth!.sub],
+  );
+  res.json({ sessions: rows });
 });
 
 /** RF-30 : le technicien prend une demande de la file. */

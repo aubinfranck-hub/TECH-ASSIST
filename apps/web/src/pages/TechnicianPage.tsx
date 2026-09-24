@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ActiveSessionCard, type MySession } from '../components/ActiveSessionCard.js';
 import { api, ApiError } from '../lib/api.js';
 
 interface QueueItem {
@@ -28,16 +29,19 @@ export function TechnicianPage() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [pendingOrders, setPendingOrders] = useState<TechOrder[]>([]);
+  const [mySessions, setMySessions] = useState<MySession[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [queueRes, ordersRes] = await Promise.all([
+      const [queueRes, ordersRes, mySessionsRes] = await Promise.all([
         api.get<{ queue: QueueItem[] }>('/api/technician/queue'),
         api.get<{ orders: TechOrder[] }>('/api/orders/pending-payment').catch(() => ({ orders: [] })),
+        api.get<{ sessions: MySession[] }>('/api/technician/my-sessions'),
       ]);
       setQueue(queueRes.queue);
       setPendingOrders(ordersRes.orders);
+      setMySessions(mySessionsRes.sessions);
       setError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -144,6 +148,16 @@ export function TechnicianPage() {
                 Paiement reçu
               </button>
             </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="font-semibold mb-3">Mes sessions actives</h2>
+        {mySessions.length === 0 && <p className="text-sm text-slate-500">Aucune session active.</p>}
+        <ul className="space-y-2">
+          {mySessions.map((s) => (
+            <ActiveSessionCard key={s.id} session={s} />
           ))}
         </ul>
       </section>
