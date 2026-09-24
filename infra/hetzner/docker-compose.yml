@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tech-assist-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-techassist}
+      POSTGRES_USER: ${POSTGRES_USER:-techassist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-techassist} -d ${POSTGRES_DB:-techassist}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [private]
+
+  api:
+    build: { context: ../.., dockerfile: infra/hetzner/Dockerfile.api }
+    container_name: tech-assist-api
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-techassist}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-techassist}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://techassist.ci,https://www.techassist.ci}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      RUSTDESK_ID_SERVER: ${RUSTDESK_ID_SERVER:-remote.techassist.ci}
+      RUSTDESK_RELAY_SERVER: ${RUSTDESK_RELAY_SERVER:-remote.techassist.ci}
+      RUSTDESK_PUBLIC_KEY: ${RUSTDESK_PUBLIC_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [private]
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/hetzner/Dockerfile.web
+      args: { VITE_API_BASE_URL: "" }
+    container_name: tech-assist-web
+    restart: unless-stopped
+    networks: [private]
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: tech-assist-caddy
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web, api]
+    restart: unless-stopped
+    networks: [private]
+
+  hbbs:
+    image: rustdesk/rustdesk-server:latest
+    container_name: tech-assist-hbbs
+    command: hbbs -r ${RUSTDESK_RELAY_HOST:-remote.techassist.ci}:21117
+    volumes: [rustdesk_data:/root]
+    ports:
+      - "21115:21115"
+      - "21116:21116/tcp"
+      - "21116:21116/udp"
+      - "21118:21118"
+    restart: unless-stopped
+    depends_on: [hbbr]
+    networks: [private]
+
+  hbbr:
+    image: rustdesk/rustdesk-server:latest
+    container_name: tech-assist-hbbr
+    command: hbbr
+    volumes: [rustdesk_data:/root]
+    ports: ["21117:21117", "21119:21119"]
+    restart: unless-stopped
+    networks: [private]
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+  rustdesk_data:
+
+networks:
+  private:
+    driver: bridge
