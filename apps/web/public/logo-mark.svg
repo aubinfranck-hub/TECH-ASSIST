@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Tech Assist">
-  <rect x="4" y="4" width="112" height="112" rx="30" fill="#dc2626"/>
-  <path d="M25 30h70v18H70v43H50V48H25z" fill="#fff"/>
-  <path d="M77 91 93 49h8v42H82z" fill="#fff"/>
-  <path d="M77 91 90 58h7L84 91z" fill="#b91c1c"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title">
+  <title id="title">TA — Tech Assist</title>
+  <rect x="4" y="4" width="112" height="112" rx="28" fill="#dc2626"/>
+  <text x="60" y="79" text-anchor="middle" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="58" font-weight="900" letter-spacing="-5">TA</text>
 </svg>
