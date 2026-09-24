@@ -50,6 +50,13 @@ export function createApp() {
     skip: () => isTest,
   });
 
+  // Pas de front-end servi ici (voir apps/web) — réponse minimale pour que
+  // le contrôle de santé par défaut d'un hébergeur (GET /) ne signale pas
+  // le service comme en échec faute de configuration d'un chemin dédié.
+  app.get('/', (_req, res) => {
+    res.json({ service: 'tech-assist-api', status: 'ok' });
+  });
+
   app.use('/api/health', healthRouter);
   app.use('/api/pricing', pricingRouter);
   app.use('/api/orders', strictLimiter, ordersRouter);
