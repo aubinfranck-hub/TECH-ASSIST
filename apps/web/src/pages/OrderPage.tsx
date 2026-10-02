@@ -198,10 +198,10 @@ export function OrderPage() {
           <section className="ta-card p-5 sm:p-7">
             <div className="rounded-xl bg-green-50 p-4 text-sm font-bold text-green-800">✓ Abonnement activé pour 30 jours</div>
             <p className="mt-4 text-sm leading-6 text-slate-600">
-              Vous pouvez maintenant démarrer vos assistances, avec l'agent IA ou un technicien.
+              Retournez dans l'application Tech Assist pour démarrer vos assistances, avec l'agent IA ou un technicien.
             </p>
             <Link to="/assistance" className="ta-button-primary mt-5 w-full">
-              Démarrer une assistance
+              Voir comment ça marche
             </Link>
           </section>
         )}

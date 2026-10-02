@@ -53,19 +53,6 @@ export { TECHNICIAN_TOKEN_KEY, COMPANY_TOKEN_KEY };
 
 export type AssistanceMode = 'ia' | 'humain';
 
-export interface Eligibility {
-  freeOfferAvailable: boolean;
-  subscription: { endsAt: string } | null;
-  aiAgentAvailable: boolean;
-}
-
-export interface AssistanceResult {
-  order: Order;
-  session: SessionInfo;
-  coverage: 'subscription' | 'free_offer';
-  fallbackToHuman: boolean;
-}
-
 export interface PricingPlan {
   id: string;
   name: string;

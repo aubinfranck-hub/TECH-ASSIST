@@ -1,0 +1,19 @@
+{
+  "name": "@tech-assist/agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Agent Tech Assist : diagnostique et corrige les problèmes de l'appareil du client, avec son accord.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 
 export interface Mail {
   to: string;
@@ -16,7 +16,7 @@ export class MailNotConfiguredError extends Error {
 /** Boîte d'envoi en mémoire, uniquement en test, pour lire le code sans vrai email. */
 export const testOutbox: Mail[] = [];
 
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
 function getTransporter(host: string) {
   if (!transporter) {

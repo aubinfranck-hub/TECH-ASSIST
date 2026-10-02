@@ -28,7 +28,7 @@ export function PricingTable() {
     <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-5 text-center">
       <p className="font-bold text-green-900">Première assistance offerte</p>
       <p className="mt-1 text-sm text-green-800">Agent IA ou technicien, sans paiement, pour essayer.</p>
-      <Link to="/assistance" className="ta-button-primary mt-4">Démarrer mon assistance offerte</Link>
+      <Link to="/assistance" className="ta-button-primary mt-4">Installer l’application</Link>
     </div>
     <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
       {particuliers.map((plan) => (
