@@ -130,4 +130,28 @@ describe('rattachement d’un PC à une entreprise', () => {
     expect((await request(app).post('/api/app/company/heartbeat').set(auth).send({ diskFreePercent: 500 })).status).toBe(400);
     expect((await request(app).post('/api/app/company/heartbeat').send({ diskFreePercent: 10 })).status).toBe(401);
   });
+
+  it('un PC rattaché à une entreprise à l’abonnement actif est couvert, même sans offre ni abonnement personnel', async () => {
+    const c = await company('Kassy SARL', 'kassy_admin', '+2250700009999');
+    const { code } = (await request(app).post('/api/company/join-codes').set('Authorization', `Bearer ${c.token}`)).body;
+    const auth = await registerApp();
+    await request(app).post('/api/app/company/join').set(auth).send({ code, deviceName: 'PC-COMPTA' });
+    await pool.query('UPDATE app_installs SET free_offer_used_at = now()');
+
+    // société pas encore active : refusé
+    await pool.query("UPDATE companies SET subscription_status = 'trial'");
+    expect((await request(app).post('/api/app/assistance').set(auth).send({ mode: 'humain' })).status).toBe(402);
+
+    await pool.query("UPDATE companies SET subscription_status = 'active'");
+    const me = await request(app).get('/api/app/me').set(auth);
+    expect(me.body.entitlements.companyCovered).toBe(true);
+    const res = await request(app).post('/api/app/assistance').set(auth).send({ mode: 'humain' });
+    expect(res.status).toBe(201);
+    expect(res.body.coverage).toBe('company');
+
+    // un PC non rattaché n'est pas couvert
+    const stranger = await registerApp();
+    await pool.query('UPDATE app_installs SET free_offer_used_at = now()');
+    expect((await request(app).post('/api/app/assistance').set(stranger).send({ mode: 'humain' })).status).toBe(402);
+  });
 });

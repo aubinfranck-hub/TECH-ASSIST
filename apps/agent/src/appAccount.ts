@@ -64,13 +64,15 @@ export async function readHardwareHash(runner: CommandRunner): Promise<string | 
 export interface Entitlements {
   freeOfferAvailable: boolean;
   subscription: { endsAt: string } | null;
+  /** Poste couvert par l'abonnement de la société. */
+  companyCovered?: boolean;
   aiAgentAvailable: boolean;
 }
 
 export interface StartedSession {
   token: string;
   sessionId: string;
-  coverage: 'subscription' | 'free_offer';
+  coverage: 'subscription' | 'company' | 'free_offer';
   fallbackToHuman: boolean;
 }
 
@@ -122,7 +124,7 @@ export class AppApi {
   startAssistance(token: string) {
     return this.call<{
       session: { id: string };
-      coverage: 'subscription' | 'free_offer';
+      coverage: 'subscription' | 'company' | 'free_offer';
       fallbackToHuman: boolean;
     }>('/app/assistance', { mode: 'ia' }, token);
   }
@@ -225,7 +227,7 @@ export async function startCovered(deps: AccountDeps, login: { token: string; en
   const { ui, api } = deps;
   const { entitlements, token } = login;
 
-  if (!entitlements.freeOfferAvailable && !entitlements.subscription) {
+  if (!entitlements.freeOfferAvailable && !entitlements.subscription && !entitlements.companyCovered) {
     ui.info('Votre assistance offerte a déjà été utilisée. Pour continuer : abonnement de 10 000 FCFA par mois (agent IA ou technicien).');
     const pick = await ui.choose("Souhaitez-vous demander l'abonnement ?", ["Oui, demander l'abonnement", 'Non, plus tard']);
     if (pick === 0) {

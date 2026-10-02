@@ -53,10 +53,22 @@ export function aiAgentAvailable(): boolean {
 interface Entitlements {
   freeOfferAvailable: boolean;
   subscription: { endsAt: Date } | null;
+  /** Poste rattaché à une société dont l'abonnement est actif. */
+  companyCovered: boolean;
   aiAgentAvailable: boolean;
 }
 
 /** L'offre est unique par adresse email ET par empreinte d'appareil : la base s'en souvient. */
+/** Ce poste est rattaché à une société dont l'abonnement est actif : l'assistance est couverte. */
+async function companyCovers(db: Db, installId: string): Promise<boolean> {
+  const r = await db.query(
+    `SELECT 1 FROM company_devices d JOIN companies c ON c.id = d.company_id
+     WHERE d.app_install_id = $1 AND c.subscription_status = 'active' LIMIT 1`,
+    [installId],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
 async function freeOfferUsed(db: Db, email: string, hardwareHash: string | null): Promise<boolean> {
   const { rows } = await db.query(
     `SELECT 1 FROM app_installs
@@ -78,12 +90,13 @@ async function activeSubscription(db: Db, email: string) {
   return rows[0] ? { endsAt: rows[0].ends_at as Date } : null;
 }
 
-async function entitlementsFor(install: { email: string; hardwareHash: string | null }): Promise<Entitlements> {
-  const [used, subscription] = await Promise.all([
+async function entitlementsFor(install: { id?: string; email: string; hardwareHash: string | null }): Promise<Entitlements> {
+  const [used, subscription, companyCovered] = await Promise.all([
     freeOfferUsed(pool, install.email, install.hardwareHash),
     activeSubscription(pool, install.email),
+    install.id ? companyCovers(pool, install.id) : Promise.resolve(false),
   ]);
-  return { freeOfferAvailable: !used, subscription, aiAgentAvailable: aiAgentAvailable() };
+  return { freeOfferAvailable: !used, subscription, companyCovered, aiAgentAvailable: aiAgentAvailable() };
 }
 
 const registerSchema = z.object({
@@ -140,7 +153,7 @@ appRouter.post('/app/register', limiter, validateBody(registerSchema), async (re
   }
   await logAudit(pool, { actorType: 'client', actorId: email, action: 'app.registered', details: { platform: body.platform } });
 
-  const entitlements = await entitlementsFor({ email, hardwareHash: install.hardware_hash });
+  const entitlements = await entitlementsFor({ id: install.id, email, hardwareHash: install.hardware_hash });
   res.status(201).json({ token: signAppToken(install.id), entitlements });
 });
 
@@ -238,7 +251,7 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
   const client = await pool.connect();
   let order: { id: string; status: string; amount_fcfa: number };
   let session: Extract<Awaited<ReturnType<typeof createSessionForOrder>>, { ok: true }>['session'];
-  let coverage: 'subscription' | 'free_offer';
+  let coverage: 'subscription' | 'company' | 'free_offer';
   try {
     await client.query('BEGIN');
     // Sérialise les demandes d'un même email ou d'un même appareil : pas de double offre en parallèle.
@@ -253,6 +266,9 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
     let planId: string;
     if (subscription) {
       coverage = 'subscription';
+      planId = SUBSCRIBER_PLAN_ID;
+    } else if (await companyCovers(client, install.id)) {
+      coverage = 'company';
       planId = SUBSCRIBER_PLAN_ID;
     } else if (!(await freeOfferUsed(client, install.email, install.hardwareHash))) {
       coverage = 'free_offer';

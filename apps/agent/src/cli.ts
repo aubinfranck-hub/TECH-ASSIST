@@ -125,7 +125,9 @@ async function main() {
           ? "L'agent IA n'est pas disponible pour le moment : un technicien prendra le relais. Décrivez votre problème."
           : started.coverage === 'free_offer'
             ? 'Votre assistance offerte est démarrée.'
-            : 'Votre abonnement est actif.',
+            : started.coverage === 'company'
+              ? "L'abonnement de votre entreprise couvre ce poste."
+              : 'Votre abonnement est actif.',
       );
     } else {
       chat.info("Je continue sans compte : je peux réparer votre PC, mais l'assistant en ligne (questions, formation) n'est pas disponible.");
