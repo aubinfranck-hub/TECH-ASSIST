@@ -131,3 +131,7 @@ API : `GEMINI_API_KEY` (et `GEMINI_MODEL`, défaut `gemini-2.0-flash`) pour l'as
 - **Santé** : à chaque lancement le programme envoie `POST /api/app/company/heartbeat` : espace disque libre, mémoire utilisée, antivirus actif, mises à jour récentes (≤ 60 jours). Lecture seule, valeurs numériques/booléennes uniquement : aucun nom de fichier ni contenu (`skills/fleetStatus.ts`).
 - **Vue de parc** : tableau + synthèse « N en bon état · M à surveiller » dans l'espace entreprise.
 - **Pas encore** : correction à distance d'un PC du parc depuis la console, actions groupées (« corrige tous les PC »), couverture de l'abonnement entreprise pour les assistances du poste. Voir D10.
+
+## Diagnostic à distance d'un PC du parc
+
+L'administrateur de l'entreprise clique « Demander » sur un poste (espace entreprise). Au prochain lancement du programme sur ce PC, l'utilisateur voit **qui** demande et **ce qui sera envoyé**, et accepte ou refuse. S'il accepte, l'agent fait l'analyse complète en **lecture seule** (`scanPc`) et n'envoie qu'un résumé (une ligne par domaine, gravité 🔴🟠🟡🟢). Aucune modification, aucun fichier. Une demande par poste à la fois, valable 7 jours ; refus et résultats sont journalisés. Limite : le programme n'est pas un service, la demande n'est traitée que quand l'utilisateur ouvre Tech Assist.

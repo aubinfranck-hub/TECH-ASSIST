@@ -18,7 +18,7 @@ export async function truncateAll() {
   await pool.query(`
     TRUNCATE TABLE audit_logs, diagnostics, sessions, subscriptions, email_verifications, orders, app_installs, technician_applications,
       pme_requests, visit_requests, technicians,
-      company_help_requests, company_devices, company_consents, company_users, companies
+      company_help_requests, company_diagnostic_requests, company_devices, company_consents, company_users, companies
       RESTART IDENTITY CASCADE;
   `);
   // pricing_plans n'est pas tronquée (référencée par les tests) — mais les

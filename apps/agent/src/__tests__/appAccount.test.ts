@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AppApi, readHardwareHash, signIn, startCovered, type AccountStore, type SavedAccount } from '../appAccount.js';
-import { ScriptedConversation } from './fakeScripts.js';
+import { ScriptedConversation, ScriptedRunner } from './fakeScripts.js';
 
 function memoryStore(initial: SavedAccount = { installId: 'install-0123456789abcdef' }): AccountStore & { data: SavedAccount } {
   const box = { data: initial } as AccountStore & { data: SavedAccount };
@@ -150,5 +150,39 @@ describe('empreinte de l\'appareil', () => {
   it('rend undefined si la lecture échoue ou rend n\'importe quoi', async () => {
     expect(await readHardwareHash({ runPowerShell: async () => ({ stdout: '{"id":"; rm -rf"}', stderr: '', exitCode: 0 }) })).toBeUndefined();
     expect(await readHardwareHash({ runPowerShell: async () => { throw new Error('x'); } })).toBeUndefined();
+  });
+});
+
+describe('demande de diagnostic de l’entreprise', () => {
+  it('refus : rien n’est analysé ni envoyé, le refus est transmis', async () => {
+    const { answerCompanyRequest } = await import('../appAccount.js');
+    const answers: unknown[] = [];
+    const api = { pendingRequest: async () => ({ id: 'r1', companyName: 'Kassy SARL' }), answerRequest: async (_t: string, _id: string, b: unknown) => { answers.push(b); return { ok: true }; } };
+    const runner = new ScriptedRunner([]);
+    const ui = new ScriptedConversation({ picks: [1] });
+    expect(await answerCompanyRequest({ ui, api: api as never, runner }, 'tok')).toBe('declined');
+    expect(answers).toEqual([{ status: 'declined' }]);
+    expect(runner.calls).toHaveLength(0);
+  });
+
+  it('aucune demande : ne pose aucune question', async () => {
+    const { answerCompanyRequest } = await import('../appAccount.js');
+    const api = { pendingRequest: async () => null };
+    const ui = new ScriptedConversation();
+    expect(await answerCompanyRequest({ ui, api: api as never, runner: new ScriptedRunner([]) }, 'tok')).toBe('none');
+    expect(ui.choices).toEqual([]);
+  });
+
+  it('accord : analyse en lecture seule puis résumé envoyé (une analyse qui échoue est signalée, pas cachée)', async () => {
+    const { answerCompanyRequest } = await import('../appAccount.js');
+    const answers: { status: string; worst?: string; summary?: string }[] = [];
+    const api = { pendingRequest: async () => ({ id: 'r1', companyName: 'Kassy SARL' }), answerRequest: async (_t: string, _id: string, b: never) => { answers.push(b); return { ok: true }; } };
+    const ui = new ScriptedConversation({ picks: [0] });
+    expect(await answerCompanyRequest({ ui, api: api as never, runner: new ScriptedRunner([]) }, 'tok')).toBe('done');
+    expect(answers).toHaveLength(1);
+    expect(answers[0]!.status).toBe('done');
+    expect(answers[0]!.worst).toBe('unknown');
+    expect(answers[0]!.summary).toMatch(/Analyse impossible/);
+    expect(ui.said).toContain('Résumé envoyé à Kassy SARL');
   });
 });

@@ -154,4 +154,52 @@ describe('rattachement d’un PC à une entreprise', () => {
     await pool.query('UPDATE app_installs SET free_offer_used_at = now()');
     expect((await request(app).post('/api/app/assistance').set(stranger).send({ mode: 'humain' })).status).toBe(402);
   });
+
+  it('diagnostic à distance : demandé par l’administrateur, accepté ou refusé par le PC, résultat visible', async () => {
+    const c = await company('Kassy SARL', 'kassy_admin', '+2250700009999');
+    const adm = { Authorization: `Bearer ${c.token}` };
+    const { code } = (await request(app).post('/api/company/join-codes').set(adm)).body;
+    const auth = await registerApp();
+    await request(app).post('/api/app/company/join').set(auth).send({ code, deviceName: 'PC-COMPTA' });
+    const deviceId = (await request(app).get('/api/company/devices').set(adm)).body.devices[0].id;
+
+    expect((await request(app).post(`/api/company/devices/${deviceId}/diagnostic`)).status).toBe(401);
+    expect((await request(app).get('/api/app/company/requests')).status).toBe(401);
+    expect((await request(app).get('/api/app/company/requests').set(auth)).body.request).toBeNull();
+
+    const asked = await request(app).post(`/api/company/devices/${deviceId}/diagnostic`).set(adm);
+    expect(asked.status).toBe(201);
+    expect((await request(app).post(`/api/company/devices/${deviceId}/diagnostic`).set(adm)).status).toBe(409); // déjà en attente
+
+    const pending = (await request(app).get('/api/app/company/requests').set(auth)).body.request;
+    expect(pending).toMatchObject({ id: asked.body.request.id, companyName: 'Kassy SARL' });
+
+    // un autre PC ne peut pas répondre à cette demande
+    const stranger = await registerApp();
+    expect((await request(app).post(`/api/app/company/requests/${pending.id}/answer`).set(stranger).send({ status: 'declined' })).status).toBe(404);
+
+    const done = await request(app).post(`/api/app/company/requests/${pending.id}/answer`).set(auth).send({ status: 'done', worst: 'fixable', summary: '🟠 Disque : presque plein' });
+    expect(done.status).toBe(200);
+    expect((await request(app).post(`/api/app/company/requests/${pending.id}/answer`).set(auth).send({ status: 'declined' })).status).toBe(404); // déjà traitée
+    expect((await request(app).get('/api/app/company/requests').set(auth)).body.request).toBeNull();
+
+    const list = (await request(app).get('/api/company/diagnostics').set(adm)).body.diagnostics;
+    expect(list[0]).toMatchObject({ device_name: 'PC-COMPTA', status: 'done', worst: 'fixable', summary: '🟠 Disque : presque plein' });
+
+    // refus : rien n'est enregistré, et une nouvelle demande est possible
+    await request(app).post(`/api/company/devices/${deviceId}/diagnostic`).set(adm);
+    const second = (await request(app).get('/api/app/company/requests').set(auth)).body.request;
+    await request(app).post(`/api/app/company/requests/${second.id}/answer`).set(auth).send({ status: 'declined', summary: 'ne doit pas être gardé' });
+    const after = (await request(app).get('/api/company/diagnostics').set(adm)).body.diagnostics;
+    expect(after[0]).toMatchObject({ status: 'declined', summary: null });
+  });
+
+  it('un employé ne peut pas demander de diagnostic', async () => {
+    const c = await company('Kassy SARL', 'kassy_admin', '+2250700009999');
+    const adm = { Authorization: `Bearer ${c.token}` };
+    await request(app).post('/api/company/users').set(adm).send({ fullName: 'Employé', phone: '+2250700005555', username: 'emp1', password: 'motdepasse123', role: 'employee' });
+    const emp = (await request(app).post('/api/auth/company/login').send({ username: 'emp1', password: 'motdepasse123' })).body.token;
+    const res = await request(app).post('/api/company/devices/00000000-0000-0000-0000-000000000000/diagnostic').set('Authorization', `Bearer ${emp}`);
+    expect(res.status).toBe(403);
+  });
 });

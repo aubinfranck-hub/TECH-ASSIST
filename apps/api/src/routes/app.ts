@@ -235,6 +235,37 @@ appRouter.post('/app/company/heartbeat', limiter, requireAppInstall, validateBod
   res.status(202).json({ received: true });
 });
 
+/** Demande de diagnostic en attente pour ce PC (valable 7 jours). Le programme la montre à l'utilisateur, qui accepte ou refuse. */
+appRouter.get('/app/company/requests', limiter, requireAppInstall, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT r.id, c.name AS company_name FROM company_diagnostic_requests r
+     JOIN company_devices d ON d.id = r.device_id JOIN companies c ON c.id = r.company_id
+     WHERE d.app_install_id = $1 AND r.status = 'pending' AND r.created_at > now() - interval '7 days'
+     ORDER BY r.created_at ASC LIMIT 1`,
+    [req.appInstall!.id],
+  );
+  res.json({ request: rows[0] ? { id: rows[0].id, companyName: rows[0].company_name } : null });
+});
+
+const answerSchema = z.object({
+  status: z.enum(['done', 'declined']),
+  worst: z.enum(['critical', 'fixable', 'watch', 'ok', 'unknown']).optional(),
+  summary: z.string().max(3000).optional(),
+});
+
+appRouter.post('/app/company/requests/:id/answer', limiter, requireAppInstall, validateBody(answerSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof answerSchema>;
+  const { rowCount } = await pool.query(
+    `UPDATE company_diagnostic_requests r SET status = $3, summary = $4, worst = $5, answered_at = now()
+     FROM company_devices d
+     WHERE r.id::text = $1 AND r.status = 'pending' AND d.id = r.device_id AND d.app_install_id = $2`,
+    [req.params.id, req.appInstall!.id, body.status, body.status === 'done' ? (body.summary ?? '') : null, body.status === 'done' ? (body.worst ?? 'unknown') : null],
+  );
+  if (!rowCount) return res.status(404).json({ error: 'Demande introuvable ou déjà traitée.' });
+  await logAudit(pool, { actorType: 'client', actorId: req.appInstall!.email, action: 'company.diagnostic_answered', details: { status: body.status } });
+  res.json({ ok: true });
+});
+
 const startSchema = z.object({
   // L'agent IA est le mode par défaut ; le technicien humain reste un choix.
   mode: z.enum(['ia', 'humain']).default('ia'),

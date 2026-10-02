@@ -32,6 +32,17 @@ interface Device {
   last_seen_at: string | null;
 }
 
+interface DiagnosticRow {
+  id: string;
+  device_name: string;
+  status: 'pending' | 'done' | 'declined';
+  worst: 'critical' | 'fixable' | 'watch' | 'ok' | 'unknown' | null;
+  summary: string | null;
+  created_at: string;
+}
+
+const STATUS_LABEL: Record<DiagnosticRow['status'], string> = { pending: 'En attente de l’utilisateur', done: 'Terminé', declined: 'Refusé par l’utilisateur' };
+
 interface CompanyUser {
   id: string;
   full_name: string;
@@ -82,6 +93,8 @@ export function CompanyPage() {
   const [lastSessionCode, setLastSessionCode] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<{ code: string; expiresAt: string } | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticRow[]>([]);
+  const [diagMessage, setDiagMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -95,6 +108,7 @@ export function CompanyPage() {
       ]);
       setHelpRequests(requestsRes.helpRequests);
       setDevices(devicesRes.devices);
+      setDiagnostics((await companyApi.get<{ diagnostics: DiagnosticRow[] }>('/api/company/diagnostics')).diagnostics);
 
       if (me.role === 'admin') {
         const [usersRes, reportRes] = await Promise.all([
@@ -118,6 +132,17 @@ export function CompanyPage() {
   useEffect(() => {
     if (token) refresh();
   }, [token, refresh]);
+
+  async function requestDiagnostic(deviceId: string) {
+    setDiagMessage(null);
+    try {
+      await companyApi.post(`/api/company/devices/${deviceId}/diagnostic`, {});
+      setDiagMessage('Demande envoyée. Le diagnostic démarre quand l’utilisateur ouvre Tech Assist sur ce PC et accepte.');
+      await refresh();
+    } catch (err) {
+      setDiagMessage(err instanceof ApiError ? err.message : 'Impossible d’envoyer la demande.');
+    }
+  }
 
   async function createJoinCode() {
     setJoinError(null);
@@ -292,6 +317,7 @@ export function CompanyPage() {
               <th className="text-left p-2">Antivirus</th>
               <th className="text-left p-2">À jour</th>
               <th className="text-left p-2">État</th>
+              {role === 'admin' && <th className="text-left p-2">Diagnostic</th>}
             </tr>
           </thead>
           <tbody>
@@ -302,10 +328,29 @@ export function CompanyPage() {
                 <td className="p-2">{d.antivirus_ok == null ? '—' : d.antivirus_ok ? 'Oui' : 'Non'}</td>
                 <td className="p-2">{d.os_up_to_date == null ? '—' : d.os_up_to_date ? 'Oui' : 'Non'}</td>
                 <td className="p-2">{deviceState(d) === 'ok' ? '🟢 OK' : '🟠 À surveiller'}</td>
+                {role === 'admin' && (
+                  <td className="p-2">
+                    <button type="button" onClick={() => requestDiagnostic(d.id)} className="font-semibold text-brand-700 underline">Demander</button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+        {diagMessage && <p className="mt-3 text-sm text-slate-700">{diagMessage}</p>}
+        {diagnostics.length > 0 && (
+          <div className="mt-5">
+            <h3 className="font-semibold">Diagnostics demandés</h3>
+            <ul className="mt-2 space-y-3 text-sm">
+              {diagnostics.slice(0, 5).map((r) => (
+                <li key={r.id} className="rounded-lg border p-3">
+                  <p className="font-semibold">{r.device_name} <span className="font-normal text-slate-500">· {STATUS_LABEL[r.status]} · {new Date(r.created_at).toLocaleDateString('fr-FR')}</span></p>
+                  {r.summary && <pre className="mt-2 whitespace-pre-wrap font-sans text-slate-700">{r.summary}</pre>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       {role === 'admin' && report && (

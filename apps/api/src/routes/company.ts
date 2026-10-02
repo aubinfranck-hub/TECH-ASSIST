@@ -93,6 +93,36 @@ companyRouter.post('/join-codes', requireCompanyAuth('admin'), async (req, res) 
   res.status(201).json(created);
 });
 
+/**
+ * Demande de diagnostic (lecture seule) d'un PC du parc. Réservé aux administrateurs ; le PC doit être rattaché
+ * à un programme installé, et son utilisateur doit accepter. Une seule demande en attente par poste.
+ */
+companyRouter.post('/devices/:id/diagnostic', requireCompanyAuth('admin'), async (req, res) => {
+  const companyId = req.companyAuth!.companyId;
+  const device = await pool.query('SELECT id, app_install_id FROM company_devices WHERE id::text = $1 AND company_id = $2', [req.params.id, companyId]);
+  if (!device.rows[0]) return res.status(404).json({ error: 'Poste introuvable.' });
+  if (!device.rows[0].app_install_id) return res.status(409).json({ error: "Ce poste n'a pas le programme Tech Assist rattaché : impossible de lui envoyer une demande." });
+  const inserted = await pool.query(
+    `INSERT INTO company_diagnostic_requests (company_id, device_id, requested_by) VALUES ($1, $2, $3)
+     ON CONFLICT (device_id) WHERE status = 'pending' DO NOTHING RETURNING id, status, created_at`,
+    [companyId, device.rows[0].id, req.companyAuth!.sub],
+  );
+  if (!inserted.rows[0]) return res.status(409).json({ error: 'Une demande est déjà en attente pour ce poste.' });
+  await logAudit(pool, { actorType: 'client', actorId: req.companyAuth!.sub, action: 'company.diagnostic_requested', details: { companyId, deviceId: device.rows[0].id } });
+  res.status(201).json({ request: inserted.rows[0] });
+});
+
+/** Dernières demandes de diagnostic de l'entreprise, avec leur résultat. */
+companyRouter.get('/diagnostics', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT r.id, r.device_id, d.device_name, r.status, r.worst, r.summary, r.created_at, r.answered_at
+     FROM company_diagnostic_requests r JOIN company_devices d ON d.id = r.device_id
+     WHERE r.company_id = $1 ORDER BY r.created_at DESC LIMIT 50`,
+    [req.companyAuth!.companyId],
+  );
+  res.json({ diagnostics: rows });
+});
+
 const deviceHeartbeatSchema = z.object({
   deviceName: z.string().min(1).max(120),
   platform: z.enum(['windows', 'android']),
