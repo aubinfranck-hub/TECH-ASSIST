@@ -301,31 +301,67 @@ const PAGE = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tech Assist — assistant</title>
 <style nonce="__NONCE__">
-:root { --brand:#1d4ed8; --bg:#f1f5f9; --card:#fff; --ink:#0f172a; --muted:#64748b; --ok:#15803d; --no:#b91c1c; }
-@media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --card:#111a2e; --ink:#e5e7eb; --muted:#94a3b8; } }
+:root { --brand:#dc2626; --brand-dark:#b91c1c; --bg:#f6f7f9; --card:#ffffff; --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --ok:#15803d; --no:#b91c1c; --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06); }
+@media (prefers-color-scheme: dark) { :root { --bg:#0e1116; --card:#171b22; --ink:#e8eaed; --muted:#9aa3af; --line:#262c36; --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.3); } }
 * { box-sizing:border-box; }
-body { margin:0; font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--ink); }
-header { position:sticky; top:0; background:var(--brand); color:#fff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
-header h1 { margin:0; font-size:1.05rem; }
-header button { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.7); border-radius:8px; padding:6px 10px; font:inherit; font-size:.85rem; cursor:pointer; }
-main { max-width:680px; margin:0 auto; padding:16px 16px 260px; }
-.b { max-width:85%; padding:10px 14px; border-radius:16px; margin:8px 0; white-space:pre-wrap; word-wrap:break-word; }
-.agent { background:var(--card); border-bottom-left-radius:4px; }
-.user { background:var(--brand); color:#fff; margin-left:auto; border-bottom-right-radius:4px; }
-.note { text-align:center; color:var(--muted); font-size:.9rem; }
-#controls { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid rgba(100,116,139,.35); padding:12px 16px calc(12px + env(safe-area-inset-bottom)); }
-#controls > div { max-width:680px; margin:0 auto; }
-#controls h2 { margin:0 0 4px; font-size:1.05rem; }
-#controls p { margin:0 0 12px; white-space:pre-wrap; color:var(--muted); }
-.row { display:flex; gap:8px; flex-wrap:wrap; }
-button.act { flex:1; min-height:44px; border:0; border-radius:10px; font:inherit; font-weight:600; cursor:pointer; background:var(--brand); color:#fff; padding:10px 14px; }
-button.yes { background:var(--ok); } button.no { background:var(--no); } button.opt { background:var(--card); color:var(--ink); border:1px solid var(--brand); text-align:left; flex-basis:100%; }
-form { display:flex; gap:8px; flex-wrap:wrap; } .attach { flex-basis:100%; font-size:.85rem; color:var(--muted); } .attach button { background:transparent; border:1px solid var(--muted); color:var(--ink); border-radius:8px; padding:6px 10px; font:inherit; font-size:.85rem; cursor:pointer; margin-right:6px; } input[type=text] { flex:1; min-height:44px; padding:8px 12px; border-radius:10px; border:1px solid var(--muted); font:inherit; background:var(--bg); color:var(--ink); }
+html { -webkit-text-size-adjust:100%; }
+body { margin:0; font:15.5px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+.brand-mark { width:36px; height:36px; flex:none; }
+header { position:sticky; top:0; z-index:5; background:var(--card); border-bottom:1px solid var(--line); box-shadow:var(--shadow); }
+header > div { max-width:760px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:12px; }
+.title { flex:1; min-width:0; }
+.title h1 { margin:0; font-size:1rem; font-weight:700; letter-spacing:-.01em; }
+.status { display:flex; align-items:center; gap:6px; font-size:.78rem; color:var(--muted); }
+.status i { width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+#handoff { background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:7px 14px; font:inherit; font-size:.82rem; font-weight:600; cursor:pointer; white-space:nowrap; transition:border-color .15s,color .15s; }
+#handoff:hover { border-color:var(--brand); color:var(--brand); }
+main { max-width:760px; margin:0 auto; padding:20px 16px 300px; }
+.msg { display:flex; gap:10px; margin:14px 0; align-items:flex-end; animation:rise .22s ease-out; }
+.msg.from-user { justify-content:flex-end; }
+.avatar { width:30px; height:30px; flex:none; }
+.b { max-width:min(82%,560px); padding:11px 15px; border-radius:18px; white-space:pre-wrap; word-wrap:break-word; overflow-wrap:anywhere; box-shadow:var(--shadow); }
+.agent { background:var(--card); border:1px solid var(--line); border-bottom-left-radius:6px; }
+.user { background:var(--brand); color:#fff; border-bottom-right-radius:6px; }
+.note { text-align:center; color:var(--muted); font-size:.85rem; margin:18px 0; }
+@keyframes rise { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce) { .msg { animation:none; } }
+#controls { position:fixed; left:0; right:0; bottom:0; background:linear-gradient(to top,var(--bg) 70%,transparent); padding:24px 16px calc(16px + env(safe-area-inset-bottom)); }
+#controls:empty { display:none; }
+#controls > div { max-width:760px; margin:0 auto; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; box-shadow:var(--shadow); }
+#controls h2 { margin:0 0 4px; font-size:1.02rem; letter-spacing:-.01em; }
+#controls p { margin:0 0 12px; white-space:pre-wrap; color:var(--ink); font-weight:600; }
+#controls h2 + p { color:var(--muted); font-weight:400; }
+.row { display:flex; gap:10px; flex-wrap:wrap; }
+button.act { flex:1; min-height:46px; border:0; border-radius:12px; font:inherit; font-weight:600; cursor:pointer; background:var(--brand); color:#fff; padding:10px 16px; transition:filter .15s,transform .05s; }
+button.act:hover { filter:brightness(.94); } button.act:active { transform:translateY(1px); }
+button.act:focus-visible, #handoff:focus-visible, input:focus-visible, .attach button:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
+button.yes { background:var(--ok); } button.no { background:transparent; color:var(--no); border:1px solid var(--no); }
+button.opt { background:var(--card); color:var(--ink); border:1px solid var(--line); text-align:left; flex-basis:100%; font-weight:500; }
+button.opt:hover { border-color:var(--brand); filter:none; }
+form { display:flex; gap:10px; flex-wrap:wrap; }
+input[type=text] { flex:1; min-width:0; min-height:46px; padding:8px 14px; border-radius:12px; border:1px solid var(--line); font:inherit; background:var(--bg); color:var(--ink); }
+input[type=text]:focus { border-color:var(--brand); }
+.attach { flex-basis:100%; font-size:.82rem; color:var(--muted); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.attach button { background:transparent; border:1px solid var(--line); color:var(--ink); border-radius:999px; padding:5px 12px; font:inherit; font-size:.82rem; cursor:pointer; }
+.attach button:hover { border-color:var(--brand); }
+.welcome { text-align:center; padding:28px 8px 8px; }
+.welcome .brand-mark { width:64px; height:64px; margin-bottom:10px; }
+.welcome h2 { margin:0 0 4px; font-size:1.35rem; letter-spacing:-.02em; }
+.welcome p { margin:0; color:var(--muted); }
 </style>
 </head>
 <body>
-<header><h1>Tech Assist — votre assistant</h1><button id="handoff" type="button">Parler à un technicien</button></header>
-<main id="log" aria-live="polite"></main>
+<header><div>
+<svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><rect x="4" y="4" width="112" height="112" rx="28" fill="#dc2626"/><text x="60" y="79" text-anchor="middle" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="58" font-weight="900" letter-spacing="-5">TA</text></svg>
+<div class="title"><h1>Tech Assist</h1><div class="status"><i></i>Votre technicien informatique IA</div></div>
+<button id="handoff" type="button">Parler à un technicien</button>
+</div></header>
+<main id="log" aria-live="polite">
+<div class="welcome" id="welcome">
+<svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><rect x="4" y="4" width="112" height="112" rx="28" fill="#dc2626"/><text x="60" y="79" text-anchor="middle" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="58" font-weight="900" letter-spacing="-5">TA</text></svg>
+<h2>Bonjour, je suis AI PC</h2><p>Décrivez votre problème : je diagnostique, j'agis avec votre accord, puis je vérifie.</p>
+</div>
+</main>
 <section id="controls" aria-label="Votre réponse"></section>
 <script nonce="__NONCE__">
 (function () {
@@ -333,7 +369,22 @@ form { display:flex; gap:8px; flex-wrap:wrap; } .attach { flex-basis:100%; font-
   var log = document.getElementById('log');
   var controls = document.getElementById('controls');
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
-  function bubble(cls, text) { log.appendChild(el('div', 'b ' + cls, text)); window.scrollTo(0, document.body.scrollHeight); }
+  /* Logo : copie du logo de l'en-tête (jamais de HTML construit à partir de texte). */
+  function avatar() {
+    var svg = document.querySelector('header svg').cloneNode(true);
+    svg.setAttribute('class', 'avatar');
+    return svg;
+  }
+  function bubble(cls, text) {
+    var welcome = document.getElementById('welcome'); if (welcome) welcome.remove();
+    if (cls === 'note') { log.appendChild(el('div', 'note', text)); }
+    else {
+      var row = el('div', 'msg from-' + cls);
+      if (cls === 'agent') row.appendChild(avatar());
+      row.appendChild(el('div', 'b ' + cls, text)); log.appendChild(row);
+    }
+    window.scrollTo(0, document.body.scrollHeight);
+  }
   function post(path, body) {
     return fetch(path + '?t=' + encodeURIComponent(token), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
   }
