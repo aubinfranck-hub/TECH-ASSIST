@@ -1,9 +1,24 @@
 import type { Action, ActionResult, CommandRunner, Diagnosis, Skill } from '../types.js';
 
-/** États d'un périphérique audio Windows (DEVICE_STATE_* de MMDevice). */
+/** États normalisés d'un périphérique audio (mêmes valeurs que DEVICE_STATE_* de l'API MMDevice). */
 const ACTIVE = 1;
 const DISABLED = 2;
+const NOT_PRESENT = 4;
 const UNPLUGGED = 8;
+
+/**
+ * Le registre (HKLM\...\MMDevices\Audio\...\DeviceState) n'utilise pas ces constantes :
+ * actif = 0x1, désactivé = 0x10000001, débranché = 0x08000001, absent = 0x04000001.
+ * On convertit vers les états normalisés, et on accepte aussi les valeurs de l'API (1, 2, 4, 8).
+ */
+export function normalizeDeviceState(raw: number): number {
+  const value = raw >>> 0;
+  const high = value >>> 24;
+  if (high & 0x10) return DISABLED;
+  if (high & 0x08) return UNPLUGGED;
+  if (high & 0x04) return NOT_PRESENT;
+  return value & 0xf;
+}
 
 const VOLUME_FLOOR = 0.05; // en dessous, on considère le son inaudible
 const VOLUME_TARGET = 0.5;
@@ -157,7 +172,7 @@ export function parseFacts(stdout: string): SoundFacts {
     .map((e) => ({
       flow: e.flow as 'Render' | 'Capture',
       guid: String(e.guid),
-      state: Number(e.state ?? 0),
+      state: normalizeDeviceState(Number(e.state ?? 0)),
       name: String(e.name ?? '').trim(),
     }));
 
@@ -267,6 +282,7 @@ export function diagnoseSound(facts: SoundFacts): Diagnosis {
   const active = render.filter((e) => e.state === ACTIVE);
   const disabled = render.filter((e) => e.state === DISABLED);
   const unplugged = render.filter((e) => e.state === UNPLUGGED);
+  const present = render.filter((e) => e.state !== NOT_PRESENT);
 
   if (active.length === 0) {
     if (disabled.length > 0) {
@@ -279,6 +295,11 @@ export function diagnoseSound(facts: SoundFacts): Diagnosis {
       problems.push('render_unplugged');
       sentences.push('Aucune sortie son n\'est branchée.');
       advice.push('Branchez vos enceintes ou votre casque (ou reconnectez votre appareil Bluetooth), puis relancez.');
+    } else if (present.length > 0) {
+      // Des sorties existent mais leur état n'est pas un état connu : ne pas conclure « pas de pilote » à tort.
+      problems.push('render_state_unknown');
+      sentences.push("Je ne comprends pas l'état de votre sortie son : un technicien doit regarder.");
+      needsHuman = true;
     } else if (missing.length === 0) {
       problems.push('no_render_device');
       sentences.push("Windows ne voit aucune carte son : le pilote audio est probablement absent ou en panne.");

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { requireAppInstall, signAppToken } from '../middleware/appAuth.js';
 import { validateBody } from '../middleware/validate.js';
-import { logAudit } from '../utils/audit.js';
+import { logAudit, type Db } from '../utils/audit.js';
 import { isDisposableEmail, normalizeEmail } from '../utils/email.js';
 import { consumeEmailCode, emailField } from './emailVerification.js';
 import { createSessionForOrder } from './sessions.js';
@@ -46,8 +46,8 @@ interface Entitlements {
 }
 
 /** L'offre est unique par adresse email ET par empreinte d'appareil : la base s'en souvient. */
-async function freeOfferUsed(email: string, hardwareHash: string | null): Promise<boolean> {
-  const { rows } = await pool.query(
+async function freeOfferUsed(db: Db, email: string, hardwareHash: string | null): Promise<boolean> {
+  const { rows } = await db.query(
     `SELECT 1 FROM app_installs
      WHERE free_offer_used_at IS NOT NULL
        AND (client_email = $1 OR ($2::text IS NOT NULL AND hardware_hash = $2))
@@ -57,8 +57,8 @@ async function freeOfferUsed(email: string, hardwareHash: string | null): Promis
   return rows.length > 0;
 }
 
-async function activeSubscription(email: string) {
-  const { rows } = await pool.query(
+async function activeSubscription(db: Db, email: string) {
+  const { rows } = await db.query(
     `SELECT ends_at FROM subscriptions
      WHERE client_email = $1 AND status = 'active' AND ends_at > now()
      ORDER BY ends_at DESC LIMIT 1`,
@@ -69,8 +69,8 @@ async function activeSubscription(email: string) {
 
 async function entitlementsFor(install: { email: string; hardwareHash: string | null }): Promise<Entitlements> {
   const [used, subscription] = await Promise.all([
-    freeOfferUsed(install.email, install.hardwareHash),
-    activeSubscription(install.email),
+    freeOfferUsed(pool, install.email, install.hardwareHash),
+    activeSubscription(pool, install.email),
   ]);
   return { freeOfferAvailable: !used, subscription, aiAgentAvailable: aiAgentAvailable() };
 }
@@ -115,12 +115,18 @@ appRouter.post('/app/register', limiter, validateBody(registerSchema), async (re
      ON CONFLICT (install_id) DO UPDATE
        SET client_phone = EXCLUDED.client_phone,
            client_name = COALESCE(EXCLUDED.client_name, app_installs.client_name),
-           hardware_hash = COALESCE(EXCLUDED.hardware_hash, app_installs.hardware_hash),
+           -- la première empreinte enregistrée reste liée à l'installation (on ne la remplace pas)
+           hardware_hash = COALESCE(app_installs.hardware_hash, EXCLUDED.hardware_hash),
            last_seen_at = now()
+       WHERE app_installs.client_email = EXCLUDED.client_email
      RETURNING id, platform, hardware_hash`,
     [body.installId, body.platform, body.hardwareHash ?? null, email, body.phone, body.name ?? null],
   );
   const install = rows[0];
+  if (!install) {
+    // Deux inscriptions simultanées avec la même installation et des emails différents.
+    return res.status(409).json({ error: 'Cette installation est déjà enregistrée avec une autre adresse email.' });
+  }
   await logAudit(pool, { actorType: 'client', actorId: email, action: 'app.registered', details: { platform: body.platform } });
 
   const entitlements = await entitlementsFor({ email, hardwareHash: install.hardware_hash });
@@ -152,6 +158,7 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
 
   const client = await pool.connect();
   let order: { id: string; status: string; amount_fcfa: number };
+  let session: Extract<Awaited<ReturnType<typeof createSessionForOrder>>, { ok: true }>['session'];
   let coverage: 'subscription' | 'free_offer';
   try {
     await client.query('BEGIN');
@@ -162,12 +169,13 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
     }
 
-    const subscription = await activeSubscription(install.email);
+    // Toutes les lectures passent par `client` : une seule connexion par requête (pas d'attente croisée sur le pool).
+    const subscription = await activeSubscription(client, install.email);
     let planId: string;
     if (subscription) {
       coverage = 'subscription';
       planId = SUBSCRIBER_PLAN_ID;
-    } else if (!(await freeOfferUsed(install.email, install.hardwareHash))) {
+    } else if (!(await freeOfferUsed(client, install.email, install.hardwareHash))) {
       coverage = 'free_offer';
       planId = FREE_OFFER_PLAN_ID;
       await client.query('UPDATE app_installs SET free_offer_used_at = now() WHERE id = $1', [install.id]);
@@ -187,6 +195,14 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
       [install.phone, install.name, install.email, install.id, planId, install.platform, mode],
     );
     order = inserted.rows[0];
+
+    // La session est créée dans la même transaction : si elle échoue, l'offerte n'est pas consommée.
+    const created = await createSessionForOrder(order.id, install.platform, mode, client);
+    if (!created.ok) {
+      await client.query('ROLLBACK');
+      return res.status(created.status).json({ error: created.error });
+    }
+    session = created.session;
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
@@ -195,24 +211,21 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
     client.release();
   }
 
-  const result = await createSessionForOrder(order.id, install.platform, mode);
-  if (!result.ok) return res.status(result.status).json({ error: result.error });
-
   await logAudit(pool, {
     actorType: 'client',
     actorId: install.email,
     orderId: order.id,
-    sessionId: result.session.id,
+    sessionId: session.id,
     action: 'assistance.started',
-    details: { coverage, requestedMode: mode, mode: result.session.mode },
+    details: { coverage, requestedMode: mode, mode: session.mode },
   });
 
   res.status(201).json({
     order,
-    session: result.session,
+    session,
     coverage,
     // true : l'agent IA a été demandé mais n'est pas activé, un technicien prend le relais.
-    fallbackToHuman: mode === 'ia' && result.session.mode === 'humain',
+    fallbackToHuman: mode === 'ia' && session.mode === 'humain',
   });
 });
 
@@ -230,6 +243,7 @@ appRouter.post('/app/subscribe', limiter, requireAppInstall, async (req, res) =>
   if (!plan) return res.status(404).json({ error: 'Abonnement indisponible pour le moment' });
 
   const client = await pool.connect();
+  let order: { id: string; status: string; amount_fcfa: number; created_at: Date };
   try {
     await client.query('BEGIN');
     const orderResult = await client.query(
@@ -237,22 +251,23 @@ appRouter.post('/app/subscribe', limiter, requireAppInstall, async (req, res) =>
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, status, amount_fcfa, created_at`,
       [install.phone, install.name, install.email, install.id, plan.id, plan.price_fcfa, install.platform],
     );
-    const order = orderResult.rows[0];
+    order = orderResult.rows[0];
     await client.query(
       `INSERT INTO subscriptions (client_phone, client_name, client_email, plan_id, order_id)
        VALUES ($1, $2, $3, $4, $5)`,
       [install.phone, install.name, install.email, plan.id, order.id],
     );
     await client.query('COMMIT');
-
-    await logAudit(pool, { actorType: 'client', actorId: install.email, orderId: order.id, action: 'subscription.requested' });
-    res.status(201).json({ order });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;
   } finally {
     client.release();
   }
+
+  // Après libération de la connexion : jamais de seconde connexion demandée en tenant la première.
+  await logAudit(pool, { actorType: 'client', actorId: install.email, orderId: order.id, action: 'subscription.requested' });
+  res.status(201).json({ order });
 });
 
 const EVENT_TYPES = [

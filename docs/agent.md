@@ -54,8 +54,11 @@ Pour les actions « admin », lancer dans un terminal administrateur.
 
 ## Ce qui n'est PAS validé
 
-- **Aucun test sur un vrai Windows.** Les 47 tests utilisent un faux Windows ;
-  les scripts PowerShell/COM sont contrôlés en structure seulement. À essayer sur
+- **Aucun test sur un vrai Windows.** Les 57 tests utilisent un faux Windows ;
+  les scripts PowerShell/COM sont contrôlés en structure seulement. Le codage de
+  `DeviceState` dans le registre (actif `0x1`, désactivé `0x10000001`, débranché
+  `0x08000001`, absent `0x04000001`) vient d'une source publique recoupée, pas
+  d'une lecture sur une machine désactivée : à confirmer. À essayer sur
   une vraie machine avant toute mise en service, en particulier l'action
   `enable_endpoint` (interface COM non documentée, marquée `verified: false`).
 - **Pas de modèle IA branché** : le planificateur est à règles. Un LLM pourra

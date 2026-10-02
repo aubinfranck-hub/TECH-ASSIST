@@ -4,7 +4,7 @@ import { pool } from '../db/pool.js';
 import { generateSessionCode, SESSION_CODE_TTL_MINUTES } from '../utils/sessionCode.js';
 import { validateBody } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
-import { logAudit } from '../utils/audit.js';
+import { logAudit, type Db } from '../utils/audit.js';
 
 export const sessionsRouter = Router();
 
@@ -29,11 +29,13 @@ export async function createSessionForOrder(
   orderId: string,
   platform: 'web' | 'windows' | 'android',
   requestedMode: SessionMode = 'humain',
+  /** Client de transaction : la session est alors créée ou annulée avec le reste (ex. offerte + commande). */
+  db: Db = pool,
 ): Promise<CreateSessionResult> {
   // L'agent IA n'est appliqué que s'il est réellement activé (AI_AGENT_ENABLED) ;
   // sinon la demande est servie par un technicien (file d'attente classique).
   const mode: SessionMode = requestedMode === 'ia' && process.env.AI_AGENT_ENABLED === 'true' ? 'ia' : 'humain';
-  const orderResult = await pool.query(
+  const orderResult = await db.query(
     `SELECT o.id, o.status, p.duration_minutes
      FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
      WHERE o.id = $1`,
@@ -51,12 +53,12 @@ export async function createSessionForOrder(
   let code = generateSessionCode();
   // Garantit l'unicité même en cas de collision improbable.
   for (let attempts = 0; attempts < 5; attempts++) {
-    const clash = await pool.query('SELECT 1 FROM sessions WHERE session_code = $1', [code]);
+    const clash = await db.query('SELECT 1 FROM sessions WHERE session_code = $1', [code]);
     if (clash.rows.length === 0) break;
     code = generateSessionCode();
   }
 
-  const { rows } = await pool.query(
+  const { rows } = await db.query(
     `INSERT INTO sessions (order_id, session_code, platform, code_expires_at, duration_minutes, mode, requested_mode)
      VALUES ($1, $2, $3, now() + interval '${SESSION_CODE_TTL_MINUTES} minutes', $4, $5, $6)
      RETURNING id, session_code, status, code_expires_at, duration_minutes, mode`,
@@ -64,7 +66,7 @@ export async function createSessionForOrder(
   );
   const session = rows[0];
 
-  await logAudit(pool, {
+  await logAudit(db, {
     actorType: 'system',
     orderId,
     sessionId: session.id,
@@ -78,6 +80,12 @@ sessionsRouter.post(
   '/orders/:orderId/session',
   validateBody(createSessionSchema),
   async (req, res) => {
+    // Les commandes créées par l'application (offerte, abonné) ont leur session créée par l'application,
+    // une seule fois : cette route publique ne doit pas pouvoir en fabriquer d'autres.
+    const owner = await pool.query('SELECT app_install_id FROM orders WHERE id = $1', [req.params.orderId]);
+    if (owner.rows[0]?.app_install_id) {
+      return res.status(403).json({ error: "Cette assistance se démarre depuis l'application Tech Assist." });
+    }
     const result = await createSessionForOrder(req.params.orderId, req.body.platform);
     if (!result.ok) return res.status(result.status).json({ error: result.error });
     res.status(201).json({ session: result.session });

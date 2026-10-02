@@ -47,22 +47,30 @@ export type ConsumeCodeResult = 'ok' | 'invalid' | 'too_many_attempts';
  * l'inscription de l'application : pas de jeton intermédiaire à faire circuler.
  */
 export async function consumeEmailCode(email: string, code: string): Promise<ConsumeCodeResult> {
-  const { rows } = await pool.query(
-    `SELECT id, code_hash, attempts FROM email_verifications
-     WHERE email = $1 AND consumed_at IS NULL AND expires_at > now()
-     ORDER BY created_at DESC LIMIT 1`,
-    [email],
+  // L'essai est compté AVANT la comparaison, en une seule requête atomique : des essais parallèles
+  // ne peuvent pas dépasser MAX_ATTEMPTS (chacun réserve son numéro d'essai).
+  const claimed = await pool.query(
+    `UPDATE email_verifications SET attempts = attempts + 1
+     WHERE id = (
+       SELECT id FROM email_verifications
+       WHERE email = $1 AND consumed_at IS NULL AND expires_at > now()
+       ORDER BY created_at DESC LIMIT 1
+     ) AND attempts < $2
+     RETURNING id, code_hash`,
+    [email, MAX_ATTEMPTS],
   );
-  const row = rows[0] as { id: string; code_hash: string; attempts: number } | undefined;
-  if (!row) return 'invalid';
-  if (row.attempts >= MAX_ATTEMPTS) return 'too_many_attempts';
+  const row = claimed.rows[0] as { id: string; code_hash: string } | undefined;
+  if (!row) {
+    const live = await pool.query(
+      'SELECT 1 FROM email_verifications WHERE email = $1 AND consumed_at IS NULL AND expires_at > now() LIMIT 1',
+      [email],
+    );
+    return live.rows.length > 0 ? 'too_many_attempts' : 'invalid';
+  }
 
   const expected = Buffer.from(row.code_hash, 'hex');
   const given = Buffer.from(hashCode(email, code), 'hex');
-  if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
-    await pool.query('UPDATE email_verifications SET attempts = attempts + 1 WHERE id = $1', [row.id]);
-    return 'invalid';
-  }
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return 'invalid';
 
   // Le « WHERE consumed_at IS NULL » garantit l'usage unique même en cas de deux confirmations simultanées.
   const consumed = await pool.query(

@@ -9,6 +9,11 @@ export interface MachineState {
 }
 
 export const SPEAKER_GUID = '{3a1c52f4-0b7e-4e1d-9b5e-6f2d8c1a7e90}';
+/** Valeurs de DeviceState telles que Windows les écrit dans le registre. */
+export const REG_DISABLED = 0x10000001;
+export const REG_UNPLUGGED = 0x08000001;
+export const REG_NOT_PRESENT = 0x04000001;
+
 export const HEADSET_GUID = '{8d2e41b7-5c3a-4f60-a1d9-0e7b6c3f2a15}';
 
 export function healthyState(): MachineState {
@@ -32,6 +37,10 @@ export interface MachineOptions {
   /** Le runner lui-même plante (délai dépassé, powershell.exe introuvable…). */
   crashOnAction?: boolean;
   failCollect?: boolean;
+  /** Appelé après le démarrage des services : permet de révéler un état jusque-là illisible (sourdine, volume). */
+  afterStartServices?: (state: MachineState) => void;
+  /** Texte d'erreur renvoyé par l'échec d'une action (pour tester les très longs messages). */
+  enableErrorText?: string;
 }
 
 /**
@@ -68,12 +77,15 @@ export class FakeMachine implements CommandRunner {
     if (script.includes('Start-Service')) {
       modifying('start_services');
       if (this.options.failStartServices) return fail("Impossible de démarrer le service (accès refusé)");
-      if (!this.options.noEffect) this.state.services.forEach((s) => (s.status = 'Running'));
+      if (!this.options.noEffect) {
+        this.state.services.forEach((s) => (s.status = 'Running'));
+        this.options.afterStartServices?.(this.state);
+      }
       return ok();
     }
     if (script.includes('[TaPolicy]::SetVisible')) {
       modifying('enable');
-      if (this.options.failEnable) return fail('Windows a refusé la réactivation (code 0x80070005)');
+      if (this.options.failEnable) return fail(this.options.enableErrorText ?? 'Windows a refusé la réactivation (code 0x80070005)');
       const match = /\{0\.0\.0\.00000000\}\.(\{[^}]+\})/.exec(script);
       const endpoint = this.state.endpoints.find((e) => e.guid === match?.[1]);
       if (!endpoint) return fail('Périphérique introuvable');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { COLLECT_SCRIPT, diagnoseSound, parseFacts, type SoundFacts } from '../skills/sound.js';
-import { FakeMachine, HEADSET_GUID, SPEAKER_GUID, healthyState } from './fakeMachine.js';
+import { COLLECT_SCRIPT, diagnoseSound, normalizeDeviceState, parseFacts, type SoundFacts } from '../skills/sound.js';
+import { FakeMachine, HEADSET_GUID, REG_DISABLED, REG_NOT_PRESENT, REG_UNPLUGGED, SPEAKER_GUID, healthyState } from './fakeMachine.js';
 
 function facts(overrides: Partial<SoundFacts> = {}): SoundFacts {
   return { ...healthyState(), ...overrides };
@@ -60,6 +60,43 @@ describe('parseFacts', () => {
       ],
     });
     expect(parseFacts(evil).endpoints.map((e) => e.name)).toEqual(['Bon']);
+  });
+});
+
+describe('états de périphérique du registre Windows', () => {
+  it('convertit les valeurs réelles du registre', () => {
+    expect(normalizeDeviceState(1)).toBe(1);
+    expect(normalizeDeviceState(REG_DISABLED)).toBe(2); // 0x10000001 : désactivé
+    expect(normalizeDeviceState(REG_UNPLUGGED)).toBe(8); // 0x08000001 : débranché
+    expect(normalizeDeviceState(REG_NOT_PRESENT)).toBe(4); // 0x04000001 : absent
+  });
+
+  it('accepte aussi les valeurs de l’API (1, 2, 4, 8)', () => {
+    expect([1, 2, 4, 8].map(normalizeDeviceState)).toEqual([1, 2, 4, 8]);
+  });
+
+  it('un haut-parleur désactivé dans le registre est bien diagnostiqué « désactivé » (et non « pas de pilote »)', () => {
+    const raw = JSON.stringify({
+      services: healthyState().services,
+      endpoints: [{ flow: 'Render', guid: SPEAKER_GUID, state: REG_DISABLED, name: 'Speaker' }],
+      volume: null,
+      muted: null,
+      admin: true,
+    });
+    const d = diagnoseSound(parseFacts(raw));
+    expect(d.problems).toEqual(['render_disabled']);
+    expect(d.needsHuman).toBe(false);
+  });
+
+  it('des sorties seulement « absentes » (anciens périphériques) ne comptent pas : pas de carte son', () => {
+    const d = diagnoseSound(facts({ endpoints: [{ flow: 'Render', guid: SPEAKER_GUID, state: 4, name: 'Ancien' }] }));
+    expect(d.problems).toEqual(['no_render_device']);
+  });
+
+  it('un état inconnu n’est pas pris pour une absence de pilote : passe la main avec un message exact', () => {
+    const d = diagnoseSound(facts({ endpoints: [{ flow: 'Render', guid: SPEAKER_GUID, state: 0, name: 'Bizarre' }] }));
+    expect(d.problems).toEqual(['render_state_unknown']);
+    expect(d.needsHuman).toBe(true);
   });
 });
 

@@ -5,6 +5,8 @@ import type { Reporter } from '../types.js';
 import {
   FakeMachine,
   HEADSET_GUID,
+  REG_DISABLED,
+  REG_UNPLUGGED,
   RecordingReporter,
   SPEAKER_GUID,
   ScriptedUi,
@@ -22,7 +24,7 @@ function setup(patch: Partial<MachineState> = {}, options: MachineOptions = {}, 
 
 // Fonction, pas constante : le faux Windows modifie son état, les tests ne doivent pas se le partager.
 const disabledSpeaker = (): Partial<MachineState> => ({
-  endpoints: [{ flow: 'Render', guid: SPEAKER_GUID, state: 2, name: 'Speaker' }],
+  endpoints: [{ flow: 'Render', guid: SPEAKER_GUID, state: REG_DISABLED, name: 'Speaker' }],
 });
 
 describe("l'agent : scénario réel (sortie désactivée)", () => {
@@ -92,7 +94,7 @@ describe("l'agent : autres problèmes", () => {
   });
 
   it('sortie débranchée : donne le conseil, pas d’action ; si ça ne suffit pas, escalade', async () => {
-    const s = setup({ endpoints: [{ flow: 'Render', guid: HEADSET_GUID, state: 8, name: 'Casque' }] }, {}, { heard: [false] });
+    const s = setup({ endpoints: [{ flow: 'Render', guid: HEADSET_GUID, state: REG_UNPLUGGED, name: 'Casque' }] }, {}, { heard: [false] });
     const outcome = await s.run();
     expect(outcome.status).toBe('escalated');
     expect(s.screen.infos.join(' ')).toMatch(/Branchez/);
@@ -125,8 +127,8 @@ describe("l'agent : quand ça se passe mal", () => {
   it('un échec arrête la suite : les actions suivantes ne sont pas tentées', async () => {
     const s = setup(
       { endpoints: [
-        { flow: 'Render', guid: SPEAKER_GUID, state: 2, name: 'A' },
-        { flow: 'Render', guid: HEADSET_GUID, state: 2, name: 'B' },
+        { flow: 'Render', guid: SPEAKER_GUID, state: REG_DISABLED, name: 'A' },
+        { flow: 'Render', guid: HEADSET_GUID, state: REG_DISABLED, name: 'B' },
       ] },
       { failEnable: true },
     );
@@ -173,5 +175,54 @@ describe("l'agent : quand ça se passe mal", () => {
     };
     const outcome = await runSkill(soundSkill, { runner: machine, ui: new ScriptedUi(), reporter: broken });
     expect(outcome.status).toBe('fixed');
+  });
+});
+
+describe("l'agent : relecture et passage de main", () => {
+  it('un problème masqué apparaît après le premier correctif : il est reproposé (services arrêtés, puis sourdine)', async () => {
+    const s = setup(
+      {
+        services: [{ name: 'Audiosrv', status: 'Stopped' }, { name: 'AudioEndpointBuilder', status: 'Running' }],
+        muted: null,
+        volume: null,
+      },
+      { afterStartServices: (state) => { state.muted = true; state.volume = 0.6; } },
+    );
+    const outcome = await s.run();
+    expect(outcome).toEqual({ status: 'fixed', actionsDone: ['start_audio_services', 'unmute'] });
+    expect(s.machine.state.muted).toBe(false);
+  });
+
+  it('ne reproduit jamais une action déjà tentée (pas de boucle)', async () => {
+    const s = setup(disabledSpeaker(), { noEffect: true });
+    await s.run();
+    expect(s.machine.modifications).toHaveLength(1);
+  });
+
+  it('un très long message d\'erreur est raccourci : le serveur ne refuse pas l\'événement', async () => {
+    const reporter = new RecordingReporter();
+    const machine = new FakeMachine({ ...healthyState(), ...disabledSpeaker() }, { failEnable: true, enableErrorText: 'x'.repeat(5000) });
+    await runSkill(soundSkill, { runner: machine, ui: new ScriptedUi(), reporter });
+    for (const event of reporter.events) expect((event.message ?? '').length).toBeLessThanOrEqual(500);
+    expect(reporter.types).toContain('escalated');
+  });
+
+  it('si le serveur ne peut pas enregistrer le passage de main, le client en est prévenu honnêtement', async () => {
+    const machine = new FakeMachine({ ...healthyState(), endpoints: [] });
+    const ui = new ScriptedUi();
+    const broken: Reporter = {
+      async event() {
+        throw new Error('le serveur a répondu 400');
+      },
+    };
+    const outcome = await runSkill(soundSkill, { runner: machine, ui, reporter: broken });
+    expect(outcome).toMatchObject({ status: 'escalated', recorded: false });
+    expect(ui.infos.join(' ')).toMatch(/pas pu prévenir le serveur/);
+    expect(ui.infos.join(' ')).not.toMatch(/Je passe la main/);
+  });
+
+  it('quand le serveur enregistre le passage de main, l\'outcome le confirme', async () => {
+    const s = setup({ endpoints: [] });
+    expect(await s.run()).toMatchObject({ status: 'escalated', recorded: true });
   });
 });

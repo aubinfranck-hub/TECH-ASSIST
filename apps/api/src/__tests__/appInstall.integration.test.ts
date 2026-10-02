@@ -205,6 +205,75 @@ describe('Application : inscription par email, assistance offerte en base, abonn
     });
   });
 
+  describe('correctifs issus de la relecture indépendante', () => {
+    it('la route publique ne fabrique pas de sessions supplémentaires à partir d\'une commande de l\'application', async () => {
+      const r = await register();
+      const first = await request(app).post('/api/app/assistance').set(auth(r)).send({ mode: 'humain' });
+      expect(first.status).toBe(201);
+
+      const extra = await request(app).post(`/api/orders/${first.body.order.id}/session`).send({ platform: 'web' });
+      expect(extra.status).toBe(403);
+      const { rows } = await pool.query('SELECT count(*)::int AS n FROM sessions');
+      expect(rows[0].n).toBe(1);
+    });
+
+    it('si la session ne peut pas être créée, l\'assistance offerte n\'est pas consommée', async () => {
+      const r = await register();
+      await pool.query(`UPDATE pricing_plans SET duration_minutes = NULL WHERE id = 'assistance_offerte'`);
+      try {
+        const failed = await request(app).post('/api/app/assistance').set(auth(r)).send({ mode: 'humain' });
+        expect(failed.status).toBe(400);
+      } finally {
+        await pool.query(`UPDATE pricing_plans SET duration_minutes = 30 WHERE id = 'assistance_offerte'`);
+      }
+      const used = await pool.query('SELECT free_offer_used_at FROM app_installs');
+      expect(used.rows[0].free_offer_used_at).toBeNull();
+      const orders = await pool.query('SELECT count(*)::int AS n FROM orders');
+      expect(orders.rows[0].n).toBe(0);
+
+      const retry = await request(app).post('/api/app/assistance').set(auth(r)).send({ mode: 'humain' });
+      expect(retry.status).toBe(201);
+    });
+
+    it('beaucoup de demandes simultanées ne bloquent pas l\'API (pas d\'attente croisée sur le pool de connexions)', async () => {
+      const r = await register();
+      const results = await Promise.all(
+        Array.from({ length: 30 }, () => request(app).post('/api/app/assistance').set(auth(r)).send({ mode: 'humain' })),
+      );
+      const statuses = results.map((x) => x.status);
+      expect(statuses.filter((x) => x === 201)).toHaveLength(1);
+      expect(statuses.filter((x) => x === 402)).toHaveLength(29);
+    }, 30_000);
+
+    it('la première empreinte d\'appareil reste liée à l\'installation', async () => {
+      const email = 'hash@example.com';
+      const installId = nextInstall();
+      await register({ email, installId, hardwareHash: 'hardware-hash-AAAAAAAAAAAA' });
+      await register({ email, installId, hardwareHash: 'hardware-hash-BBBBBBBBBBBB' });
+      const { rows } = await pool.query('SELECT hardware_hash FROM app_installs WHERE install_id = $1', [installId]);
+      expect(rows[0].hardware_hash).toBe('hardware-hash-AAAAAAAAAAAA');
+    });
+
+    it('des essais de code en parallèle ne dépassent pas 5 essais', async () => {
+      const email = 'race@example.com';
+      await request(app).post('/api/app/email-code').send({ email });
+      const attempts = await Promise.all(
+        Array.from({ length: 15 }, () =>
+          request(app).post('/api/app/register').send({
+            installId: nextInstall(),
+            platform: 'windows',
+            email,
+            code: '000000',
+            phone: '+2250700001111',
+          }),
+        ),
+      );
+      expect(attempts.every((x) => x.status === 400 || x.status === 429)).toBe(true);
+      const { rows } = await pool.query('SELECT attempts FROM email_verifications WHERE email = $1', [email]);
+      expect(rows[0].attempts).toBe(5);
+    });
+  });
+
   describe('abonnement 10 000 FCFA / mois', () => {
     it('reste inactif tant que le paiement n\'est pas confirmé, puis couvre les assistances', async () => {
       const r = await register();
