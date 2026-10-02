@@ -1,4 +1,4 @@
-import type { ActionResult, CommandRunner } from '../types.js';
+import type { Action, ActionResult, CommandRunner } from '../types.js';
 
 /** Enveloppe commune des scripts : un échec = message sur stderr + code de sortie 1. */
 export function guarded(body: string): string {
@@ -58,4 +58,33 @@ export function psQuote(value: string): string {
 /** Lit un nombre fini positif ou nul, sinon null. */
 export function nonNegative(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/** Note chaque action proposée dans `tried` quand elle est lancée : le tour suivant peut alors passer à l'hypothèse d'après. */
+export function tracked(actions: Action[], tried: Set<string>): Action[] {
+  return actions.map((a) => ({
+    ...a,
+    run: (runner: CommandRunner) => {
+      tried.add(a.id);
+      return a.run(runner);
+    },
+  }));
+}
+
+/** Texte lu sur la machine (nom de processus, d'appareil…) : affichable, jamais exécutable. Sans caractères de contrôle, borné. */
+export function safeLabel(value: unknown, max = 60): string {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+
+/** « 1,2 Go », « 340 Mo » : tailles lisibles en français. */
+export function formatBytes(bytes: number): string {
+  const gb = bytes / 1024 ** 3;
+  if (gb >= 1) return `${gb.toFixed(1).replace('.', ',')} Go`;
+  const mb = bytes / 1024 ** 2;
+  if (mb >= 1) return `${Math.round(mb)} Mo`;
+  return `${Math.round(bytes / 1024)} Ko`;
 }

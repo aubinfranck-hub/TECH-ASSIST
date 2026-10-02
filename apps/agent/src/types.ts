@@ -35,6 +35,12 @@ export interface Action {
   verified: boolean;
   /** Consigne affichée au client une fois l'action lancée (ex. « suivez la fenêtre qui s'ouvre »). */
   followUp?: string;
+  /** « sensitive » : modification difficile à défaire (pile réseau, composants Windows, pilote…) ; un point de restauration est créé d'abord. */
+  risk?: 'normal' | 'sensitive';
+  /** Action lancée juste avant celle-ci, après l'accord du client (ex. point de restauration). */
+  prepare?: Action;
+  /** Ne prend effet qu'après un redémarrage : l'agent ne peut pas vérifier tout de suite et propose de redémarrer. */
+  needsReboot?: boolean;
   run(runner: CommandRunner): Promise<ActionResult>;
 }
 

@@ -1,5 +1,6 @@
 import type { Action, Diagnosis, Skill } from '../types.js';
 import { asArray, extractJson, guarded, psQuote, readScript, runScript } from './common.js';
+import { withRestorePoint } from './safety.js';
 import { serviceSkill } from './services.js';
 
 /**
@@ -171,8 +172,93 @@ Write-Output 'OK'`),
 
 const isApipa = (ip: string) => ip.startsWith('169.254.');
 
+function restartAdapterAction(adapter: NetAdapter): Action {
+  const name = adapter.name;
+  return {
+    id: 'restart_adapter',
+    title: `Redémarrer la carte réseau « ${name} »`,
+    explanation: `Je coupe puis rallume la carte réseau « ${name} » (comme la désactiver puis l'activer). La connexion se coupe quelques secondes. Rien d'autre n'est modifié.`,
+    requiresAdmin: true,
+    verified: true,
+    run: (runner) => run(runner, guarded(`Restart-NetAdapter -Name ${psQuote(name)} -Confirm:$false\nStart-Sleep -Seconds 5\nWrite-Output 'OK'`)),
+  };
+}
+
+function resetDnsServersAction(adapter: NetAdapter): Action {
+  const name = adapter.name;
+  return {
+    id: 'reset_dns_servers',
+    title: `Remettre les serveurs DNS de « ${name} » en automatique`,
+    explanation: `Les noms de sites ne sont toujours pas trouvés. Je remets les serveurs DNS de la carte « ${name} » en automatique (ceux de votre box). Si vous aviez saisi des DNS à la main, notez-les avant : ils seront effacés.`,
+    requiresAdmin: true,
+    verified: true,
+    run: (runner) => run(runner, guarded(`Set-DnsClientServerAddress -InterfaceAlias ${psQuote(name)} -ResetServerAddresses\nClear-DnsClientCache\nWrite-Output 'OK'`)),
+  };
+}
+
+/** Dernier recours côté Windows : réinitialise Winsock et la pile TCP/IP. Difficile à défaire : point de restauration d'abord, redémarrage ensuite. */
+function resetNetworkStackAction(): Action {
+  return withRestorePoint({
+    id: 'reset_network_stack',
+    title: 'Réinitialiser la pile réseau de Windows (Winsock et TCP/IP)',
+    explanation:
+      "Les corrections simples n'ont pas suffi. Je réinitialise les composants réseau de Windows (Winsock et TCP/IP). Vos fichiers ne sont pas touchés, mais les réglages réseau avancés (adresse fixe, par exemple) reviennent aux valeurs d'origine ; un redémarrage est nécessaire.",
+    requiresAdmin: true,
+    verified: true,
+    needsReboot: true,
+    run: (runner) =>
+      run(
+        runner,
+        guarded(`netsh winsock reset | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "La réinitialisation de Winsock a échoué." }
+netsh int ip reset | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "La réinitialisation de TCP/IP a échoué." }
+ipconfig /flushdns | Out-Null
+Write-Output 'OK'`),
+      ),
+  });
+}
+
+export interface ChainLink {
+  label: string;
+  /** null : non testé (maillon précédent cassé). */
+  ok: boolean | null;
+}
+
+/** Maillons du chemin réseau, pour le tableau 🟢/🔴. Le premier 🔴 est la cause ; ce qui suit n'est pas testé. */
+export function networkChain(facts: NetworkFacts): ChainLink[] {
+  const up = facts.adapters.filter((a) => a.physical && a.status.toLowerCase() === 'up');
+  const upAliases = new Set(up.map((a) => a.name.toLowerCase()));
+  const live = facts.configs.filter((c) => upAliases.has(c.alias.toLowerCase()));
+  const hasAddress = live.some((c) => c.ipv4.some((ip) => !isApipa(ip)));
+  const results: [string, boolean | null][] = [
+    ['Carte réseau', up.length > 0],
+    ['Adresse IP', hasAddress],
+    ['Passerelle (box)', facts.gatewayOk],
+    ['Internet', facts.internetOk],
+    ['DNS (noms de sites)', facts.dnsOk],
+    ['Sites sécurisés (https)', facts.httpsOk],
+  ];
+  const chain: ChainLink[] = [];
+  let broken = false;
+  for (const [label, ok] of results) {
+    if (broken) chain.push({ label, ok: null });
+    else {
+      chain.push({ label, ok });
+      if (ok === false) broken = true;
+    }
+  }
+  return chain;
+}
+
+export function formatChain(chain: ChainLink[]): string {
+  const width = Math.max(...chain.map((l) => l.label.length));
+  return chain.map((l) => `${l.label.padEnd(width)}  ${l.ok === null ? '⚪ non testé' : l.ok ? '🟢' : '🔴'}`).join('\n');
+}
+
 /** Fonction pure : du premier maillon cassé au diagnostic. */
-export function diagnoseNetwork(facts: NetworkFacts): Diagnosis {
+/** `tried` : actions déjà essayées ; on passe alors à l'hypothèse suivante au lieu de recommencer. */
+export function diagnoseNetwork(facts: NetworkFacts, tried: ReadonlySet<string> = new Set()): Diagnosis {
   const problems: string[] = [];
   const sentences: string[] = [];
   const advice: string[] = [];
@@ -204,16 +290,21 @@ export function diagnoseNetwork(facts: NetworkFacts): Diagnosis {
     const upAliases = new Set(up.map((a) => a.name.toLowerCase()));
     const live = facts.configs.filter((c) => upAliases.has(c.alias.toLowerCase()));
     const hasAddress = live.some((c) => c.ipv4.some((ip) => !isApipa(ip)));
+    const usable = up.find((a) => ADAPTER_NAME.test(a.name));
     const onlyApipa = !hasAddress && live.some((c) => c.ipv4.some(isApipa));
 
     if (!hasAddress) {
       problems.push(onlyApipa ? 'dhcp_failed' : 'no_address');
       sentences.push("Votre ordinateur n'a pas reçu d'adresse réseau de la box.");
       actions.push(renewIpAction());
+      if (tried.has('renew_ip') && usable) actions.push(restartAdapterAction(usable));
+      if (tried.has('restart_adapter')) actions.push(resetNetworkStackAction());
       advice.push('Si cela persiste, redémarrez votre box (débranchez-la 30 secondes).');
     } else if (facts.gatewayOk === false) {
       problems.push('gateway_unreachable');
       sentences.push('Votre ordinateur ne parvient pas à joindre votre box.');
+      if (usable) actions.push(restartAdapterAction(usable));
+      if (tried.has('restart_adapter')) actions.push(resetNetworkStackAction());
       advice.push('Redémarrez votre box (débranchez-la 30 secondes), puis vérifiez que vous êtes bien connecté au bon réseau.');
     } else if (!facts.internetOk) {
       problems.push('no_internet');
@@ -223,6 +314,8 @@ export function diagnoseNetwork(facts: NetworkFacts): Diagnosis {
       problems.push('dns_failed');
       sentences.push("Internet répond, mais les noms de sites ne sont pas trouvés (DNS).");
       actions.push(flushDnsAction());
+      if (tried.has('flush_dns') && usable) actions.push(resetDnsServersAction(usable));
+      if (tried.has('reset_dns_servers')) actions.push(resetNetworkStackAction());
     } else if (!facts.httpsOk) {
       const proxied = facts.proxy.enabled || facts.proxy.autoConfig !== '';
       if (proxied) {
@@ -242,8 +335,9 @@ export function diagnoseNetwork(facts: NetworkFacts): Diagnosis {
   }
 
   const healthy = problems.length === 0;
+  const chain = formatChain(networkChain(facts));
   return {
-    summary: healthy ? 'Côté Windows, la connexion à Internet fonctionne.' : sentences.join(' '),
+    summary: healthy ? `Côté Windows, la connexion à Internet fonctionne.\n${chain}` : `${sentences.join(' ')}\n${chain}`,
     problems,
     actions,
     advice,
@@ -254,6 +348,7 @@ export function diagnoseNetwork(facts: NetworkFacts): Diagnosis {
 
 export function networkSkill(): Skill {
   const services = serviceSkill('network');
+  const tried = new Set<string>();
   return {
     id: 'network',
     title: 'Réseau : pas d’Internet ou de Wi-Fi',
@@ -262,7 +357,9 @@ export function networkSkill(): Skill {
       // Les services d'abord : tant qu'ils sont cassés, le reste du diagnostic n'a pas de sens.
       const base = await services.diagnose(runner);
       if (!base.healthy) return base;
-      return diagnoseNetwork(parseNetworkFacts(await readScript(runner, COLLECT_SCRIPT, 'Le diagnostic réseau')));
+      const d = diagnoseNetwork(parseNetworkFacts(await readScript(runner, COLLECT_SCRIPT, 'Le diagnostic réseau')), tried);
+      // Chaque action proposée est notée : si le problème persiste, le tour suivant passe à l'hypothèse d'après.
+      return { ...d, actions: d.actions.map((a) => ({ ...a, run: (r) => { tried.add(a.id); return a.run(r); } })) };
     },
   };
 }
