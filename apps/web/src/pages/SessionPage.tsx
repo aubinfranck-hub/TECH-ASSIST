@@ -48,6 +48,12 @@ export function SessionPage() {
     refresh(code);
   }
 
+  async function escalateToHuman() {
+    if (!session) return;
+    await api.post(`/api/sessions/${session.id}/escalate`);
+    refresh(code);
+  }
+
   async function stopSession() {
     if (!session) return;
     await api.post(`/api/sessions/${session.id}/stop`, { stoppedBy: 'client' });
@@ -95,7 +101,25 @@ export function SessionPage() {
       <h1 className="mb-1 text-2xl font-bold sm:text-3xl">Session {session.session_code}</h1>
       <p className="mb-6 text-slate-500">Statut : {session.status}</p>
 
-      {session.status === 'created' && (
+      {session.requested_mode === 'ia' && session.mode === 'humain' && session.status !== 'completed' && (
+        <p className="ta-card mb-4 border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          L'agent IA n'est pas encore disponible : un technicien prend votre demande en charge.
+        </p>
+      )}
+
+      {session.mode === 'ia' && (session.status === 'created' || session.status === 'active') && (
+        <div className="ta-card mb-4 border-brand-200 bg-brand-50 p-4 text-sm text-brand-900">
+          <p className="font-bold">Votre agent IA vous assiste</p>
+          <p className="mt-1 leading-6">
+            Il n'agit sur votre appareil qu'avec votre accord, et vous pouvez tout arrêter à tout moment.
+          </p>
+          <button onClick={escalateToHuman} className="mt-3 font-semibold text-brand-700 underline">
+            Passer à un technicien
+          </button>
+        </div>
+      )}
+
+      {session.status === 'created' && session.mode !== 'ia' && (
         <p className="ta-card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           En attente d'un technicien. Ce code expire dans {formatRemaining(codeRemaining)}.
         </p>

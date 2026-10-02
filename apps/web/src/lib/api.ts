@@ -51,6 +51,21 @@ export const api = makeClient(TECHNICIAN_TOKEN_KEY);
 export const companyApi = makeClient(COMPANY_TOKEN_KEY);
 export { TECHNICIAN_TOKEN_KEY, COMPANY_TOKEN_KEY };
 
+export type AssistanceMode = 'ia' | 'humain';
+
+export interface Eligibility {
+  freeOfferAvailable: boolean;
+  subscription: { endsAt: string } | null;
+  aiAgentAvailable: boolean;
+}
+
+export interface AssistanceResult {
+  order: Order;
+  session: SessionInfo;
+  coverage: 'subscription' | 'free_offer';
+  fallbackToHuman: boolean;
+}
+
 export interface PricingPlan {
   id: string;
   name: string;
@@ -58,6 +73,7 @@ export interface PricingPlan {
   price_fcfa: number;
   duration_minutes: number | null;
   description: string;
+  metadata?: { subscription?: boolean; periodDays?: number };
 }
 
 export interface Order {
@@ -67,6 +83,7 @@ export interface Order {
   platform?: 'web' | 'windows' | 'android';
   created_at: string;
   paid_at?: string | null;
+  plan_id?: string;
   plan_name?: string;
   duration_minutes?: number | null;
 }
@@ -83,6 +100,8 @@ export interface SessionInfo {
   consent_control_at?: string | null;
   remote_peer_id?: string | null;
   remote_paired_at?: string | null;
+  mode?: AssistanceMode;
+  requested_mode?: AssistanceMode | null;
 }
 
 export interface RemoteConfig {
