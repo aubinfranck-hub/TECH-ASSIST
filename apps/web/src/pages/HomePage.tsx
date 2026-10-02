@@ -27,74 +27,40 @@ const FAQ = [
 export function HomePage() {
   return (
     <div>
-      <section className="relative overflow-hidden bg-[#11151b] text-white">
-        <div className="absolute -right-24 -top-32 h-96 w-96 rounded-full bg-brand-600/30 blur-3xl" />
-        <div className="absolute -bottom-40 left-1/3 h-80 w-80 rounded-full bg-orange-500/10 blur-3xl" />
-        <div className="ta-container relative grid gap-12 py-14 sm:py-20 lg:grid-cols-[1.08fr_.92fr] lg:items-center lg:gap-16 lg:py-24">
-          <div>
-            <div className="ta-badge-dark"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Assistance informatique à distance</div>
-            <h1 className="mt-6 max-w-3xl font-display text-[2.7rem] font-extrabold leading-[.98] tracking-[-.045em] sm:text-6xl lg:text-[4.35rem]">
-              Votre PC a un problème.<br /><span className="text-brand-500">Tech Assist s’en occupe.</span>
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
-              Un agent IA analyse votre ordinateur, vous explique le problème et vous accompagne pour le résoudre. Si nécessaire, un technicien humain prend le relais.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link to="/assistance" className="ta-button bg-brand-600 text-white shadow-lg shadow-brand-900/30 hover:-translate-y-0.5 hover:bg-brand-500">Commencer maintenant →</Link>
-              <Link to="/diagnostic" className="ta-button border border-white/15 bg-white/5 text-white hover:bg-white/10">Faire un diagnostic</Link>
+      <section className="relative overflow-hidden bg-[#0b1220] text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,rgba(239,68,68,.20),transparent_34%),linear-gradient(90deg,#07101d_0%,#0b1220_48%,rgba(11,18,32,.42)_100%)]" />
+        <div className="ta-container relative py-8 sm:py-12 lg:py-16">
+          <div className="relative min-h-[520px] overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900 shadow-2xl">
+            <img
+              src="https://assets.zyrosite.com/cdn-cgi/image/format%3Dauto%2Cw%3D1536%2Ch%3D900%2Cfit%3Dcrop/jl6el4uMpAe2TySk/5a63946a-c873-4cc3-8190-b1df4e6becad-4iXbdJ44xqTMF7zN.jpg"
+              alt="Technicien informatique travaillant sur un laptop et un écran"
+              className="absolute inset-0 h-full w-full object-cover object-center opacity-80"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#07101d] via-[#07101d]/90 to-[#07101d]/15" />
+            <div className="relative z-10 flex min-h-[520px] max-w-2xl flex-col justify-center p-7 sm:p-10 lg:p-14">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[.16em] text-slate-200 backdrop-blur">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" /> Assistance informatique professionnelle
+              </div>
+              <h1 className="mt-6 font-display text-[2.8rem] font-extrabold leading-[.98] tracking-[-.045em] sm:text-6xl lg:text-[4.5rem]">
+                Votre informatique.<br /><span className="text-brand-500">Toujours opérationnelle.</span>
+              </h1>
+              <p className="mt-6 max-w-xl text-base leading-7 text-slate-200 sm:text-lg">
+                Assistance à distance pour PC et laptops, diagnostic, Windows, réseau et sécurité. Une aide rapide, claire et sécurisée, avec un technicien quand c’est nécessaire.
+              </p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link to="/assistance" className="ta-button bg-brand-600 text-white shadow-xl shadow-red-950/30 hover:-translate-y-0.5 hover:bg-brand-500">Démarrer une assistance <span aria-hidden>→</span></Link>
+                <Link to="/diagnostic" className="ta-button border border-white/20 bg-white/10 text-white backdrop-blur hover:bg-white/15">Lancer un diagnostic</Link>
+              </div>
+              <div className="mt-8 grid max-w-xl grid-cols-3 gap-3 border-t border-white/10 pt-5">
+                <div><p className="text-sm font-extrabold">PC & Laptop</p><p className="mt-1 text-xs text-slate-400">Windows & logiciels</p></div>
+                <div><p className="text-sm font-extrabold">Réseau</p><p className="mt-1 text-xs text-slate-400">Wi-Fi & Internet</p></div>
+                <div><p className="text-sm font-extrabold">Humain + IA</p><p className="mt-1 text-xs text-slate-400">Relais technicien</p></div>
+              </div>
             </div>
-            <div className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-xs font-medium text-slate-400">
-              <span>✓ Première assistance offerte</span><span>✓ Vous gardez le contrôle</span><span>✓ Côte d’Ivoire</span>
-            </div>
-          </div>
-
-          <div className="relative">
-            <div className="absolute -inset-8 rounded-[3rem] bg-brand-500/15 blur-3xl" />
-            <div className="relative">
-              <div className="mb-5 grid grid-cols-[1.25fr_.75fr] items-end gap-3">
-                <div className="rounded-2xl border border-white/10 bg-slate-800/90 p-3 shadow-2xl">
-                  <div className="rounded-xl border border-slate-600 bg-slate-950 p-2">
-                    <div className="flex h-28 items-center justify-center rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 sm:h-36">
-                      <div className="h-20 w-28 rounded-lg border-2 border-slate-500 bg-slate-800 shadow-inner sm:h-24 sm:w-36">
-                        <div className="m-2 h-1.5 w-10 rounded-full bg-brand-500/80" />
-                        <div className="mx-2 mt-3 h-1.5 w-20 rounded-full bg-slate-600" />
-                        <div className="mx-2 mt-2 h-1.5 w-14 rounded-full bg-slate-700" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mx-auto mt-2 h-1.5 w-16 rounded-full bg-slate-600" />
-                  <p className="mt-1 text-center text-[9px] font-bold uppercase tracking-wider text-slate-400">PC bureau</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-slate-800/90 p-2.5 shadow-2xl">
-                  <div className="rounded-xl border-2 border-slate-500 bg-slate-950 p-1.5">
-                    <div className="h-24 rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 sm:h-28">
-                      <div className="p-2"><div className="h-1.5 w-8 rounded-full bg-emerald-400/80" /><div className="mt-2 h-1.5 w-12 rounded-full bg-slate-600" /></div>
-                    </div>
-                  </div>
-                  <div className="mx-1 mt-1 h-1.5 rounded-full bg-slate-500" />
-                  <p className="mt-1 text-center text-[9px] font-bold uppercase tracking-wider text-slate-400">Laptop</p>
-                </div>
-              </div>
-              <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-white p-4 shadow-2xl sm:p-5">
-              <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /><span className="text-xs font-bold text-slate-800">Tech Assist · Diagnostic</span></div>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">EN DIRECT</span>
-              </div>
-              <div className="space-y-3 text-sm leading-6">
-                <div className="ml-auto w-fit max-w-[84%] rounded-2xl rounded-br-md bg-[#14181f] px-4 py-2.5 text-white">Mon PC est très lent depuis ce matin.</div>
-                <div className="max-w-[94%] rounded-2xl rounded-bl-md bg-slate-100 px-4 py-3 text-slate-800">
-                  <p className="font-semibold">Diagnostic terminé — aucune modification effectuée.</p>
-                  <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
-                    <div className="rounded-xl bg-white p-2.5"><b className="text-orange-600">3 Go</b><br />espace libre</div>
-                    <div className="rounded-xl bg-white p-2.5"><b className="text-amber-600">14</b><br />apps au démarrage</div>
-                    <div className="rounded-xl bg-white p-2.5"><b className="text-emerald-600">OK</b><br />antivirus</div>
-                  </div>
-                </div>
-                <div className="max-w-[94%] rounded-2xl rounded-bl-md border border-brand-100 bg-brand-50 px-4 py-3 text-slate-800">
-                  <p>Je peux libérer environ <b>9 Go</b> sans toucher à vos documents.</p>
-                  <div className="mt-3 flex gap-2"><span className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-white">Autoriser</span><span className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold">Refuser</span></div>
-                </div>
-              </div>
+            <div className="absolute bottom-6 right-6 z-10 hidden rounded-2xl border border-white/15 bg-slate-950/75 p-4 shadow-xl backdrop-blur sm:block">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">✓</span>
+                <div><p className="text-sm font-bold">Assistance sécurisée</p><p className="text-xs text-slate-400">Vous gardez le contrôle</p></div>
               </div>
             </div>
           </div>
@@ -114,12 +80,16 @@ export function HomePage() {
           <div><p className="ta-eyebrow">Nos interventions</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Les problèmes du quotidien, simplement.</h2></div>
           <Link to="/assistance" className="text-sm font-bold text-brand-700 hover:underline">Voir l’assistance →</Link>
         </div>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {SERVICES.map((service) => (
-            <article key={service.title} className="ta-card group p-6 transition duration-200 hover:-translate-y-1 hover:border-brand-200 hover:shadow-soft">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-50 text-xl text-brand-700">{service.icon}</div>
-              <h3 className="mt-5 text-lg font-extrabold">{service.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{service.text}</p>
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ['https://assets.zyrosite.com/cdn-cgi/image/format%3Dauto%2Cw%3D900%2Ch%3D650%2Cfit%3Dcrop/jl6el4uMpAe2TySk/5a63946a-c873-4cc3-8190-b1df4e6becad-4iXbdJ44xqTMF7zN.jpg','PC & Laptop','Dépannage Windows, lenteurs, pilotes, logiciels et performances.'],
+            ['https://pcsunlimited.co.uk/assets/onsite-support-bg-BFhK_F52.png','Réseau & Internet','Wi-Fi, routeurs, connexion, partage réseau et configuration.'],
+            ['https://www.stuermer-maschinen.de/fileadmin/_processed_/c/0/csm_14_Junior_Web_Entwickler_IMG_4131_dc9fb269b6.jpg','Windows & Office','Installation, configuration, Microsoft 365 et accompagnement utilisateur.'],
+            ['https://bcomservices.com/images/computer-repair-service-gold-coast-1.webp','Sécurité & Maintenance','Virus, optimisation, maintenance et problèmes matériels.'],
+          ].map(([image,title,text]) => (
+            <article key={title} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl">
+              <div className="h-44 overflow-hidden bg-slate-100"><img src={image} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /></div>
+              <div className="p-5"><h3 className="text-lg font-extrabold">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{text}</p><Link to="/assistance" className="mt-4 inline-flex text-sm font-bold text-brand-700">En savoir plus →</Link></div>
             </article>
           ))}
         </div>
