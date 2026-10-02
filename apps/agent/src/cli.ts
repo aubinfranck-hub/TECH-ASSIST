@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { hostname } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { runSkill } from './agent.js';
+import { AppApi, DEFAULT_API_BASE, FileAccountStore, readHardwareHash, signIn, startCovered } from './appAccount.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
 import { ChatUi } from './chatServer.js';
 import { converse } from './conversation.js';
@@ -96,12 +97,37 @@ async function main() {
   }
 
   const chat = await ChatUi.start();
-  chat.onHandoff = () => {
-    reporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
-  };
   console.log(`Ouverture de l'assistant dans votre navigateur : ${chat.url}`);
   if (!flag('no-browser')) openBrowser(chat.url);
-  const result = await converse({ runner, ui: chat, reporter, assistant, machine });
+
+  // Sans session fournie en ligne de commande (cas du double-clic) : connexion par email, puis assistance couverte.
+  let conversationReporter: Reporter = reporter;
+  let conversationAssistant: Assistant | undefined = assistant;
+  if (!online && !flag('offline')) {
+    const api = new AppApi(apiBase ?? DEFAULT_API_BASE);
+    const deps = { ui: chat, api, store: new FileAccountStore(), hardwareHash: await readHardwareHash(runner) };
+    const login = await signIn(deps);
+    const started = login ? await startCovered(deps, login) : null;
+    if (started) {
+      const base = apiBase ?? DEFAULT_API_BASE;
+      conversationReporter = new CompositeReporter([new ConsoleReporter(), new HttpReporter(base, started.token, started.sessionId)]);
+      conversationAssistant = new HttpAssistant(base, started.token, started.sessionId);
+      chat.info(
+        started.fallbackToHuman
+          ? "L'agent IA n'est pas disponible pour le moment : un technicien prendra le relais. Décrivez votre problème."
+          : started.coverage === 'free_offer'
+            ? 'Votre assistance offerte est démarrée.'
+            : 'Votre abonnement est actif.',
+      );
+    } else {
+      chat.info("Je continue sans compte : je peux réparer votre PC, mais l'assistant en ligne (questions, formation) n'est pas disponible.");
+    }
+  }
+
+  chat.onHandoff = () => {
+    conversationReporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
+  };
+  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine });
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();
   console.log(`Conversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);
