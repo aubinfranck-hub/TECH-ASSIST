@@ -82,6 +82,7 @@ export async function runSkill(skill: Skill, ctx: AgentContext): Promise<Outcome
       if (result.ok) {
         done.push(action.id);
         await report({ type: 'action_done', action: action.id, message: result.message });
+        if (action.followUp) ctx.ui.info(action.followUp);
       } else {
         await report({ type: 'action_failed', action: action.id, message: result.message });
         return escalate(

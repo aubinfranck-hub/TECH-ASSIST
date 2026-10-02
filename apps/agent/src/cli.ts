@@ -1,54 +1,46 @@
+import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { runSkill } from './agent.js';
+import { HttpAssistant, type Assistant } from './assistant.js';
+import { ChatUi } from './chatServer.js';
+import { converse } from './conversation.js';
 import { PowerShellRunner } from './powershell.js';
 import { CompositeReporter, ConsoleReporter, HttpReporter } from './reporters.js';
-import { SKILL_MENU, resolveSkill } from './skills/index.js';
-import type { Action, Reporter, Skill, Ui } from './types.js';
+import { resolveSkill, SKILL_MENU } from './skills/index.js';
+import type { Action, ConversationUi, Reporter } from './types.js';
 
 function arg(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
+const flag = (name: string) => process.argv.includes(`--${name}`);
 
-function consoleUi(rl: ReturnType<typeof createInterface>): Ui {
+/** Conversation dans le terminal (option --console). */
+function consoleUi(rl: ReturnType<typeof createInterface>): ConversationUi {
   const yes = async (question: string) => {
     const answer = (await rl.question(`${question} [o/n] `)).trim().toLowerCase();
     return answer === 'o' || answer === 'oui' || answer === 'y';
   };
   return {
-    info: (message) => console.log(message),
+    info: (message) => console.log(`\n${message}`),
     confirmAction: (action: Action) => yes(`\n${action.title}\n${action.explanation}\nJe peux le faire ?`),
     confirmFixed: (question) => yes(question),
+    ask: async (prompt) => {
+      const answer = (await rl.question(`\n${prompt}\n> `)).trim();
+      return answer === '' ? null : answer;
+    },
+    choose: async (question, options) => {
+      console.log(`\n${question}`);
+      options.forEach((option, index) => console.log(`  ${index + 1}. ${option}`));
+      const n = Number((await rl.question('Votre choix : ')).trim());
+      return Number.isInteger(n) && n >= 1 && n <= options.length ? n - 1 : null;
+    },
   };
 }
 
-/** Sans `--skill` ni `--service`, le client choisit son problème dans un menu. */
-async function chooseSkill(rl: ReturnType<typeof createInterface>): Promise<Skill> {
-  const explicit = arg('skill') ?? (arg('service') ? `service:${arg('service')}` : undefined);
-  if (explicit) {
-    const skill = resolveSkill(explicit);
-    if (!skill) {
-      console.error(`Compétence inconnue : ${explicit}. Disponibles : ${SKILL_MENU.map((c) => c.id).join(', ')}, service:<nom>`);
-      process.exit(2);
-    }
-    return skill;
-  }
-  const other = SKILL_MENU.length + 1;
-  console.log('\nQuel est votre problème ?');
-  SKILL_MENU.forEach((choice, index) => console.log(`  ${index + 1}. ${choice.label}`));
-  console.log(`  ${other}. Un autre service Windows (je tape son nom)`);
-  for (;;) {
-    const answer = Number((await rl.question('Votre choix : ')).trim());
-    if (Number.isInteger(answer) && answer >= 1 && answer <= SKILL_MENU.length) return SKILL_MENU[answer - 1]!.build();
-    if (answer === other) {
-      const name = (await rl.question('Nom du service (comme dans services.msc) : ')).trim();
-      const skill = resolveSkill(`service:${name}`);
-      if (skill) return skill;
-      console.log('Nom invalide (lettres, chiffres, _ . - uniquement).');
-    } else {
-      console.log(`Tapez un numéro entre 1 et ${other}.`);
-    }
-  }
+function openBrowser(url: string) {
+  // Navigateur par défaut de Windows ; l'adresse ne contient aucun caractère spécial du shell.
+  spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
 }
 
 async function main() {
@@ -57,20 +49,51 @@ async function main() {
     process.exit(2);
   }
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const skill = await chooseSkill(rl);
-
   // Compte rendu au serveur : seulement si l'application a une session ouverte.
   const reporters: Reporter[] = [new ConsoleReporter()];
   const apiBase = arg('api') ?? process.env.TECH_ASSIST_API;
   const token = arg('token') ?? process.env.TECH_ASSIST_TOKEN;
   const sessionId = arg('session') ?? process.env.TECH_ASSIST_SESSION;
-  if (apiBase && token && sessionId) reporters.push(new HttpReporter(apiBase, token, sessionId));
+  const online = !!(apiBase && token && sessionId);
+  if (online) reporters.push(new HttpReporter(apiBase!, token!, sessionId!));
+  const reporter = new CompositeReporter(reporters);
+  const assistant: Assistant | undefined = online ? new HttpAssistant(apiBase!, token!, sessionId!) : undefined;
+  const runner = new PowerShellRunner();
 
-  const ui = consoleUi(rl);
-  const outcome = await runSkill(skill, { runner: new PowerShellRunner(), ui, reporter: new CompositeReporter(reporters) });
-  console.log(`\nRésultat : ${outcome.status}`);
-  rl.close();
+  // Mode direct : une compétence précise, dans le terminal.
+  const direct = arg('skill') ?? (arg('service') ? `service:${arg('service')}` : undefined);
+  if (direct) {
+    const skill = resolveSkill(direct);
+    if (!skill) {
+      console.error(`Compétence inconnue : ${direct}. Disponibles : ${SKILL_MENU.map((c) => c.id).join(', ')}, service:<nom>`);
+      process.exit(2);
+    }
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const outcome = await runSkill(skill, { runner, ui: consoleUi(rl), reporter });
+    console.log(`\nRésultat : ${outcome.status}`);
+    rl.close();
+    process.exit(0);
+  }
+
+  // Mode conversation (par défaut) : page de chat dans le navigateur, ou terminal avec --console.
+  if (flag('console')) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const result = await converse({ runner, ui: consoleUi(rl), reporter, assistant });
+    console.log(`\nConversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);
+    rl.close();
+    process.exit(0);
+  }
+
+  const chat = await ChatUi.start();
+  chat.onHandoff = () => {
+    reporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
+  };
+  console.log(`Ouverture de l'assistant dans votre navigateur : ${chat.url}`);
+  if (!flag('no-browser')) openBrowser(chat.url);
+  const result = await converse({ runner, ui: chat, reporter, assistant });
+  await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
+  await chat.close();
+  console.log(`Conversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);
   process.exit(0);
 }
 

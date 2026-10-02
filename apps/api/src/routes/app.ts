@@ -7,6 +7,13 @@ import { validateBody } from '../middleware/validate.js';
 import { logAudit, type Db } from '../utils/audit.js';
 import { isDisposableEmail, normalizeEmail } from '../utils/email.js';
 import { consumeEmailCode, emailField } from './emailVerification.js';
+import {
+  AssistantUnavailableError,
+  MAX_HISTORY_TURNS,
+  MAX_MESSAGE_CHARS,
+  MAX_TURN_CHARS,
+  askOfficeAssistant,
+} from '../assistant/officeAssistant.js';
 import { createSessionForOrder } from './sessions.js';
 
 /**
@@ -279,7 +286,11 @@ const EVENT_TYPES = [
   'action_failed',
   'verified',
   'escalated',
+  /** Ce que le client a demandé dans la conversation (journal lisible par le technicien). */
+  'user_request',
 ] as const;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const eventSchema = z.object({
   type: z.enum(EVENT_TYPES),
@@ -297,6 +308,7 @@ const eventSchema = z.object({
 appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateBody(eventSchema), async (req, res) => {
   const install = req.appInstall!;
   const body = req.body as z.infer<typeof eventSchema>;
+  if (!UUID.test(req.params.id!)) return res.status(404).json({ error: 'Session introuvable' });
 
   // La session doit appartenir à CETTE installation, via sa commande.
   const owned = await pool.query(
@@ -325,4 +337,74 @@ appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateB
     ]);
   }
   res.status(201).json({ recorded: true });
+});
+
+const chatSchema = z.object({
+  message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
+  history: z
+    .array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(MAX_TURN_CHARS) }))
+    .max(MAX_HISTORY_TURNS)
+    .default([]),
+});
+
+/** Chaque appel coûte de l'IA : plafond par session (en plus de la limite par adresse IP). */
+export const MAX_CHATS_PER_SESSION = 40;
+
+const chatLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
+/**
+ * Questions d'usage (Office, Outlook, Windows) posées pendant une assistance. La réponse est du TEXTE :
+ * elle n'est jamais exécutée par l'agent. Sans clé d'IA configurée, la route répond 503 et l'agent propose
+ * honnêtement un technicien. Les questions et réponses sont journalisées : le technicien relit la conversation.
+ */
+appRouter.post('/app/sessions/:id/chat', chatLimiter, requireAppInstall, validateBody(chatSchema), async (req, res) => {
+  const install = req.appInstall!;
+  const body = req.body as z.infer<typeof chatSchema>;
+  if (!UUID.test(req.params.id!)) return res.status(404).json({ error: 'Session introuvable' });
+
+  // La session doit appartenir à CETTE installation, via sa commande, et ne pas être terminée.
+  const owned = await pool.query(
+    `SELECT s.id, s.status, s.order_id FROM sessions s JOIN orders o ON o.id = s.order_id
+     WHERE s.id = $1 AND o.app_install_id = $2`,
+    [req.params.id, install.id],
+  );
+  const session = owned.rows[0];
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (!['created', 'waiting_technician', 'active'].includes(session.status)) {
+    return res.status(409).json({ error: 'Cette assistance est terminée.' });
+  }
+
+  // Plafond approximatif sous forte concurrence (la limite par IP borne l'écart).
+  const used = await pool.query(`SELECT count(*)::int AS n FROM audit_logs WHERE session_id = $1 AND action = 'agent.chat'`, [session.id]);
+  if (used.rows[0].n >= MAX_CHATS_PER_SESSION) {
+    return res.status(429).json({
+      code: 'chat_limit',
+      error: "Vous avez atteint la limite de questions pour cette assistance : un technicien peut prendre le relais.",
+    });
+  }
+
+  let answer: { text: string; model: string };
+  try {
+    answer = await askOfficeAssistant(body.message, body.history);
+  } catch (err) {
+    if (!(err instanceof AssistantUnavailableError)) throw err;
+    console.error(`[assistant] indisponible : ${err.message}`);
+    return res.status(503).json({ code: 'assistant_unavailable', error: "L'assistant en ligne n'est pas disponible pour le moment." });
+  }
+
+  await logAudit(pool, {
+    actorType: 'client',
+    actorId: install.email,
+    sessionId: session.id,
+    orderId: session.order_id,
+    action: 'agent.chat',
+    details: { question: body.message.slice(0, 300), answer: answer.text.slice(0, 500), model: answer.model },
+  });
+  res.json({ answer: answer.text });
 });

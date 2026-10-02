@@ -1,4 +1,5 @@
-import type { Action, ActionResult, CommandRunner, Diagnosis, Skill } from '../types.js';
+import type { Action, Diagnosis, Skill } from '../types.js';
+import { asArray, extractJson, guarded, nonNegative, readScript, runScript } from './common.js';
 
 /**
  * Compétence « services Windows » : surveille et répare les services dont dépendent
@@ -151,17 +152,6 @@ function psList(names: string[]): string {
   return names.map((n) => `'${assertServiceName(n)}'`).join(',');
 }
 
-/** Enveloppe commune : échec = message sur stderr + code de sortie 1. */
-function guarded(body: string): string {
-  return `$ErrorActionPreference = 'Stop'
-try {
-${body}
-} catch {
-  [Console]::Error.WriteLine($_.Exception.Message)
-  exit 1
-}`;
-}
-
 /** Lecture seule : état des services demandés ET de ceux dont ils dépendent ; file d'impression ; droits. */
 export function collectScript(names: string[], checkPrintQueue: boolean): string {
   const spool = checkPrintQueue
@@ -200,18 +190,9 @@ $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 `);
 }
 
-function asArray<T>(value: unknown): T[] {
-  if (value == null) return [];
-  return (Array.isArray(value) ? value : [value]) as T[];
-}
-
 /** Lit la sortie JSON du script de collecte, de façon tolérante (objet seul, BOM, texte parasite). */
 export function parseServiceFacts(stdout: string): ServiceFacts {
-  const text = stdout.replace(/^﻿/, '').trim();
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end < start) throw new Error('Réponse de diagnostic illisible');
-  const raw = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+  const raw = extractJson(stdout);
 
   const services = asArray<Record<string, unknown>>(raw.services)
     .filter((s) => SERVICE_NAME.test(String(s.name ?? '')))
@@ -222,7 +203,7 @@ export function parseServiceFacts(stdout: string): ServiceFacts {
       startMode: String(s.startMode ?? ''),
       dependsOn: asArray<unknown>(s.dependsOn).map(String).filter((n) => SERVICE_NAME.test(n)),
     }));
-  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+  const num = nonNegative;
   return {
     services,
     spoolFiles: num(raw.spoolFiles),
@@ -231,15 +212,7 @@ export function parseServiceFacts(stdout: string): ServiceFacts {
   };
 }
 
-async function run(runner: CommandRunner, script: string): Promise<ActionResult> {
-  try {
-    const res = await runner.runPowerShell(script, { timeoutMs: 60_000 });
-    if (res.exitCode === 0) return { ok: true, message: res.stdout.trim() || 'OK' };
-    return { ok: false, message: res.stderr.trim() || `Échec (code ${res.exitCode})` };
-  } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : String(err) };
-  }
-}
+const run = (runner: Parameters<typeof runScript>[0], script: string) => runScript(runner, script, 60_000);
 
 /** Démarre le service et attend qu'il tourne réellement (jusqu'à 30 s). */
 const startBlock = (name: string) =>
@@ -431,9 +404,8 @@ function profileSkill(id: string, title: string, verifyQuestion: string, specs: 
     title,
     verifyQuestion,
     async diagnose(runner) {
-      const res = await runner.runPowerShell(collectScript(names, checkPrintQueue), { timeoutMs: 60_000 });
-      if (res.exitCode !== 0) throw new Error(res.stderr.trim() || 'Le diagnostic des services a échoué');
-      return diagnoseServices(specs, parseServiceFacts(res.stdout), { custom });
+      const out = await readScript(runner, collectScript(names, checkPrintQueue), 'Le diagnostic des services');
+      return diagnoseServices(specs, parseServiceFacts(out), { custom });
     },
   };
 }

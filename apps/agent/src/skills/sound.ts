@@ -1,4 +1,5 @@
-import type { Action, ActionResult, CommandRunner, Diagnosis, Skill } from '../types.js';
+import type { Action, Diagnosis, Skill } from '../types.js';
+import { asArray, extractJson, guarded, readScript, runScript } from './common.js';
 
 /** États normalisés d'un périphérique audio (mêmes valeurs que DEVICE_STATE_* de l'API MMDevice). */
 const ACTIVE = 1;
@@ -115,17 +116,6 @@ public class TaPolicy {
 }
 `;
 
-/** Enveloppe commune : échec = message sur stderr + code de sortie 1. */
-function guarded(body: string): string {
-  return `$ErrorActionPreference = 'Stop'
-try {
-${body}
-} catch {
-  [Console]::Error.WriteLine($_.Exception.Message)
-  exit 1
-}`;
-}
-
 /** Lecture seule : services, périphériques (registre MMDevices), volume, sourdine, droits. */
 export const COLLECT_SCRIPT = guarded(String.raw`
 $ErrorActionPreference = 'SilentlyContinue'
@@ -150,18 +140,9 @@ $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 [pscustomobject]@{ services = $svc; endpoints = $eps; volume = $vol; muted = $mute; admin = $admin } | ConvertTo-Json -Depth 4 -Compress
 `);
 
-function asArray<T>(value: unknown): T[] {
-  if (value == null) return [];
-  return (Array.isArray(value) ? value : [value]) as T[];
-}
-
 /** Lit la sortie JSON du script de collecte, de façon tolérante (objet seul, BOM, texte parasite). */
 export function parseFacts(stdout: string): SoundFacts {
-  const text = stdout.replace(/^﻿/, '').trim();
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end < start) throw new Error('Réponse de diagnostic illisible');
-  const raw = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+  const raw = extractJson(stdout);
 
   const services = asArray<{ name?: unknown; status?: unknown }>(raw.services).map((s) => ({
     name: String(s.name ?? ''),
@@ -186,15 +167,7 @@ export function parseFacts(stdout: string): SoundFacts {
   };
 }
 
-async function run(runner: CommandRunner, script: string): Promise<ActionResult> {
-  try {
-    const res = await runner.runPowerShell(script, { timeoutMs: 45_000 });
-    if (res.exitCode === 0) return { ok: true, message: res.stdout.trim() || 'OK' };
-    return { ok: false, message: res.stderr.trim() || `Échec (code ${res.exitCode})` };
-  } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : String(err) };
-  }
-}
+const run = (runner: Parameters<typeof runScript>[0], script: string) => runScript(runner, script, 45_000);
 
 function startServicesAction(): Action {
   return {
@@ -339,8 +312,6 @@ export const soundSkill: Skill = {
   title: 'Son : pas de son sur l\'ordinateur',
   verifyQuestion: 'Entendez-vous du son maintenant ?',
   async diagnose(runner) {
-    const res = await runner.runPowerShell(COLLECT_SCRIPT, { timeoutMs: 45_000 });
-    if (res.exitCode !== 0) throw new Error(res.stderr.trim() || 'Le diagnostic du son a échoué');
-    return diagnoseSound(parseFacts(res.stdout));
+    return diagnoseSound(parseFacts(await readScript(runner, COLLECT_SCRIPT, 'Le diagnostic du son', 45_000)));
   },
 };

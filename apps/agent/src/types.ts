@@ -28,8 +28,13 @@ export interface Action {
   explanation: string;
   /** Nécessite que l'agent soit lancé en administrateur. */
   requiresAdmin: boolean;
-  /** false : écrite d'après la documentation mais pas encore validée sur une vraie machine. */
+  /**
+   * true : commande ou cmdlet standard et documentée ; false : mécanisme non documenté ou fragile
+   * (interface COM interne…). Dans les deux cas, pas encore essayée sur une vraie machine.
+   */
   verified: boolean;
+  /** Consigne affichée au client une fois l'action lancée (ex. « suivez la fenêtre qui s'ouvre »). */
+  followUp?: string;
   run(runner: CommandRunner): Promise<ActionResult>;
 }
 
@@ -65,7 +70,8 @@ export type EventType =
   | 'action_done'
   | 'action_failed'
   | 'verified'
-  | 'escalated';
+  | 'escalated'
+  | 'user_request';
 
 export interface AgentEvent {
   type: EventType;
@@ -86,4 +92,14 @@ export interface Ui {
   confirmAction(action: Action): Promise<boolean>;
   /** « Entendez-vous du son maintenant ? » — l'agent ne peut pas l'entendre lui-même. */
   confirmFixed(question: string): Promise<boolean>;
+}
+
+/** Interface de conversation : en plus des confirmations, l'utilisateur écrit et choisit. */
+export interface ConversationUi extends Ui {
+  /** Question libre ; null si l'utilisateur ferme la conversation. */
+  ask(prompt: string): Promise<string | null>;
+  /** Choix dans une liste (index), null s'il renonce. */
+  choose(question: string, options: string[]): Promise<number | null>;
+  /** Le client a demandé un technicien depuis l'interface (bouton dédié). */
+  wasHandedOff?(): boolean;
 }
