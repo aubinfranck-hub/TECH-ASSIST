@@ -31,19 +31,19 @@ export function Layout() {
             <Link to="/technicien" className="ml-2 rounded-lg bg-[#14181f] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Espace technicien</Link>
           </nav>
 
-          <Link to="/assistance" className="ta-button-primary min-h-10 w-auto px-4 py-2 text-xs sm:text-sm md:hidden">
-            Assistance
-          </Link>
+          <details className="group relative md:hidden">
+            <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-300 marker:hidden" aria-label="Menu">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 5h12M3 9h12M3 13h12" /></svg>
+            </summary>
+            <nav className="absolute right-0 top-12 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-soft" aria-label="Navigation mobile">
+              <Link to="/assistance" className="block rounded-lg px-3 py-2.5 font-semibold text-brand-700">Installer l’application</Link>
+              <Link to="/session" className="block rounded-lg px-3 py-2.5 text-slate-700">Ma session</Link>
+              <Link to="/entreprise" className="block rounded-lg px-3 py-2.5 text-slate-700">Entreprises</Link>
+              <Link to="/technicien" className="block rounded-lg px-3 py-2.5 text-slate-700">Espace technicien</Link>
+            </nav>
+          </details>
         </div>
 
-        <div className="border-t border-slate-100 md:hidden">
-          <nav className="ta-container flex gap-1 overflow-x-auto py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Navigation mobile">
-            <Link to="/assistance" className="whitespace-nowrap rounded-lg bg-brand-50 px-3 py-2 text-[11px] font-bold text-brand-700">Assistance</Link>
-            <Link to="/session" className="whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium text-slate-600">Ma session</Link>
-            <Link to="/entreprise" className="whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium text-slate-600">Entreprises</Link>
-            <Link to="/technicien" className="whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium text-slate-600">Technicien</Link>
-          </nav>
-        </div>
       </header>
 
       <main className="flex-1"><Outlet /></main>

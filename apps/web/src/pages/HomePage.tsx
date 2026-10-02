@@ -39,33 +39,33 @@ const FAQ = [
 export function HomePage() {
   return (
     <div>
-      <section className="border-b border-slate-200 bg-white">
+      <section className="bg-brand-600">
         <div className="ta-container grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:gap-14 lg:py-24">
           <div>
-            <h1 className="max-w-xl font-display text-[2.4rem] font-extrabold leading-[1.04] text-[#14181f] sm:text-5xl lg:text-[3.6rem]">
+            <h1 className="max-w-xl font-display text-[2.5rem] font-extrabold leading-[1.02] text-white sm:text-5xl lg:text-[3.6rem]">
               Un technicien informatique, dans votre PC, quand vous en avez besoin.
             </h1>
-            <p className="mt-5 max-w-lg text-base leading-7 text-slate-600 sm:text-lg">
+            <p className="mt-5 max-w-lg text-base leading-7 text-red-50 sm:text-lg">
               Installez Tech Assist sur Windows. L’agent trouve la panne, vous explique ce qu’il va faire, corrige avec votre accord, puis vérifie. Un technicien reste disponible.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Link to="/assistance" className="ta-button-primary">Installer l’application</Link>
-              <a href="#tarifs" className="ta-button-secondary">Voir les tarifs</a>
+              <Link to="/assistance" className="ta-button bg-white text-brand-700 hover:bg-red-50">Installer l’application</Link>
+              <a href="#tarifs" className="ta-button border border-white/50 text-white hover:bg-white/10">Voir les tarifs</a>
             </div>
-            <p className="mt-4 text-sm text-slate-500">La première assistance est offerte.</p>
+            <p className="mt-4 text-sm text-red-100">La première assistance est offerte.</p>
           </div>
 
           <div className="mx-auto w-full max-w-md lg:max-w-none">
             <div
-              className="rounded-2xl border border-slate-200 bg-[#f6f7f9] p-4 shadow-soft sm:p-5"
+              className="rounded-2xl bg-white p-4 shadow-2xl sm:p-5"
               role="img"
               aria-label="Exemple de conversation entre un client et l’agent Tech Assist"
             >
               <div className="space-y-3 text-[15px] leading-6">
-                <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-brand-600 px-4 py-2.5 text-white">
+                <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-[#14181f] px-4 py-2.5 text-white">
                   Mon PC est très lent depuis ce matin.
                 </div>
-                <div className="max-w-[92%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-slate-800">
+                <div className="max-w-[92%] rounded-2xl rounded-bl-md bg-slate-100 px-4 py-3 text-slate-800">
                   <p>J’ai examiné votre PC, rien n’a été modifié.</p>
                   <ul className="mt-2 space-y-1 text-sm">
                     <li>🟠 Disque presque plein : 3 Go libres</li>
@@ -73,10 +73,10 @@ export function HomePage() {
                     <li>🟢 Antivirus actif, Windows à jour</li>
                   </ul>
                 </div>
-                <div className="max-w-[92%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-slate-800">
+                <div className="max-w-[92%] rounded-2xl rounded-bl-md bg-slate-100 px-4 py-3 text-slate-800">
                   <p>Je peux supprimer les fichiers temporaires et libérer environ 9 Go. Vos documents ne sont pas touchés.</p>
                   <div className="mt-3 flex gap-2">
-                    <span className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Oui, nettoyer</span>
+                    <span className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white">Oui, nettoyer</span>
                     <span className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Non merci</span>
                   </div>
                 </div>
