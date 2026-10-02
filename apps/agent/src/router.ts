@@ -37,6 +37,9 @@ const fold = (s: string) =>
 
 const NOT_PROGRAM = /\b(fichier|dossier|photo|image|video|mail|message|courriel|document|contact|compte|mot de passe|historique|cache|cookie|ligne|texte|page|tableau|cellule|colonne|formule|signature)s?\b/;
 const MALWARE = /\b(virus|malware|malveillant|trojan|cheval de troie|spyware|logiciel espion|adware|publicites? (intempestives?|partout|envahissantes?)|pop-?ups?|pirat|infecte|hacke|rootkit|keylogger)\w*/;
+const TEAMS = /\b(teams?|ms-?teams)\b/;
+const ONEDRIVE = /\b(one-?drive|synchronis\w*|synchro)\b/;
+const LICENCE = /\b(activ\w* (office|word|excel|windows)|(office|word|excel|powerpoint|outlook) (non |pas )(activee?|active|licencie\w*)|produit non active|licence (office|expiree|invalide)|licence|abonnement (office|microsoft 365|365) expire)\b/;
 const OFFICE = /\b(outlook|office|word|excel|powerpoint|messagerie|onenote|access)\b/;
 const HOWTO = /\b(comment|astuce|tutoriel|explique|expliquer|apprendre|formule|tableau croise|publipostage|mise en forme|mise en page|raccourci|inserer|fusionner|trier|filtrer|imprimer un|creer un|ajouter une?|modifier la)\b/;
 const OFFICE_PROBLEM = /\b(plante|plantage|bloque|bloquee?|fige|figee|gele|crash|ne repond|repond plus|ne s'ouvre|s'ouvre pas|ne demarre|demarre pas|ferme tout seul|se ferme|erreur|lent|lente|lag|ne marche|marche pas|ne fonctionne|fonctionne pas|probleme)\b/;
@@ -171,7 +174,12 @@ export function routeIntent(original: string): Intent[] {
 
   if (MALWARE.test(text) || /\bantivirus\b/.test(text)) add({ kind: 'skill', skillId: 'malware' });
 
-  if (OFFICE.test(text)) {
+  const licence = LICENCE.test(text);
+  if (TEAMS.test(text) && !HOWTO.test(text)) add({ kind: 'skill', skillId: 'teams' });
+  if (ONEDRIVE.test(text) && !HOWTO.test(text)) add({ kind: 'skill', skillId: 'onedrive' });
+  if (licence) add({ kind: 'skill', skillId: 'office-licence' });
+
+  if (OFFICE.test(text) && !licence) {
     const howTo = HOWTO.test(text);
     const problem = OFFICE_PROBLEM.test(text);
     if (problem || !howTo) add({ kind: 'skill', skillId: 'office' });

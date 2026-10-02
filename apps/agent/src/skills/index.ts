@@ -11,6 +11,7 @@ import { serverCheckSkill } from './serverCheck.js';
 import { serverHealthSkill } from './serverHealth.js';
 import { networkSkill } from './network.js';
 import { officeSkill } from './office.js';
+import { oneDriveSkill, officeLicenceSkill, teamsSkill } from './microsoft365.js';
 import { performanceSkill } from './performance.js';
 import { printerSkill } from './printer.js';
 import { securitySkill } from './security.js';
@@ -35,6 +36,9 @@ export const SKILL_MENU: SkillChoice[] = [
   { id: 'lan-map', label: 'Réseau local : appareils connectés', build: networkMapSkill },
   { id: 'malware', label: 'Virus ou logiciel malveillant', build: malwareSkill },
   { id: 'office', label: 'Office / Outlook : plante ou ne répond plus', build: () => officeSkill() },
+  { id: 'teams', label: 'Teams : connexion, écran blanc, appels coupés', build: teamsSkill },
+  { id: 'onedrive', label: 'OneDrive : la synchronisation est bloquée', build: oneDriveSkill },
+  { id: 'office-licence', label: 'Office : « produit non activé » / licence', build: officeLicenceSkill },
   { id: 'performance', label: 'Performances : mémoire et processeur', build: performanceSkill },
   { id: 'startup', label: 'Démarrage lent : programmes au démarrage', build: startupSkill },
   { id: 'disk', label: 'Disque : espace et santé', build: diskSkill },

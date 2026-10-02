@@ -118,3 +118,12 @@ intervenir, 2 critiques » ; « corrige tous les problèmes non critiques »).
 Couverture société (FAIT) : un PC rattaché à une entreprise dont l’abonnement est `active` est couvert (`coverage: company`) sans offre ni abonnement personnel ; l’administrateur Tech Assist active l’abonnement société.
 
 Ordre proposé : (1) espace société + rattachement des PC + vue de parc en lecture seule (FAIT : codes de rattachement, santé du poste, synthèse ; voir `docs/agent.md`) ; (2) passerelle + découverte réseau en lecture seule (cartographie ; première tranche faite : compétence `lan-map`, vue depuis un seul PC, passive) ; (3) un premier connecteur en lecture seule (Windows Server via WinRM, ou MikroTik) ; (4) actions à validation humaine. En attendant, l'agent le dit franchement au client et propose un technicien (`router.ts`, intention `human_only`).
+
+## D10 — Forfaits à l'usage (particuliers) et contrat mensuel (entreprises)
+
+Remplace l'abonnement particulier à 10 000 FCFA/mois (qui reste techniquement présent mais n'est plus mis en avant).
+
+- **Particulier** : première assistance offerte (une par e-mail/appareil), puis un forfait **par assistance**, payé par Mobile Money et confirmé par un technicien : **Diagnostic 500** (portée `diagnostic` : l'agent analyse et explique, ne modifie rien), **Dépannage 2 000** (`fix` : un problème précis), **Intervention complète 5 000** (`full` : analyse et réparation complètes). La portée est lue de `pricing_plans.metadata.scope` ; elle est appliquée par l'agent (`converse` + `runSkill readOnly`).
+- **Entreprise** : un contrat mensuel unique de 10 000 FCFA (couverture des postes rattachés). Les paliers PME historiques (9 900 / 24 900 / 49 900) restent dans la base en attendant l'arbitrage commercial.
+- Parcours : `POST /app/orders` → paiement → confirmation par un technicien (`confirm-payment`) → `GET /app/orders/:id` (attente) → `POST /app/assistance {orderId}` ; une commande ne démarre qu'une session (index unique), un forfait payé non utilisé est retrouvé via `entitlements.paidForfait`.
+- Transparence : l'agent est présenté pour ce qu'il est ; un technicien nommé supervise et le bouton « Parler à un humain » reste visible. Aucune formulation ne prétend qu'un humain écrit quand c'est l'IA.

@@ -145,3 +145,11 @@ Premier connecteur d'infrastructure, en **lecture seule** : après la vérificat
 ## Assistant téléphone (Android) — `/telephone`
 
 Page installable (« ajouter à l'écran d'accueil ») qui offre aux téléphones le même parcours que le programme Windows : e-mail + code, première assistance offerte, abonnement, puis conversation avec l'assistant IA (guidage seul) avec photo d'écran possible. Le téléphone n'est **jamais contrôlé** (D4 : guidage seul). Consignes spécifiques (`PHONE_SYSTEM_PROMPT`) : jamais de mot de passe, PIN, code SMS ou Mobile Money demandé ; applications du Play Store seulement ; sauvegarde avant réinitialisation. Limite : un navigateur n'a pas d'empreinte matérielle, l'offre gratuite est donc limitée par adresse e-mail seulement. Pas d'APK natif (pas d'outils Android ici).
+
+## Forfaits et portée
+
+Après l'assistance offerte, l'agent propose les forfaits Diagnostic (500), Dépannage (2 000) et Intervention complète (5 000 FCFA), attend la confirmation du paiement (sondage toutes les 10 s, 15 min), puis démarre l'assistance avec la portée du forfait : `diagnostic` = lecture seule (ce qui serait fait est expliqué, rien n'est modifié ; installation, désinstallation et lecteurs réseau refusés), `fix` = un problème précis (la réparation complète du PC est réservée à `full`), `full` = tout. Un forfait payé mais pas encore utilisé est retrouvé au prochain lancement.
+
+## Microsoft 365 (Teams, OneDrive, licence Office)
+
+`teams` : ferme Teams s'il ne répond plus et vide son cache (messages et compte intacts). `onedrive` : démarre OneDrive, ou le réinitialise (`/reset`, aucun fichier supprimé) ; signale un disque presque plein, cause fréquente. `office-licence` : lecture seule via `OSPP.VBS /dstatus` ; n'active et ne contourne jamais une licence, indique comment se reconnecter et qui doit renouveler. Les chemins sont fixes (jamais fournis par le serveur ou l'IA). Non validé sur une vraie machine : les actions `teams_clear_cache` et `onedrive_reset` sont marquées `verified: false`.

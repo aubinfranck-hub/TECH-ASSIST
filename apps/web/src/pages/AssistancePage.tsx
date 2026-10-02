@@ -14,7 +14,7 @@ const STEPS = [
   },
   {
     title: 'Confirmez votre e-mail',
-    text: 'Un code à 6 chiffres vous est envoyé. Votre e-mail identifie votre première assistance offerte et votre abonnement.',
+    text: 'Un code à 6 chiffres vous est envoyé. Votre e-mail identifie votre première assistance offerte et vos forfaits.',
   },
   {
     title: 'Demandez de l’aide',
@@ -54,8 +54,8 @@ export function AssistancePage() {
       <p className="ta-eyebrow mb-2">Assistance</p>
       <h1 className="mb-3 text-2xl font-bold sm:text-3xl">L'assistance se fait dans l'application</h1>
       <p className="mb-8 text-slate-600">
-        Votre première assistance est offerte. Ensuite, un abonnement de {price.toLocaleString('fr-FR')} FCFA par mois
-        donne accès à l'assistance, avec l'agent IA ou un technicien.
+        Votre première assistance est offerte. Ensuite, vous choisissez un forfait selon votre besoin : 500 FCFA (diagnostic),
+        2 000 FCFA (dépannage) ou 5 000 FCFA (intervention complète). Les entreprises ont un contrat de 10 000 FCFA par mois.
       </p>
 
       <section className="ta-card mb-8 p-6 sm:p-8">
@@ -114,8 +114,7 @@ export function AssistancePage() {
         <p className="font-bold">Une assistance offerte par personne</p>
         <p className="mt-1">
           Elle est rattachée à votre e-mail vérifié et à votre appareil : se réinscrire avec une autre adresse sur le même
-          appareil ne donne pas droit à une seconde assistance offerte. L'abonnement suit votre e-mail, même après une
-          réinstallation. Le paiement se confirme avec un technicien (Mobile Money).
+          appareil ne donne pas droit à une seconde assistance offerte. Le paiement se confirme avec un technicien (Mobile Money).
         </p>
       </section>
     </div>

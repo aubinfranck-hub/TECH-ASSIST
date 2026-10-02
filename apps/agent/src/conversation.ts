@@ -37,7 +37,7 @@ export interface ConversationResult {
 }
 
 const GREETING =
-  "Bonjour, je suis AI PC, votre technicien informatique. Dites-moi en une phrase ce que vous voulez — par exemple « mon ordinateur est lent » (je l'analyse et je le répare), « je n'ai pas Internet », « mon imprimante ne marche pas », « je n'accède pas au serveur », « je pense avoir un virus », « Outlook plante », « installe VLC », « je veux désinstaller Skype » — ou « apprends-moi Excel » pour une formation, ou posez-moi une question sur Office.";
+  "Bonjour, je suis AI PC, votre technicien informatique. Dites-moi en une phrase ce que vous voulez — par exemple « mon ordinateur est lent » (je l'analyse et je le répare), « je n'ai pas Internet », « mon imprimante ne marche pas », « je n'accède pas au serveur », « je pense avoir un virus », « Outlook plante », « Teams ne se connecte pas », « OneDrive ne se synchronise plus », « Word dit produit non activé », « installe VLC », « je veux désinstaller Skype » — ou « apprends-moi Excel » pour une formation, ou posez-moi une question sur Office.";
 
 /** Ce que l'agent ne fait pas : dit franchement, puis un technicien. */
 const HUMAN_ONLY_TEXT: Record<HumanOnlyTopic, string> = {
