@@ -22,6 +22,8 @@ export interface ConversationDeps {
   roots?: string[];
   /** Nom de l'ordinateur, imprimé en tête des rapports. */
   machine?: string;
+  /** Rattachement à une entreprise ; absent si le client n'est pas connecté à son compte. */
+  company?: { join(code: string, deviceName: string): Promise<{ ok: true; companyName: string } | { ok: false; error: string }> };
 }
 
 export interface ConversationResult {
@@ -130,6 +132,8 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
       await handleMapDrive(intent.letter, intent.unc);
     } else if (intent.kind === 'install') {
       await handleInstall(intent.app);
+    } else if (intent.kind === 'company') {
+      await handleCompany();
     } else if (intent.kind === 'training') {
       await handleTraining(intent.topic);
     } else if (intent.kind === 'human_only') {
@@ -164,6 +168,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     if (intent.kind === 'mapdrive') return 'Connecter un lecteur réseau';
     if (intent.kind === 'install') return intent.app ? `Installer ${INSTALL_CATALOG.find((a) => a.key === intent.app)?.label ?? intent.app}` : 'Installer un logiciel';
     if (intent.kind === 'training') return 'Me former (explications et exercices)';
+    if (intent.kind === 'company') return 'Rattacher ce PC à mon entreprise';
     if (intent.kind === 'human_only') return 'Demander un technicien (hors de mon domaine)';
     if (intent.kind === 'chat') return 'Répondre à ma question (explication)';
     return 'Urgence';
@@ -251,6 +256,23 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     const drive = await askValid('Quelle lettre de lecteur voulez-vous ? (de D à Z, par exemple Z)', (v) => DRIVE_LETTER.test(v.replace(/:$/, '').toUpperCase()), 'La lettre doit aller de D à Z.', letter);
     if (!drive) return;
     outcomes.push(await runAndNote(mapDriveSkill(drive.replace(/:$/, '').toUpperCase(), path)));
+  }
+
+  async function handleCompany() {
+    if (!deps.company) {
+      ui.info("Pour rattacher ce PC à votre entreprise, connectez-vous d'abord avec votre adresse email (relancez le programme). Le code vous est donné par l'administrateur de votre entreprise, dans son espace entreprise.");
+      return;
+    }
+    const code = await askValid('Entrez le code de rattachement donné par votre administrateur (exemple : ABCDE-FGHJK) :', (v) => /^[A-Za-z0-9 -]{8,20}$/.test(v), 'Ce code ne ressemble pas à un code de rattachement (10 lettres et chiffres).');
+    if (!code) return;
+    const device = (deps.machine ?? 'PC').slice(0, 40);
+    const result = await deps.company.join(code, device);
+    if (result.ok) {
+      ui.info(`C'est fait : ce PC (« ${device} ») est maintenant rattaché à l'entreprise « ${result.companyName} ». Son état de santé (espace disque, antivirus, mises à jour) sera visible par votre administrateur. Aucun fichier ni document n'est transmis.`);
+      await log({ type: 'user_request', message: 'Rattachement à une entreprise' });
+    } else {
+      ui.info(result.error);
+    }
   }
 
   async function handleInstall(app?: string) {

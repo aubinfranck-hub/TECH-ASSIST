@@ -126,6 +126,17 @@ export class AppApi {
       fallbackToHuman: boolean;
     }>('/app/assistance', { mode: 'ia' }, token);
   }
+  joinCompany(token: string, code: string, deviceName: string) {
+    return this.call<{ companyName: string }>('/app/company/join', { code, deviceName }, token);
+  }
+  async heartbeat(token: string, health: Record<string, number | boolean>): Promise<boolean> {
+    try {
+      await this.call('/app/company/heartbeat', health, token);
+      return true;
+    } catch {
+      return false; // pas rattaché, ou serveur injoignable : sans importance pour le client
+    }
+  }
   subscribe(token: string) {
     return this.call<{ order: { id: string; amount_fcfa: number } }>('/app/subscribe', {}, token);
   }
@@ -239,5 +250,18 @@ export async function startCovered(deps: AccountDeps, login: { token: string; en
   } catch (err) {
     ui.info(err instanceof Error ? err.message : "Impossible de démarrer l'assistance.");
     return null;
+  }
+}
+
+
+export type JoinResult = { ok: true; companyName: string } | { ok: false; error: string };
+
+/** Rattache ce PC à l'entreprise du code ; les erreurs du serveur sont renvoyées telles quelles (déjà en français). */
+export async function joinCompany(api: AppApi, token: string, code: string, deviceName: string): Promise<JoinResult> {
+  try {
+    const res = await api.joinCompany(token, code, deviceName);
+    return { ok: true, companyName: res.companyName };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Rattachement impossible.' };
   }
 }

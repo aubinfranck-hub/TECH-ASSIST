@@ -123,3 +123,11 @@ API : `GEMINI_API_KEY` (et `GEMINI_MODEL`, défaut `gemini-2.0-flash`) pour l'as
 - **Double-clic** : ouvre le chat dans le navigateur, puis connexion par email (`appAccount.ts`) : code à 6 chiffres envoyé par l'API (`/api/app/email-code`), numéro de téléphone, inscription (`/api/app/register`) avec l'empreinte de l'appareil (SHA-256 de MachineGuid), jeton gardé dans `%APPDATA%\TechAssist\compte.json`. L'assistance offerte n'est consommée qu'après accord du client ; offerte déjà utilisée → proposition d'abonnement (10 000 FCFA/mois). Sans compte : réparations seulement.
 - **Prérequis serveur** : `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` (ex. Gmail + mot de passe d'application) sinon l'envoi du code échoue (503) ; `GEMINI_API_KEY` pour le chat/formation/captures.
 - **Non validé** : le `.exe` n'a pas été lancé sur un vrai Windows.
+
+## Rattachement à une entreprise et vue de parc
+
+- **Administrateur** (espace entreprise) : bouton « Générer un code de rattachement » → code à usage unique, 10 caractères, valable 48 h, stocké sous forme d'empreinte (`POST /api/company/join-codes`, migration 008).
+- **Poste** : dans le programme, « rattacher ce PC à mon entreprise » + le code → `POST /api/app/company/join` : le PC est inscrit dans le parc de l'entreprise (un PC = une entreprise ; un nom de poste unique par entreprise ; un code refusé ou en conflit n'est pas consommé).
+- **Santé** : à chaque lancement le programme envoie `POST /api/app/company/heartbeat` : espace disque libre, mémoire utilisée, antivirus actif, mises à jour récentes (≤ 60 jours). Lecture seule, valeurs numériques/booléennes uniquement : aucun nom de fichier ni contenu (`skills/fleetStatus.ts`).
+- **Vue de parc** : tableau + synthèse « N en bon état · M à surveiller » dans l'espace entreprise.
+- **Pas encore** : correction à distance d'un PC du parc depuis la console, actions groupées (« corrige tous les PC »), couverture de l'abonnement entreprise pour les assistances du poste. Voir D10.

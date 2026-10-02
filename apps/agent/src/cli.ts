@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { hostname } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { runSkill } from './agent.js';
-import { AppApi, DEFAULT_API_BASE, FileAccountStore, readHardwareHash, signIn, startCovered } from './appAccount.js';
+import { AppApi, DEFAULT_API_BASE, FileAccountStore, joinCompany, readHardwareHash, signIn, startCovered } from './appAccount.js';
+import { collectFleetHealth } from './skills/fleetStatus.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
 import { ChatUi } from './chatServer.js';
 import { converse } from './conversation.js';
@@ -103,10 +104,17 @@ async function main() {
   // Sans session fournie en ligne de commande (cas du double-clic) : connexion par email, puis assistance couverte.
   let conversationReporter: Reporter = reporter;
   let conversationAssistant: Assistant | undefined = assistant;
+  let companyDeps: Parameters<typeof converse>[0]['company'];
   if (!online && !flag('offline')) {
     const api = new AppApi(apiBase ?? DEFAULT_API_BASE);
     const deps = { ui: chat, api, store: new FileAccountStore(), hardwareHash: await readHardwareHash(runner) };
     const login = await signIn(deps);
+    if (login) {
+      const token = login.token;
+      companyDeps = { join: (code, deviceName) => joinCompany(api, token, code, deviceName) };
+      // État de santé du poste pour l'espace entreprise (sans effet si le PC n'est rattaché à aucune entreprise).
+      collectFleetHealth(runner).then((health) => api.heartbeat(token, health as Record<string, number | boolean>)).catch(() => undefined);
+    }
     const started = login ? await startCovered(deps, login) : null;
     if (started) {
       const base = apiBase ?? DEFAULT_API_BASE;
@@ -127,7 +135,7 @@ async function main() {
   chat.onHandoff = () => {
     conversationReporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
   };
-  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine });
+  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps });
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();
   console.log(`Conversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);

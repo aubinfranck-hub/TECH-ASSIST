@@ -21,6 +21,8 @@ export type Intent =
   /** Installation d'un logiciel du catalogue ; `app` seulement si reconnu. */
   | { kind: 'install'; app?: string }
   | { kind: 'training'; topic: string }
+  /** Rattacher ce PC à l'espace entreprise (code donné par l'administrateur). */
+  | { kind: 'company' }
   /** Hors de portée de l'agent (routeurs, domaine, comptes, parc d'ordinateurs) : un technicien ou l'espace entreprise. */
   | { kind: 'human_only'; topic: HumanOnlyTopic }
   | { kind: 'emergency' }
@@ -40,6 +42,7 @@ const HOWTO = /\b(comment|astuce|tutoriel|explique|expliquer|apprendre|formule|t
 const OFFICE_PROBLEM = /\b(plante|plantage|bloque|bloquee?|fige|figee|gele|crash|ne repond|repond plus|ne s'ouvre|s'ouvre pas|ne demarre|demarre pas|ferme tout seul|se ferme|erreur|lent|lente|lag|ne marche|marche pas|ne fonctionne|fonctionne pas|probleme)\b/;
 
 const INFRASTRUCTURE = /\b(routeurs?|routers?|switch(es)?|commutateurs?|firewall|vpn|vlan|active directory|controleur de domaine|gpo|strategie de groupe|mikrotik|ubiquiti|unifi|tp-?link|cisco|fortinet|fortigate|aruba|huawei|windows server|dhcp|points? d'acces|infrastructure|datacenter)\b/;
+const COMPANY = /\b(rattach\w*|code (de rattachement|entreprise|societe)|(ajouter|enregistrer|connecter) (ce|cet) (pc|ordinateur|poste) (a|dans|au) (mon|ma|l') ?(entreprise|societe|parc)|rejoindre (mon|ma|l') ?(entreprise|societe))\b/;
 const FLEET = /\b(tous les (pc|ordinateurs|postes|ordis)|tout le parc|le parc|parc informatique|flotte|ensemble des (pc|ordinateurs|postes)|plusieurs (pc|ordinateurs|postes)|chaque (pc|poste))\b/;
 const ACCOUNTS = /\b(mot de passe|mdp|creer un (compte|utilisateur)|ajoute\w* un utilisateur|nouvel? utilisateur|compte utilisateur|droits? d'acces|permissions?|bureau a distance|rdp|reinitialis\w* (le |mon )?(mot|compte))\b/;
 const REPAIR = /\b(repar\w* (mon|le|cet|ce) (pc|ordinateur|ordi|portable)|repare mon pc|maintenance|optimis\w*|(mon|le|cet|ce) (pc|ordinateur|ordi|portable|machine) (est|devient) (tres |trop |super )?(lent|lente|lents)|ordinateur (lent|lente)|pc (lent|lente)|ca rame|\brame\b|trop lent|tres lent|mon pc ne va pas|prends? soin de mon (pc|ordinateur))\b/;
@@ -139,6 +142,7 @@ export function routeIntent(original: string): Intent[] {
   }
 
   // Hors de portée : on le dit honnêtement au lieu de faire semblant (voir conversation.ts).
+  if (COMPANY.test(text)) return [{ kind: 'company' }];
   if (INFRASTRUCTURE.test(text)) add({ kind: 'human_only', topic: 'infrastructure' });
   else if (FLEET.test(text)) add({ kind: 'human_only', topic: 'fleet' });
   else if (ACCOUNTS.test(text) && !/\bcomment\b/.test(text)) add({ kind: 'human_only', topic: 'accounts' });

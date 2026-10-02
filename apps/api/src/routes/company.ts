@@ -6,6 +6,7 @@ import { requireCompanyAuth } from '../middleware/companyAuth.js';
 import { validateBody } from '../middleware/validate.js';
 import { logAudit } from '../utils/audit.js';
 import { createSessionForOrder } from './sessions.js';
+import { createJoinCode } from '../utils/joinCodes.js';
 
 export const companyRouter = Router();
 companyRouter.use(requireCompanyAuth());
@@ -80,6 +81,16 @@ companyRouter.get('/devices', async (req, res) => {
     [req.companyAuth!.companyId],
   );
   res.json({ devices: rows });
+});
+
+/**
+ * Code de rattachement d'un poste : à usage unique, valable 48 h. Réservé aux administrateurs de l'entreprise.
+ * Le code est montré une seule fois (seule son empreinte est conservée).
+ */
+companyRouter.post('/join-codes', requireCompanyAuth('admin'), async (req, res) => {
+  const created = await createJoinCode(pool, req.companyAuth!.companyId);
+  await logAudit(pool, { actorType: 'client', actorId: req.companyAuth!.sub, action: 'company.join_code_created', details: { companyId: req.companyAuth!.companyId } });
+  res.status(201).json(created);
 });
 
 const deviceHeartbeatSchema = z.object({

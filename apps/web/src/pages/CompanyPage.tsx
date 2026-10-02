@@ -47,6 +47,22 @@ interface Report {
   riskyDevices: Array<{ device_name: string }>;
 }
 
+/** Un poste est « à surveiller » si l'espace disque est faible ou si l'antivirus / les mises à jour sont en défaut. */
+function deviceState(d: Device): 'ok' | 'warn' {
+  if ((d.disk_free_percent != null && d.disk_free_percent < 10) || d.antivirus_ok === false || d.os_up_to_date === false) return 'warn';
+  return 'ok';
+}
+
+function FleetSummary({ devices }: { devices: Device[] }) {
+  if (devices.length === 0) return null;
+  const warn = devices.filter((d) => deviceState(d) === 'warn').length;
+  return (
+    <p className="mb-3 text-sm">
+      <span className="font-semibold">{devices.length - warn}</span> poste(s) en bon état · <span className="font-semibold">{warn}</span> à surveiller
+    </p>
+  );
+}
+
 export function CompanyPage() {
   const [token, setToken] = useState<string | null>(localStorage.getItem(COMPANY_TOKEN_KEY));
   const [role, setRole] = useState<'admin' | 'employee' | null>(null);
@@ -64,6 +80,8 @@ export function CompanyPage() {
   const [helpDescription, setHelpDescription] = useState('');
   const [helpPriority, setHelpPriority] = useState<'normal' | 'urgent'>('normal');
   const [lastSessionCode, setLastSessionCode] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -100,6 +118,15 @@ export function CompanyPage() {
   useEffect(() => {
     if (token) refresh();
   }, [token, refresh]);
+
+  async function createJoinCode() {
+    setJoinError(null);
+    try {
+      setJoinCode(await companyApi.post<{ code: string; expiresAt: string }>('/api/company/join-codes', {}));
+    } catch {
+      setJoinError('Impossible de générer le code. Réessayez.');
+    }
+  }
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -235,10 +262,28 @@ export function CompanyPage() {
 
       <section>
         <h2 className="font-semibold mb-3">Parc informatique</h2>
-        <p className="text-xs text-slate-500 mb-3">
-          TA[MANQUANT] : l'agent permanent qui alimente cet inventaire automatiquement n'est pas encore construit
-          (nécessite un pipeline de build Windows dédié). En attendant, un poste peut être ajouté manuellement.
-        </p>
+        <FleetSummary devices={devices} />
+        {role === 'admin' ? (
+          <div className="rounded-lg border bg-white p-4 mb-3 text-sm">
+            <p className="mb-2">
+              Pour ajouter un PC : installez le programme Tech Assist sur ce PC, puis dites-lui « rattacher ce PC à mon entreprise » et entrez le code
+              ci-dessous. Le code est à usage unique et valable 48 heures. Seul l'état de santé du PC (disque, antivirus, mises à jour) est transmis :
+              aucun fichier, aucun document.
+            </p>
+            <button type="button" onClick={createJoinCode} className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium hover:bg-brand-700">
+              Générer un code de rattachement
+            </button>
+            {joinCode && (
+              <p className="mt-3">
+                Code : <span className="font-mono text-lg font-bold tracking-wider">{joinCode.code}</span>
+                <span className="text-slate-500"> — valable jusqu'au {new Date(joinCode.expiresAt).toLocaleString('fr-FR')}. Notez-le : il ne sera plus affiché.</span>
+              </p>
+            )}
+            {joinError && <p className="mt-2 text-brand-700">{joinError}</p>}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500 mb-3">Seul l'administrateur de l'entreprise peut rattacher un nouveau PC.</p>
+        )}
         <table className="w-full text-sm border rounded-lg overflow-hidden">
           <thead className="bg-slate-100">
             <tr>
@@ -246,6 +291,7 @@ export function CompanyPage() {
               <th className="text-left p-2">Disque libre</th>
               <th className="text-left p-2">Antivirus</th>
               <th className="text-left p-2">À jour</th>
+              <th className="text-left p-2">État</th>
             </tr>
           </thead>
           <tbody>
@@ -255,6 +301,7 @@ export function CompanyPage() {
                 <td className="p-2">{d.disk_free_percent != null ? `${d.disk_free_percent}%` : '—'}</td>
                 <td className="p-2">{d.antivirus_ok == null ? '—' : d.antivirus_ok ? 'Oui' : 'Non'}</td>
                 <td className="p-2">{d.os_up_to_date == null ? '—' : d.os_up_to_date ? 'Oui' : 'Non'}</td>
+                <td className="p-2">{deviceState(d) === 'ok' ? '🟢 OK' : '🟠 À surveiller'}</td>
               </tr>
             ))}
           </tbody>

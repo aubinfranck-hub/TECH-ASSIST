@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { consumeJoinCode } from '../utils/joinCodes.js';
 import { pool } from '../db/pool.js';
 import { requireAppInstall, signAppToken } from '../middleware/appAuth.js';
 import { validateBody } from '../middleware/validate.js';
@@ -151,6 +152,74 @@ appRouter.get('/app/me', requireAppInstall, async (req, res) => {
     platform: install.platform,
     entitlements: await entitlementsFor(install),
   });
+});
+
+const joinSchema = z.object({
+  code: z.string().min(8).max(20),
+  deviceName: z.string().trim().min(1).max(120),
+});
+
+/**
+ * Rattache ce PC à l'espace entreprise qui a généré le code (usage unique, 48 h). Un poste ne peut appartenir
+ * qu'à une entreprise ; le rattachement est journalisé.
+ */
+appRouter.post('/app/company/join', limiter, requireAppInstall, validateBody(joinSchema), async (req, res) => {
+  const install = req.appInstall!;
+  const body = req.body as z.infer<typeof joinSchema>;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const already = await client.query('SELECT 1 FROM company_devices WHERE app_install_id = $1', [install.id]);
+    if (already.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Ce PC est déjà rattaché à une entreprise.' });
+    }
+    const joined = await consumeJoinCode(client, body.code);
+    if (!joined) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Code invalide, expiré ou déjà utilisé. Demandez un nouveau code à votre administrateur.' });
+    }
+    const inserted = await client.query(
+      `INSERT INTO company_devices (company_id, device_name, platform, app_install_id, last_seen_at)
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT (company_id, device_name) DO NOTHING
+       RETURNING id`,
+      [joined.companyId, body.deviceName, install.platform, install.id],
+    );
+    if (inserted.rows.length === 0) {
+      await client.query('ROLLBACK'); // le code n'est pas consommé : l'annulation le restitue
+      return res.status(409).json({ error: 'Un poste portant ce nom existe déjà dans votre entreprise.' });
+    }
+    const company = await client.query('SELECT name FROM companies WHERE id = $1', [joined.companyId]);
+    await client.query('COMMIT');
+    await logAudit(pool, { actorType: 'client', actorId: install.email, action: 'company.device_joined', details: { companyId: joined.companyId } });
+    return res.status(201).json({ companyName: company.rows[0]?.name ?? '' });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
+const heartbeatSchema = z.object({
+  diskFreePercent: z.number().int().min(0).max(100).optional(),
+  memoryUsedPercent: z.number().int().min(0).max(100).optional(),
+  antivirusOk: z.boolean().optional(),
+  osUpToDate: z.boolean().optional(),
+});
+
+/** Santé du poste, envoyée par le programme : alimente la vue de parc de l'entreprise. 404 si le PC n'est rattaché à aucune entreprise. */
+appRouter.post('/app/company/heartbeat', limiter, requireAppInstall, validateBody(heartbeatSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof heartbeatSchema>;
+  const { rowCount } = await pool.query(
+    `UPDATE company_devices SET disk_free_percent = $2, memory_used_percent = $3, antivirus_ok = $4, os_up_to_date = $5, last_seen_at = now()
+     WHERE app_install_id = $1`,
+    [req.appInstall!.id, body.diskFreePercent ?? null, body.memoryUsedPercent ?? null, body.antivirusOk ?? null, body.osUpToDate ?? null],
+  );
+  if (!rowCount) return res.status(404).json({ error: "Ce PC n'est rattaché à aucune entreprise." });
+  res.status(202).json({ received: true });
 });
 
 const startSchema = z.object({
