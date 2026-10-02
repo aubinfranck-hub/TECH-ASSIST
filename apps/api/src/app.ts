@@ -23,6 +23,10 @@ export function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  // Derrière le proxy de l'hébergeur (Render), sinon req.ip serait toujours celui du proxy et les limiteurs
+  // seraient partagés par TOUS les clients. Nombre de proxys de confiance : TRUST_PROXY (1 par défaut).
+  const trustProxy = Number(process.env.TRUST_PROXY ?? 1);
+  app.set('trust proxy', Number.isInteger(trustProxy) && trustProxy >= 0 ? trustProxy : 1);
   app.use(helmet());
   // CORS_ORIGIN='*' doit rester une vraie autorisation universelle : passer
   // ['*'] (résultat de .split(',')) à la bibliothèque cors ne fait PAS ça —

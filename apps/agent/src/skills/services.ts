@@ -19,7 +19,7 @@ const SERVICE_NAME = /^[A-Za-z0-9_.-]{1,40}$/;
  * été exprès (durcissement de sécurité), les rouvrir exposerait la machine. Un technicien décide.
  */
 const NEVER_ENABLE = new Set(
-  ['remoteregistry', 'tlntsvr', 'snmp', 'remoteaccess', 'ssdpsrv', 'upnphost', 'winrm', 'termservice', 'sshd', 'ftpsvc', 'w3svc'],
+  ['remoteregistry', 'tlntsvr', 'snmp', 'remoteaccess', 'ssdpsrv', 'upnphost', 'winrm', 'termservice', 'sshd', 'ftpsvc', 'w3svc', 'sessionenv', 'umrdpservice', 'lanmanserver', 'webclient', 'rpclocator', 'msftpsvc', 'simptcp', 'fax'],
 );
 
 const TRANSIENT_STATES = new Set(['start pending', 'stop pending', 'continue pending', 'pause pending']);
@@ -268,7 +268,7 @@ function clearPrintQueueAction(files: number): Action {
         guarded(
           String.raw`Stop-Service -Name 'Spooler' -Force
 $dir = Join-Path $env:windir 'System32\spool\PRINTERS'
-Get-ChildItem -Path $dir -File -ErrorAction SilentlyContinue | Remove-Item -Force
+Get-ChildItem -Path $dir -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 ` +
             `${startBlock('Spooler')}\nWrite-Output 'OK'`,
         ),

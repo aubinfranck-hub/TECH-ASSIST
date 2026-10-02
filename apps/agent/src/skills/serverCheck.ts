@@ -1,5 +1,5 @@
 import type { Diagnosis, Skill } from '../types.js';
-import { asArray, extractJson, guarded, psQuote, readScript } from './common.js';
+import { asArray, extractJson, guarded, isLocalHost, psQuote, readScript } from './common.js';
 
 /**
  * « Je n'arrive pas à accéder au serveur » : test en lecture seule, de ce PC vers le serveur :
@@ -22,7 +22,7 @@ export interface ServerFacts {
 }
 
 export function serverCollectScript(host: string): string {
-  if (!SERVER_HOST.test(host)) throw new Error('Nom ou adresse de serveur non valide');
+  if (!SERVER_HOST.test(host) || !isLocalHost(host)) throw new Error('Nom ou adresse de serveur non valide (une adresse publique sur Internet est refusée)');
   return guarded(String.raw`
 $ErrorActionPreference = 'SilentlyContinue'
 $target = ${psQuote(host)}

@@ -67,7 +67,7 @@ const restartDeviceAction = (p: PnpProblem): Action =>
     run: (runner) =>
       runScript(
         runner,
-        guarded(`$id = '${assertDeviceId(p.id)}'\nDisable-PnpDevice -InstanceId $id -Confirm:$false\nStart-Sleep -Seconds 3\nEnable-PnpDevice -InstanceId $id -Confirm:$false\nStart-Sleep -Seconds 3\nWrite-Output 'OK'`),
+        guarded(`$id = '${assertDeviceId(p.id)}'\ntry {\n  Disable-PnpDevice -InstanceId $id -Confirm:$false\n  Start-Sleep -Seconds 3\n} finally {\n  Enable-PnpDevice -InstanceId $id -Confirm:$false\n}\nStart-Sleep -Seconds 3\nWrite-Output 'OK'`),
       ),
   });
 

@@ -51,9 +51,7 @@ $wordPath = [string](Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Cu
 if (-not $install -and ($outlookPath -or $wordPath)) { $install = [pscustomobject]@{ kind = 'msi'; version = ''; platform = ''; culture = '' } }
 $procs = @(Get-Process -Name OUTLOOK,WINWORD,EXCEL,POWERPNT,ONENOTE,MSACCESS | ForEach-Object { [pscustomobject]@{ name = [string]$_.ProcessName; responding = [bool]$_.Responding } })
 $crashes = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = 1000; StartTime = (Get-Date).AddDays(-7) } | Where-Object { $_.Message -match '(OUTLOOK|WINWORD|EXCEL|POWERPNT)\.EXE' } | ForEach-Object {
-  $a = [regex]::Match($_.Message, 'Faulting application name: ([^,\s]+)')
-  $m = [regex]::Match($_.Message, 'Faulting module name: ([^,\r\n]+)')
-  [pscustomobject]@{ app = [string]$a.Groups[1].Value; module = [string]$m.Groups[1].Value; minutesAgo = [int]((Get-Date) - $_.TimeCreated).TotalMinutes }
+  [pscustomobject]@{ app = [string]$_.Properties[0].Value; module = [string]$_.Properties[3].Value; minutesAgo = [int]((Get-Date) - $_.TimeCreated).TotalMinutes }
 })
 $addins = @(Get-ChildItem -Path 'HKCU:\Software\Microsoft\Office\Outlook\Addins','HKLM:\SOFTWARE\Microsoft\Office\Outlook\Addins','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Office\Outlook\Addins' | ForEach-Object {
   $p = Get-ItemProperty -LiteralPath $_.PSPath
@@ -198,7 +196,10 @@ export function diagnoseOffice(facts: OfficeFacts, options: OfficeDiagnoseOption
   const maxAge = options.ignoreCrashesOlderThanMinutes ?? Infinity;
   const recent = facts.crashes.filter((c) => c.minutesAgo <= maxAge);
   const byApp = new Map<string, number>();
-  for (const c of recent) byApp.set(c.app, (byApp.get(c.app) ?? 0) + 1);
+  for (const c of recent) {
+    const key = c.app.replace(/\.exe$/i, '').toUpperCase();
+    byApp.set(key, (byApp.get(key) ?? 0) + 1);
+  }
   const crashing = [...byApp.entries()].filter(([, n]) => n >= CRASH_THRESHOLD);
   for (const [app, n] of crashing) {
     problems.push(`office_crashing:${app}`);

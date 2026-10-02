@@ -330,7 +330,7 @@ appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateB
     sessionId: req.params.id,
     orderId: owned.rows[0].order_id,
     action: `agent.${body.type}`,
-    details: { skill: body.skill, action: body.action, message: body.message, ...(body.details ?? {}) },
+    details: { ...(body.details ?? {}), skill: body.skill, action: body.action, message: body.message },
   });
 
   // Quand l'agent passe la main, la session rejoint la file des techniciens.

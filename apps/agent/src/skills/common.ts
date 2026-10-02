@@ -88,3 +88,18 @@ export function formatBytes(bytes: number): string {
   if (mb >= 1) return `${Math.round(mb)} Mo`;
   return `${Math.round(bytes / 1024)} Ko`;
 }
+
+
+/**
+ * Hôte acceptable pour un serveur d'entreprise : un nom (court ou complet) ou une adresse IPv4 PRIVÉE.
+ * Refuse les adresses publiques (un partage monté vers Internet enverrait l'authentification Windows de la session)
+ * et les noms contenant « .. ».
+ */
+export function isLocalHost(host: string): boolean {
+  if (host.includes('..')) return false;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) return !/^[\d.]+$/.test(host); // « 1.2.3 » ou autre suite de chiffres/points : pas un nom
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  if ([a, b, Number(m[3]), Number(m[4])].some((n) => n > 255)) return false;
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a === 127 || (a === 169 && b === 254);
+}

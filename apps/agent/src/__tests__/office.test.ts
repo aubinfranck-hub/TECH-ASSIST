@@ -68,6 +68,11 @@ describe('diagnoseOffice', () => {
     expect(diagnoseOffice(f, { roots: ROOTS, ignoreCrashesOlderThanMinutes: 500 }).healthy).toBe(false);
   });
 
+  it('Outlook planté avec le nom réel du processus (OUTLOOK.EXE) : le mode sans échec est bien proposé', () => {
+    const d = diagnoseOffice(facts({ crashes: crashes('OUTLOOK.EXE', 1) }), { roots: ROOTS });
+    expect(d.actions.map((a) => a.id)).toEqual(['outlook_safe_mode']);
+  });
+
   it('Outlook déjà planté : propose le mode sans échec (chemin contrôlé) et signale les compléments tiers', () => {
     const d = diagnoseOffice(
       facts({

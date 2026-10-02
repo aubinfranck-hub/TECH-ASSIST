@@ -1,5 +1,5 @@
 import type { Action, Diagnosis, Skill } from '../types.js';
-import { extractJson, guarded, psQuote, readScript, runScript, tracked } from './common.js';
+import { extractJson, guarded, isLocalHost, psQuote, readScript, runScript, tracked } from './common.js';
 
 /**
  * Lecteur réseau (ex. Z: → \\serveur\partage). L'agent ne demande ni ne saisit JAMAIS de mot de passe :
@@ -37,7 +37,9 @@ $client.Close()
 
 function assertInputs(letter: string, unc: string) {
   if (!DRIVE_LETTER.test(letter)) throw new Error('Lettre de lecteur non valide (D à Z)');
-  if (!UNC_PATH.test(unc)) throw new Error('Chemin réseau non valide (forme \\\\serveur\\partage)');
+  if (!UNC_PATH.test(unc) || !isLocalHost(unc.slice(2).split('\\')[0]!) || unc.split('\\').some((part) => part === '..')) {
+    throw new Error('Chemin réseau non valide (forme \\\\serveur\\partage, serveur de votre réseau)');
+  }
 }
 
 export function parseMapDriveFacts(stdout: string, letter: string, unc: string): MapDriveFacts {

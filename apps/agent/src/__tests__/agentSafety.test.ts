@@ -220,3 +220,20 @@ describe('rapport d’intervention', () => {
     expect(text).toContain('Aucun diagnostic');
   });
 });
+
+describe('relecture indépendante : durcissements', () => {
+  it('isLocalHost : noms et adresses privées seulement', async () => {
+    const { isLocalHost } = await import('../skills/common.js');
+    for (const ok of ['SRV-COMPTA', 'srv.entreprise.ci', '192.168.1.10', '10.0.0.5', '172.16.4.2', '127.0.0.1']) expect(isLocalHost(ok), ok).toBe(true);
+    for (const no of ['8.8.8.8', '172.32.0.1', '1.2.3', '300.1.1.1', 'a..b', '41.66.12.9']) expect(isLocalHost(no), no).toBe(false);
+  });
+
+  it('refuse un partage ou un serveur sur une adresse publique', async () => {
+    const { serverCollectScript } = await import('../skills/serverCheck.js');
+    const { mapDriveSkill } = await import('../skills/mapDrive.js');
+    expect(() => serverCollectScript('8.8.8.8')).toThrow();
+    expect(() => serverCollectScript('SRV-COMPTA')).not.toThrow();
+    expect(() => mapDriveSkill('Z', '\\\\8.8.8.8\\partage')).toThrow();
+    expect(() => mapDriveSkill('Z', '\\\\SRV\\partage\\..\\autre')).toThrow();
+  });
+});
