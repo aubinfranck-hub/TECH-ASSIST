@@ -49,10 +49,10 @@ export async function runSkill(skill: Skill, ctx: AgentContext): Promise<Outcome
   }
 
   if (diagnosis.healthy) {
-    // Rien d'anormal côté système : seul le client peut dire si le son sort vraiment.
-    const heard = await ctx.ui.confirmFixed('Tout semble correct côté Windows. Entendez-vous du son ?');
-    if (heard) return { status: 'fixed', actionsDone: done };
-    return escalate(ctx, report, done, "Le système semble correct mais le client n'entend toujours rien");
+    // Rien d'anormal côté système : seul le client peut dire si le problème est réellement réglé.
+    const ok = await ctx.ui.confirmFixed(`Tout semble correct côté Windows. ${skill.verifyQuestion}`);
+    if (ok) return { status: 'fixed', actionsDone: done };
+    return escalate(ctx, report, done, 'Le système semble correct mais le problème persiste pour le client');
   }
 
   const attempted = new Set<string>();
@@ -95,7 +95,7 @@ export async function runSkill(skill: Skill, ctx: AgentContext): Promise<Outcome
     }
     if (done.length === doneBefore) break; // rien n'a été appliqué (refus) : inutile de relire l'état
 
-    // Vérification : on relit l'état (l'agent n'entend pas le son, c'est ensuite au client de le dire).
+    // Vérification : on relit l'état, puis c'est au client de confirmer que ça fonctionne.
     try {
       after = await skill.diagnose(ctx.runner);
     } catch (err) {
@@ -104,9 +104,9 @@ export async function runSkill(skill: Skill, ctx: AgentContext): Promise<Outcome
     await report({ type: 'verified', message: after.summary, details: { healthy: after.healthy, problems: after.problems } });
 
     if (after.healthy) {
-      const heard = await ctx.ui.confirmFixed('Entendez-vous du son maintenant ?');
-      if (heard) return { status: 'fixed', actionsDone: done };
-      return escalate(ctx, report, done, "Corrections appliquées mais le client n'entend toujours rien");
+      const ok = await ctx.ui.confirmFixed(skill.verifyQuestion);
+      if (ok) return { status: 'fixed', actionsDone: done };
+      return escalate(ctx, report, done, 'Corrections appliquées mais le problème persiste pour le client');
     }
     if (after.needsHuman) return escalate(ctx, report, done, after.summary);
     // Un problème auparavant masqué peut apparaître une fois le premier réglé : on repropose.
@@ -116,8 +116,8 @@ export async function runSkill(skill: Skill, ctx: AgentContext): Promise<Outcome
   if (done.length === 0) {
     if (declinedAny) return { status: 'declined', actionsDone: done };
     // Aucune action possible (ex. casque débranché) : les conseils ont été donnés.
-    const heard = await ctx.ui.confirmFixed('Entendez-vous du son maintenant ?');
-    if (heard) return { status: 'fixed', actionsDone: done };
+    const ok = await ctx.ui.confirmFixed(skill.verifyQuestion);
+    if (ok) return { status: 'fixed', actionsDone: done };
     return escalate(ctx, report, done, 'Aucune correction automatique possible');
   }
 

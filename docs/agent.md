@@ -31,7 +31,33 @@ le dépannage.
 - Tout identifiant lu sur la machine est validé (GUID) avant d'entrer dans un
   script ; les noms affichés n'y entrent jamais.
 
-## Compétence « son » (`skills/sound.ts`)
+## Compétences : tout service Windows
+
+| Compétence (`--skill`) | Couvre |
+|---|---|
+| `sound` | Son : services audio, sortie désactivée (COM), sourdine, volume — voir ci-dessous |
+| `print` | Spouleur d'impression, file d'impression bloquée (> 10 min) |
+| `network` | DHCP, DNS, détection réseau, partages, Wi-Fi (si présent) |
+| `update` | Windows Update, BITS, chiffrement, orchestrateur |
+| `bluetooth`, `search`, `time` | Bluetooth, recherche Windows, synchronisation de l'heure |
+| `windows` | **Analyse complète** : tous les services ci-dessus + services essentiels (journal, WMI, planificateur, Plug-and-Play, thèmes) |
+| `service:<Nom>` ou `--service <Nom>` | **N'importe quel service**, par son nom (celui de `services.msc`), avec ses dépendances |
+
+Sans `--skill`, le client choisit son problème dans un menu.
+
+Règles communes aux services (`skills/services.ts`) :
+- **Trois actions seulement**, toujours proposées avant d'agir : démarrer un service
+  arrêté, réactiver un service désactivé, vider une file d'impression bloquée.
+  L'agent **n'arrête ni ne désactive jamais** un service.
+- Dépendances : ce dont un service dépend est démarré/réactivé **avant** lui.
+- Un service « à la demande » (Windows Update, BITS…) arrêté est normal : seul son état
+  *désactivé* est signalé. Un composant facultatif absent (Wi-Fi sur un PC de bureau) est ignoré ;
+  un service indispensable introuvable passe la main.
+- Jamais de réactivation automatique des services sensibles désactivés
+  (RemoteRegistry, WinRM, Telnet, SNMP, RDP…) : probablement désactivés exprès, un technicien décide.
+- Les noms de service sont validés (`[A-Za-z0-9_.-]{1,40}`) avant d'entrer dans un script.
+
+### Détail de la compétence « son » (`skills/sound.ts`)
 
 | Code problème | Action proposée | Admin |
 |---|---|---|
@@ -40,21 +66,25 @@ le dépannage.
 | `muted` | lever la sourdine (Core Audio) | non |
 | `volume_low` (< 5 %) | remettre le volume à 50 % | non |
 | `render_unplugged` | conseil (brancher), pas d'action | — |
-| `audio_service_missing`, `no_render_device` | passe la main | — |
+| `audio_service_missing`, `no_render_device`, `render_state_unknown` | passe la main | — |
 
 ## Lancer (Windows)
 
 ```bash
 npm run build --workspace apps/agent
-node apps/agent/dist/cli.js --skill sound \
+node apps/agent/dist/cli.js                       # menu : le client choisit son problème
+node apps/agent/dist/cli.js --skill print         # un domaine
+node apps/agent/dist/cli.js --service Spooler     # un service précis
+# avec journal côté serveur :
+node apps/agent/dist/cli.js --skill windows \
   --api https://<api> --token <jeton app> --session <id session>
 ```
 Sans `--api/--token/--session`, l'agent fonctionne en local sans journal serveur.
-Pour les actions « admin », lancer dans un terminal administrateur.
+Pour les actions « admin » (toutes celles des services), lancer dans un terminal administrateur.
 
 ## Ce qui n'est PAS validé
 
-- **Aucun test sur un vrai Windows.** Les 57 tests utilisent un faux Windows ;
+- **Aucun test sur un vrai Windows.** Les 92 tests utilisent un faux Windows ;
   les scripts PowerShell/COM sont contrôlés en structure seulement. Le codage de
   `DeviceState` dans le registre (actif `0x1`, désactivé `0x10000001`, débranché
   `0x08000001`, absent `0x04000001`) vient d'une source publique recoupée, pas
@@ -65,4 +95,4 @@ Pour les actions « admin », lancer dans un terminal administrateur.
   choisir parmi les actions de la liste blanche, jamais écrire de commandes.
 - **Pas d'installateur** (EXE signé, APK) ni de génération de l'empreinte
   matérielle côté client ; les liens de téléchargement du site restent vides.
-- Android et les autres compétences (réseau, lenteur, imprimante…) : à faire.
+- Android, et les compétences hors services (lenteur, disque plein, pilotes, logiciels précis) : à faire.

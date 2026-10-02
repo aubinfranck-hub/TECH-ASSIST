@@ -77,8 +77,9 @@ utilisé son assistance offerte (`app_installs.free_offer_used_at`).
   techniciens, et inversement.
 
 **Agent IA.** Un agent local (`apps/agent`, voir `docs/agent.md`) tourne sur
-l'appareil du client : il observe, propose chaque correction, attend le « oui »
-du client, agit, vérifie, et journalise chaque étape côté serveur
+l'appareil du client et couvre **tous les services Windows** (son, impression, réseau,
+mises à jour, Bluetooth, recherche, heure, ou un service désigné par son nom) : il
+observe, propose chaque correction, attend le « oui » du client, agit, vérifie, et journalise chaque étape côté serveur
 (`POST /api/app/sessions/:id/events`). Tant que `AI_AGENT_ENABLED` n'est pas à
 `true`, une demande « IA » est servie par un technicien (la session garde
 `requested_mode = 'ia'`). Les sessions `mode = 'ia'` n'entrent pas dans la file

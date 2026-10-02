@@ -26,7 +26,7 @@ const MODES = [
   {
     title: 'Agent IA',
     badge: 'Mode principal',
-    text: "L'agent regarde l'état de votre appareil, vous explique le problème, propose chaque correction et attend votre « oui ». Il vérifie ensuite que c'est réglé.",
+    text: "L'agent regarde l'état de votre appareil (son, impression, Internet, mises à jour, Bluetooth, heure, ou tout autre service Windows), vous explique le problème, propose chaque correction et attend votre « oui ». Il vérifie ensuite que c'est réglé.",
   },
   {
     title: 'Technicien humain',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COLLECT_SCRIPT, diagnoseSound, normalizeDeviceState, parseFacts, type SoundFacts } from '../skills/sound.js';
+import { checkStructure } from './structure.js';
 import { FakeMachine, HEADSET_GUID, REG_DISABLED, REG_NOT_PRESENT, REG_UNPLUGGED, SPEAKER_GUID, healthyState } from './fakeMachine.js';
 
 function facts(overrides: Partial<SoundFacts> = {}): SoundFacts {
@@ -214,21 +215,6 @@ describe('diagnoseSound', () => {
     ).toThrow(/invalide/);
   });
 });
-
-/** Retire le contenu des here-strings @'…'@ : ce qui reste est du PowerShell « nu ». */
-function stripHereStrings(script: string) {
-  return script.replace(/@'\r?\n[\s\S]*?\r?\n'@/g, '@HERE@');
-}
-
-function checkStructure(script: string) {
-  const opens = (script.match(/@'$/gm) ?? []).length;
-  const closes = (script.match(/^'@$/gm) ?? []).length;
-  expect(closes).toBe(opens); // un here-string PowerShell se ferme obligatoirement en début de ligne
-  const bare = stripHereStrings(script);
-  expect((bare.match(/\{/g) ?? []).length).toBe((bare.match(/\}/g) ?? []).length);
-  expect((bare.match(/\(/g) ?? []).length).toBe((bare.match(/\)/g) ?? []).length);
-  expect(script.trimEnd().endsWith('}')).toBe(true); // se termine par le « catch » de l'enveloppe
-}
 
 describe('scripts PowerShell (contrôle de structure : pas de PowerShell dans cet environnement)', () => {
   it('le script de collecte est bien formé et en lecture seule', () => {

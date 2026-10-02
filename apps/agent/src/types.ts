@@ -51,6 +51,8 @@ export interface Diagnosis {
 export interface Skill {
   id: string;
   title: string;
+  /** Question posée au client pour confirmer que c'est réglé (l'agent ne peut pas le constater seul). */
+  verifyQuestion: string;
   /** Lecture seule : observe l'état de l'appareil, ne modifie rien. */
   diagnose(runner: CommandRunner): Promise<Diagnosis>;
 }

@@ -337,6 +337,7 @@ export function diagnoseSound(facts: SoundFacts): Diagnosis {
 export const soundSkill: Skill = {
   id: 'sound',
   title: 'Son : pas de son sur l\'ordinateur',
+  verifyQuestion: 'Entendez-vous du son maintenant ?',
   async diagnose(runner) {
     const res = await runner.runPowerShell(COLLECT_SCRIPT, { timeoutMs: 45_000 });
     if (res.exitCode !== 0) throw new Error(res.stderr.trim() || 'Le diagnostic du son a échoué');
