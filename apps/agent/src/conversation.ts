@@ -6,6 +6,7 @@ import { SKILL_MENU, resolveSkill } from './skills/index.js';
 import { INSTALL_CATALOG, installSkill } from './skills/install.js';
 import { DRIVE_LETTER, UNC_PATH, mapDriveSkill } from './skills/mapDrive.js';
 import { SERVER_HOST, serverCheckSkill } from './skills/serverCheck.js';
+import { serverHealthSkill } from './skills/serverHealth.js';
 import { runTraining } from './training.js';
 import { findPrograms, listInstalledPrograms, planUninstall, uninstallProgramSkill, type InstalledProgram } from './skills/uninstall.js';
 import type { AgentEvent, CommandRunner, ConversationUi, Reporter, Skill } from './types.js';
@@ -247,7 +248,13 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
       host,
     );
     if (!target) return;
-    outcomes.push(await runAndNote(serverCheckSkill(target)));
+    const reach = await runAndNote(serverCheckSkill(target));
+    outcomes.push(reach);
+    // Joignable : proposer, en lecture seule, l'état du serveur (disque, mémoire, services).
+    if (reach.status === 'fixed') {
+      const pick = await ui.choose(`Voulez-vous aussi voir l'état de « ${target} » (disque, mémoire, services) ? Lecture seule, avec votre session Windows.`, ['Oui, voir l’état', 'Non merci']);
+      if (pick === 0) outcomes.push(await runAndNote(serverHealthSkill(target)));
+    }
   }
 
   async function handleMapDrive(letter?: string, unc?: string) {

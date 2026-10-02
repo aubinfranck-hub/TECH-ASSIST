@@ -8,6 +8,7 @@ import { networkMapSkill } from './networkMap.js';
 import { installSkill } from './install.js';
 import { malwareSkill } from './malware.js';
 import { serverCheckSkill } from './serverCheck.js';
+import { serverHealthSkill } from './serverHealth.js';
 import { networkSkill } from './network.js';
 import { officeSkill } from './office.js';
 import { performanceSkill } from './performance.js';
@@ -56,6 +57,13 @@ export function resolveSkill(id: string): Skill | undefined {
   if (id.startsWith('server:')) {
     try {
       return serverCheckSkill(id.slice('server:'.length));
+    } catch {
+      return undefined;
+    }
+  }
+  if (id.startsWith('server-health:')) {
+    try {
+      return serverHealthSkill(id.slice('server-health:'.length));
     } catch {
       return undefined;
     }

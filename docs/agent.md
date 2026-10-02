@@ -135,3 +135,7 @@ API : `GEMINI_API_KEY` (et `GEMINI_MODEL`, défaut `gemini-2.0-flash`) pour l'as
 ## Diagnostic à distance d'un PC du parc
 
 L'administrateur de l'entreprise clique « Demander » sur un poste (espace entreprise). Au prochain lancement du programme sur ce PC, l'utilisateur voit **qui** demande et **ce qui sera envoyé**, et accepte ou refuse. S'il accepte, l'agent fait l'analyse complète en **lecture seule** (`scanPc`) et n'envoie qu'un résumé (une ligne par domaine, gravité 🔴🟠🟡🟢). Aucune modification, aucun fichier. Une demande par poste à la fois, valable 7 jours ; refus et résultats sont journalisés. Limite : le programme n'est pas un service, la demande n'est traitée que quand l'utilisateur ouvre Tech Assist.
+
+## Santé d'un serveur Windows (`server-health:<hôte>`)
+
+Premier connecteur d'infrastructure, en **lecture seule** : après la vérification d'accès (« Je n'arrive pas à accéder au serveur »), si le serveur répond, l'agent propose d'en lire l'état (disques, mémoire, services automatiques arrêtés, erreurs système sur 24 h, durée sans redémarrage). La lecture se fait depuis le PC avec **la session Windows de l'utilisateur** (CIM) : aucun identifiant demandé, stocké ou envoyé ; si la session n'a pas les droits, l'agent le dit. Réseau local uniquement (adresses publiques refusées). L'agent ne modifie jamais un serveur : tout problème trouvé passe à un technicien. Non fait : routeurs/commutateurs/pare-feu (identifiants d'équipement chiffrés + passerelle, voir D10), actions sur serveur.
