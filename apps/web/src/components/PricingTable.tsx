@@ -24,6 +24,12 @@ export function PricingTable() {
   const particuliers = plans.filter((p) => p.segment === 'particulier');
 
   return (
+    <>
+    <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-5 text-center">
+      <p className="font-bold text-green-900">Première assistance offerte</p>
+      <p className="mt-1 text-sm text-green-800">Agent IA ou technicien, sans paiement, pour essayer.</p>
+      <Link to="/assistance" className="ta-button-primary mt-4">Installer l’application</Link>
+    </div>
     <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
       {particuliers.map((plan) => (
         <article key={plan.id} className="ta-card flex flex-col p-6 transition hover:-translate-y-1 hover:shadow-soft">
@@ -32,7 +38,9 @@ export function PricingTable() {
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-600">Particulier</p>
               <h3 className="mt-2 text-xl font-black text-slate-950">{plan.name}</h3>
             </div>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">Disponible</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+              {plan.metadata?.subscription ? 'Par mois' : 'Disponible'}
+            </span>
           </div>
 
           <div className="mt-6">
@@ -40,6 +48,7 @@ export function PricingTable() {
               {plan.price_fcfa.toLocaleString('fr-FR')}
             </span>
             <span className="ml-1 text-sm font-semibold text-slate-500">FCFA</span>
+            {plan.metadata?.subscription && <p className="mt-1 text-sm text-slate-500">par mois · agent IA ou technicien</p>}
             {plan.duration_minutes && (
               <p className="mt-1 text-sm text-slate-500">jusqu'à {plan.duration_minutes} min</p>
             )}
@@ -47,11 +56,12 @@ export function PricingTable() {
 
           <p className="mt-5 flex-1 text-sm leading-6 text-slate-500">{plan.description}</p>
 
-          <Link to="/diagnostic" className="ta-button-primary mt-6 w-full">
-            Choisir cette formule
+          <Link to={plan.metadata?.subscription ? '/assistance' : '/diagnostic'} className="ta-button-primary mt-6 w-full">
+            {plan.metadata?.subscription ? "M'abonner" : 'Choisir cette formule'}
           </Link>
         </article>
       ))}
     </div>
+    </>
   );
 }

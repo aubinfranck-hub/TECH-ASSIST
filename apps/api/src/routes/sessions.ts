@@ -4,7 +4,7 @@ import { pool } from '../db/pool.js';
 import { generateSessionCode, SESSION_CODE_TTL_MINUTES } from '../utils/sessionCode.js';
 import { validateBody } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
-import { logAudit } from '../utils/audit.js';
+import { logAudit, type Db } from '../utils/audit.js';
 
 export const sessionsRouter = Router();
 
@@ -12,8 +12,10 @@ const createSessionSchema = z.object({
   platform: z.enum(['web', 'windows', 'android']),
 });
 
+export type SessionMode = 'ia' | 'humain';
+
 export type CreateSessionResult =
-  | { ok: true; session: { id: string; session_code: string; status: string; code_expires_at: Date; duration_minutes: number } }
+  | { ok: true; session: { id: string; session_code: string; status: string; code_expires_at: Date; duration_minutes: number; mode: SessionMode } }
   | { ok: false; status: number; error: string };
 
 /**
@@ -23,8 +25,17 @@ export type CreateSessionResult =
  * toutes deux par une commande — à 0 FCFA et déjà payée pour les PME couvertes
  * par un abonnement.
  */
-export async function createSessionForOrder(orderId: string, platform: 'web' | 'windows' | 'android'): Promise<CreateSessionResult> {
-  const orderResult = await pool.query(
+export async function createSessionForOrder(
+  orderId: string,
+  platform: 'web' | 'windows' | 'android',
+  requestedMode: SessionMode = 'humain',
+  /** Client de transaction : la session est alors créée ou annulée avec le reste (ex. offerte + commande). */
+  db: Db = pool,
+): Promise<CreateSessionResult> {
+  // L'agent IA n'est appliqué que s'il est réellement activé (AI_AGENT_ENABLED) ;
+  // sinon la demande est servie par un technicien (file d'attente classique).
+  const mode: SessionMode = requestedMode === 'ia' && process.env.AI_AGENT_ENABLED === 'true' ? 'ia' : 'humain';
+  const orderResult = await db.query(
     `SELECT o.id, o.status, p.duration_minutes
      FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
      WHERE o.id = $1`,
@@ -42,20 +53,20 @@ export async function createSessionForOrder(orderId: string, platform: 'web' | '
   let code = generateSessionCode();
   // Garantit l'unicité même en cas de collision improbable.
   for (let attempts = 0; attempts < 5; attempts++) {
-    const clash = await pool.query('SELECT 1 FROM sessions WHERE session_code = $1', [code]);
+    const clash = await db.query('SELECT 1 FROM sessions WHERE session_code = $1', [code]);
     if (clash.rows.length === 0) break;
     code = generateSessionCode();
   }
 
-  const { rows } = await pool.query(
-    `INSERT INTO sessions (order_id, session_code, platform, code_expires_at, duration_minutes)
-     VALUES ($1, $2, $3, now() + interval '${SESSION_CODE_TTL_MINUTES} minutes', $4)
-     RETURNING id, session_code, status, code_expires_at, duration_minutes`,
-    [orderId, code, platform, order.duration_minutes],
+  const { rows } = await db.query(
+    `INSERT INTO sessions (order_id, session_code, platform, code_expires_at, duration_minutes, mode, requested_mode)
+     VALUES ($1, $2, $3, now() + interval '${SESSION_CODE_TTL_MINUTES} minutes', $4, $5, $6)
+     RETURNING id, session_code, status, code_expires_at, duration_minutes, mode`,
+    [orderId, code, platform, order.duration_minutes, mode, requestedMode],
   );
   const session = rows[0];
 
-  await logAudit(pool, {
+  await logAudit(db, {
     actorType: 'system',
     orderId,
     sessionId: session.id,
@@ -69,6 +80,12 @@ sessionsRouter.post(
   '/orders/:orderId/session',
   validateBody(createSessionSchema),
   async (req, res) => {
+    // Les commandes créées par l'application (offerte, abonné) ont leur session créée par l'application,
+    // une seule fois : cette route publique ne doit pas pouvoir en fabriquer d'autres.
+    const owner = await pool.query('SELECT app_install_id FROM orders WHERE id = $1', [req.params.orderId]);
+    if (owner.rows[0]?.app_install_id) {
+      return res.status(403).json({ error: "Cette assistance se démarre depuis l'application Tech Assist." });
+    }
     const result = await createSessionForOrder(req.params.orderId, req.body.platform);
     if (!result.ok) return res.status(result.status).json({ error: result.error });
     res.status(201).json({ session: result.session });
@@ -79,11 +96,35 @@ sessionsRouter.get('/sessions/:code', async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, session_code, status, code_expires_at, duration_minutes,
             started_at, ends_at, consent_screen_at, consent_control_at, technician_id,
-            remote_peer_id, remote_paired_at
+            remote_peer_id, remote_paired_at, mode, requested_mode
      FROM sessions WHERE session_code = $1`,
     [req.params.code],
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Session introuvable' });
+  res.json({ session: rows[0] });
+});
+
+/**
+ * « Passer à un technicien » : le client peut quitter l'agent IA à tout moment ;
+ * la session rejoint alors la file d'attente des techniciens.
+ */
+sessionsRouter.post('/sessions/:id/escalate', async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE sessions SET mode = 'humain'
+     WHERE id = $1 AND status IN ('created', 'waiting_technician', 'active')
+     RETURNING id, mode, status`,
+    [req.params.id],
+  );
+  if (rows.length === 0) {
+    return res.status(409).json({ error: 'Session terminée ou introuvable' });
+  }
+
+  await logAudit(pool, {
+    actorType: 'client',
+    sessionId: req.params.id,
+    action: 'session.escalated_to_human',
+  });
+
   res.json({ session: rows[0] });
 });
 
@@ -141,13 +182,14 @@ sessionsRouter.post('/sessions/:id/stop', validateBody(stopSchema), async (req, 
 sessionsRouter.get('/technician/queue', requireAuth('technician', 'admin'), async (_req, res) => {
   const { rows } = await pool.query(
     `SELECT s.id, s.session_code, s.platform, s.created_at, s.duration_minutes,
-            o.client_phone, o.client_name,
+            s.requested_mode, o.client_phone, o.client_name,
             c.name AS company_name, chr.priority AS company_priority
      FROM sessions s
      JOIN orders o ON o.id = s.order_id
      LEFT JOIN company_help_requests chr ON chr.session_id = s.id
      LEFT JOIN companies c ON c.id = chr.company_id
      WHERE s.status IN ('created', 'waiting_technician') AND s.technician_id IS NULL
+       AND s.mode = 'humain'
      ORDER BY (chr.priority = 'urgent') DESC, s.created_at ASC`,
   );
   res.json({ queue: rows });

@@ -6,9 +6,11 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 
 import { adminRouter } from './routes/admin.js';
+import { appRouter } from './routes/app.js';
 import { companyRouter } from './routes/company.js';
 import { companyAuthRouter } from './routes/companyAuth.js';
 import { diagnosticsRouter } from './routes/diagnostics.js';
+import { emailVerificationRouter } from './routes/emailVerification.js';
 import { healthRouter } from './routes/health.js';
 import { leadsRouter } from './routes/leads.js';
 import { ordersRouter } from './routes/orders.js';
@@ -34,6 +36,8 @@ export function createApp() {
       credentials: false,
     }),
   );
+  // Seule la route de chat accepte une capture d'écran jointe (réduite par l'agent, 800 000 caractères au plus en base64).
+  app.use('/api/app/sessions/:id/chat', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '200kb' }));
 
   // RS-11 : plafond général par IP, tous endpoints confondus. Les endpoints
@@ -70,6 +74,8 @@ export function createApp() {
   app.use('/api/health', healthRouter);
   app.use('/api/pricing', pricingRouter);
   app.use('/api/orders', ordersRouter);
+  app.use('/api', emailVerificationRouter);
+  app.use('/api', appRouter);
   app.use('/api', diagnosticsRouter);
   app.use('/api', sessionsRouter);
   app.use('/api', remoteRouter);
@@ -84,7 +90,10 @@ export function createApp() {
   });
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  app.use((err: Error & { type?: string }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    // Erreurs du lecteur de corps de requête : ce sont des erreurs du client, pas du serveur.
+    if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Requête trop volumineuse' });
+    if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Requête illisible' });
     console.error(err);
     res.status(500).json({ error: 'Erreur interne du serveur' });
   });

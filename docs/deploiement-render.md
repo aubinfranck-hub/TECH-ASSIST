@@ -60,6 +60,8 @@ Variables d'environnement :
 | `JWT_SECRET`, `SESSION_SECRETS_KEY` | générés pour cette mise en prod, à ne pas réutiliser ailleurs |
 | `CORS_ORIGIN` | `https://tech-assist-web.onrender.com` |
 | `DATABASE_URL` | `ntic-shared-db`, schéma `tech_assist` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | **à renseigner avant d'ouvrir l'application** : envoi des codes de vérification par e-mail (sans eux, la production refuse d'envoyer un code) |
+| `AI_AGENT_ENABLED` | `false` tant que l'agent n'est pas distribué (les demandes « IA » vont alors à un technicien) |
 | `GEMINI_API_KEY` | vide (moteur de diagnostic local utilisé à la place) |
 | `RUSTDESK_ID_SERVER`, `RUSTDESK_RELAY_SERVER`, `RUSTDESK_PUBLIC_KEY` | vides tant que `infra/rustdesk/` n'est pas déployé séparément |
 
@@ -67,6 +69,7 @@ Variables d'environnement :
 
 Static Site, build `npm install && npm run build --workspace apps/web`,
 publication `apps/web/dist`, `VITE_API_BASE_URL=https://tech-assist-api.onrender.com`.
+Optionnel : `VITE_APP_WINDOWS_URL` / `VITE_APP_ANDROID_URL` (liens de téléchargement de l'application, vides tant qu'elle n'est pas publiée).
 
 ## À surveiller
 

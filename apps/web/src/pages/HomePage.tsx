@@ -57,8 +57,8 @@ export function HomePage() {
               sécurisé et pensé pour les particuliers comme pour les PME.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row">
-              <Link to="/diagnostic" className="ta-button-primary">
-                Démarrer mon diagnostic
+              <Link to="/assistance" className="ta-button-primary">
+                Installer l’application — 1re assistance offerte
               </Link>
               <a href="#tarifs" className="ta-button-secondary border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
                 Voir les tarifs

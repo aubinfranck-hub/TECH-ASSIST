@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout.js';
 import { AdminPage } from './pages/AdminPage.js';
+import { AssistancePage } from './pages/AssistancePage.js';
 import { CompanyPage } from './pages/CompanyPage.js';
 import { DiagnosticPage } from './pages/DiagnosticPage.js';
 import { HomePage } from './pages/HomePage.js';
@@ -14,6 +15,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<HomePage />} />
+        <Route path="/assistance" element={<AssistancePage />} />
         <Route path="/diagnostic" element={<DiagnosticPage />} />
         <Route path="/commande/:orderId" element={<OrderPage />} />
         <Route path="/session" element={<SessionPage />} />

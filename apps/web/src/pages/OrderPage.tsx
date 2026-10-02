@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, type Order, type SessionInfo } from '../lib/api.js';
 
 interface Diagnostic {
@@ -82,7 +82,8 @@ export function OrderPage() {
     return <div className="ta-container py-14"><div className="ta-card p-6 text-center text-sm text-slate-500">Chargement de votre commande…</div></div>;
   }
 
-  const isDiagnosticPlan = order.duration_minutes == null;
+  const isSubscription = order.plan_id === 'abonnement_mensuel';
+  const isDiagnosticPlan = order.duration_minutes == null && !isSubscription;
   const paid = order.status === 'paid';
 
   return (
@@ -108,7 +109,7 @@ export function OrderPage() {
           {[
             ['01', 'Commande', true],
             ['02', 'Paiement', paid,],
-            ['03', isDiagnosticPlan ? 'Diagnostic' : 'Session', paid],
+            ['03', isSubscription ? 'Abonnement' : isDiagnosticPlan ? 'Diagnostic' : 'Session', paid],
           ].map(([number, label, active]) => (
             <div key={String(number)} className={`rounded-xl border p-3 sm:rounded-2xl sm:p-4 ${active ? 'border-brand-200 bg-brand-50' : 'border-slate-200 bg-white'}`}>
               <div className="flex items-center gap-2">
@@ -193,7 +194,19 @@ export function OrderPage() {
           </section>
         )}
 
-        {paid && !isDiagnosticPlan && (
+        {paid && isSubscription && (
+          <section className="ta-card p-5 sm:p-7">
+            <div className="rounded-xl bg-green-50 p-4 text-sm font-bold text-green-800">✓ Abonnement activé pour 30 jours</div>
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              Retournez dans l'application Tech Assist pour démarrer vos assistances, avec l'agent IA ou un technicien.
+            </p>
+            <Link to="/assistance" className="ta-button-primary mt-5 w-full">
+              Voir comment ça marche
+            </Link>
+          </section>
+        )}
+
+        {paid && !isDiagnosticPlan && !isSubscription && (
           <section className="ta-card p-5 sm:p-7">
             <div className="rounded-xl bg-green-50 p-4 text-sm font-bold text-green-800">✓ Paiement confirmé</div>
             <button onClick={createSession} disabled={submitting} className="ta-button-primary mt-5 w-full disabled:opacity-50">

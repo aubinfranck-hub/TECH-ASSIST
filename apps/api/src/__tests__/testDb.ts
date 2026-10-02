@@ -16,7 +16,7 @@ export async function applyMigrations() {
 
 export async function truncateAll() {
   await pool.query(`
-    TRUNCATE TABLE audit_logs, diagnostics, sessions, orders, technician_applications,
+    TRUNCATE TABLE audit_logs, diagnostics, sessions, subscriptions, email_verifications, orders, app_installs, technician_applications,
       pme_requests, visit_requests, technicians,
       company_help_requests, company_devices, company_consents, company_users, companies
       RESTART IDENTITY CASCADE;
@@ -26,6 +26,7 @@ export async function truncateAll() {
   // remet à leur valeur de référence pour ne pas polluer les tests suivants.
   await pool.query(`
     UPDATE pricing_plans SET active = TRUE
-    WHERE id IN ('pme_essentiel', 'pme_pro', 'pme_entreprise', 'diagnostic_express', 'assistance_rapide', 'session_maintenance');
+    WHERE id IN ('pme_essentiel', 'pme_pro', 'pme_entreprise', 'diagnostic_express', 'assistance_rapide', 'session_maintenance',
+      'assistance_offerte', 'abonnement_mensuel', 'assistance_abonne');
   `);
 }
