@@ -49,8 +49,33 @@ export function HomePage() {
           </div>
 
           <div className="relative">
-            <div className="absolute -inset-4 rounded-[2rem] bg-brand-500/10 blur-xl" />
-            <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-white p-4 shadow-2xl sm:p-5">
+            <div className="absolute -inset-8 rounded-[3rem] bg-brand-500/15 blur-3xl" />
+            <div className="relative">
+              <div className="mb-5 grid grid-cols-[1.25fr_.75fr] items-end gap-3">
+                <div className="rounded-2xl border border-white/10 bg-slate-800/90 p-3 shadow-2xl">
+                  <div className="rounded-xl border border-slate-600 bg-slate-950 p-2">
+                    <div className="flex h-28 items-center justify-center rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 sm:h-36">
+                      <div className="h-20 w-28 rounded-lg border-2 border-slate-500 bg-slate-800 shadow-inner sm:h-24 sm:w-36">
+                        <div className="m-2 h-1.5 w-10 rounded-full bg-brand-500/80" />
+                        <div className="mx-2 mt-3 h-1.5 w-20 rounded-full bg-slate-600" />
+                        <div className="mx-2 mt-2 h-1.5 w-14 rounded-full bg-slate-700" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mx-auto mt-2 h-1.5 w-16 rounded-full bg-slate-600" />
+                  <p className="mt-1 text-center text-[9px] font-bold uppercase tracking-wider text-slate-400">PC bureau</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-800/90 p-2.5 shadow-2xl">
+                  <div className="rounded-xl border-2 border-slate-500 bg-slate-950 p-1.5">
+                    <div className="h-24 rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 sm:h-28">
+                      <div className="p-2"><div className="h-1.5 w-8 rounded-full bg-emerald-400/80" /><div className="mt-2 h-1.5 w-12 rounded-full bg-slate-600" /></div>
+                    </div>
+                  </div>
+                  <div className="mx-1 mt-1 h-1.5 rounded-full bg-slate-500" />
+                  <p className="mt-1 text-center text-[9px] font-bold uppercase tracking-wider text-slate-400">Laptop</p>
+                </div>
+              </div>
+              <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-white p-4 shadow-2xl sm:p-5">
               <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /><span className="text-xs font-bold text-slate-800">Tech Assist · Diagnostic</span></div>
                 <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">EN DIRECT</span>
@@ -69,6 +94,7 @@ export function HomePage() {
                   <p>Je peux libérer environ <b>9 Go</b> sans toucher à vos documents.</p>
                   <div className="mt-3 flex gap-2"><span className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-white">Autoriser</span><span className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold">Refuser</span></div>
                 </div>
+              </div>
               </div>
             </div>
           </div>
