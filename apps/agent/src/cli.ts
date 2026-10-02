@@ -115,7 +115,7 @@ async function main() {
       // État de santé du poste pour l'espace entreprise (sans effet si le PC n'est rattaché à aucune entreprise).
       collectFleetHealth(runner).then((health) => api.heartbeat(token, health as Record<string, number | boolean>)).catch(() => undefined);
       // Demande de diagnostic de l'entreprise (lecture seule, avec l'accord de l'utilisateur).
-      await answerCompanyRequest({ ui: chat, api, runner }, token).catch(() => undefined);
+      await answerCompanyRequest({ ui: chat, api, runner, reporter, machine }, token).catch(() => undefined);
     }
     const started = login ? await startCovered(deps, login) : null;
     if (started) {

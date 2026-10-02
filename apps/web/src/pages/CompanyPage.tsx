@@ -34,6 +34,7 @@ interface Device {
 
 interface DiagnosticRow {
   id: string;
+  kind: 'diagnostic' | 'repair';
   device_name: string;
   status: 'pending' | 'done' | 'declined';
   worst: 'critical' | 'fixable' | 'watch' | 'ok' | 'unknown' | null;
@@ -133,11 +134,22 @@ export function CompanyPage() {
     if (token) refresh();
   }, [token, refresh]);
 
-  async function requestDiagnostic(deviceId: string) {
+  async function requestAll(kind: 'diagnostic' | 'repair') {
     setDiagMessage(null);
     try {
-      await companyApi.post(`/api/company/devices/${deviceId}/diagnostic`, {});
-      setDiagMessage('Demande envoyée. Le diagnostic démarre quand l’utilisateur ouvre Tech Assist sur ce PC et accepte.');
+      const r = await companyApi.post<{ created: number }>('/api/company/devices/requests/all', { kind });
+      setDiagMessage(r.created > 0 ? `${r.created} demande(s) envoyée(s). Chaque utilisateur accepte ou refuse sur son PC.` : 'Aucune nouvelle demande : tous les postes ont déjà une demande en attente, ou n’ont pas le programme.');
+      await refresh();
+    } catch (err) {
+      setDiagMessage(err instanceof ApiError ? err.message : 'Impossible d’envoyer les demandes.');
+    }
+  }
+
+  async function requestDiagnostic(deviceId: string, kind: 'diagnostic' | 'repair' = 'diagnostic') {
+    setDiagMessage(null);
+    try {
+      await companyApi.post(`/api/company/devices/${deviceId}/diagnostic`, { kind });
+      setDiagMessage('Demande envoyée. Elle démarre quand l’utilisateur ouvre Tech Assist sur ce PC et accepte.');
       await refresh();
     } catch (err) {
       setDiagMessage(err instanceof ApiError ? err.message : 'Impossible d’envoyer la demande.');
@@ -330,13 +342,20 @@ export function CompanyPage() {
                 <td className="p-2">{deviceState(d) === 'ok' ? '🟢 OK' : '🟠 À surveiller'}</td>
                 {role === 'admin' && (
                   <td className="p-2">
-                    <button type="button" onClick={() => requestDiagnostic(d.id)} className="font-semibold text-brand-700 underline">Demander</button>
+                    <button type="button" onClick={() => requestDiagnostic(d.id)} className="font-semibold text-brand-700 underline">Diagnostiquer</button>
+                    <button type="button" onClick={() => requestDiagnostic(d.id, 'repair')} className="ml-3 font-semibold text-brand-700 underline">Réparer</button>
                   </td>
                 )}
               </tr>
             ))}
           </tbody>
         </table>
+        {role === 'admin' && devices.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-3 text-sm">
+            <button type="button" onClick={() => requestAll('diagnostic')} className="ta-button-secondary w-auto">Diagnostiquer tous les postes</button>
+            <button type="button" onClick={() => requestAll('repair')} className="ta-button-secondary w-auto">Réparer tous les postes</button>
+          </div>
+        )}
         {diagMessage && <p className="mt-3 text-sm text-slate-700">{diagMessage}</p>}
         {diagnostics.length > 0 && (
           <div className="mt-5">
@@ -344,7 +363,7 @@ export function CompanyPage() {
             <ul className="mt-2 space-y-3 text-sm">
               {diagnostics.slice(0, 5).map((r) => (
                 <li key={r.id} className="rounded-lg border p-3">
-                  <p className="font-semibold">{r.device_name} <span className="font-normal text-slate-500">· {STATUS_LABEL[r.status]} · {new Date(r.created_at).toLocaleDateString('fr-FR')}</span></p>
+                  <p className="font-semibold">{r.device_name} <span className="font-normal text-slate-500">({r.kind === 'repair' ? 'réparation' : 'diagnostic'})</span> <span className="font-normal text-slate-500">· {STATUS_LABEL[r.status]} · {new Date(r.created_at).toLocaleDateString('fr-FR')}</span></p>
                   {r.summary && <pre className="mt-2 whitespace-pre-wrap font-sans text-slate-700">{r.summary}</pre>}
                 </li>
               ))}

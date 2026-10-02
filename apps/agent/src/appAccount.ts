@@ -139,9 +139,9 @@ export class AppApi {
       return false; // pas rattaché, ou serveur injoignable : sans importance pour le client
     }
   }
-  async pendingRequest(token: string): Promise<{ id: string; companyName: string } | null> {
+  async pendingRequest(token: string): Promise<{ id: string; kind?: 'diagnostic' | 'repair'; companyName: string } | null> {
     try {
-      const r = await this.call<{ request: { id: string; companyName: string } | null }>('/app/company/requests', null, token, 'GET');
+      const r = await this.call<{ request: { id: string; kind?: 'diagnostic' | 'repair'; companyName: string } | null }>('/app/company/requests', null, token, 'GET');
       return r.request;
     } catch {
       return null;
@@ -286,30 +286,45 @@ const WORST_ORDER = ['critical', 'fixable', 'watch', 'unknown', 'ok'] as const;
  * puis accepte ou refuse. Seul un résumé (une ligne par domaine) est transmis, jamais de fichier.
  */
 export async function answerCompanyRequest(
-  deps: { ui: Pick<import('./types.js').ConversationUi, 'info' | 'choose'>; api: AppApi; runner: import('./types.js').CommandRunner },
+  deps: { ui: import('./types.js').ConversationUi; api: AppApi; runner: import('./types.js').CommandRunner; reporter?: import('./types.js').Reporter; machine?: string },
   token: string,
 ): Promise<'none' | 'done' | 'declined'> {
   const req = await deps.api.pendingRequest(token);
   if (!req) return 'none';
+  const repair = req.kind === 'repair';
   const pick = await deps.ui.choose(
-    `${req.companyName} demande un diagnostic de ce PC. Rien ne sera modifié ; un résumé (disque, sécurité, démarrage, performances…) lui sera envoyé. Acceptez-vous ?`,
-    ['Oui, lancer le diagnostic', 'Non'],
+    repair
+      ? `${req.companyName} demande de réparer ce PC (« Réparer mon PC »). Je commence par analyser ; ensuite, chaque correction vous est expliquée et ne se fait qu'avec votre accord. Vos documents ne sont jamais touchés. Un résumé sera envoyé à l'entreprise. Acceptez-vous ?`
+      : `${req.companyName} demande un diagnostic de ce PC. Rien ne sera modifié ; un résumé (disque, sécurité, démarrage, performances…) lui sera envoyé. Acceptez-vous ?`,
+    [repair ? 'Oui, réparer' : 'Oui, lancer le diagnostic', 'Non'],
   );
   try {
     if (pick !== 0) {
       await deps.api.answerRequest(token, req.id, { status: 'declined' });
-      deps.ui.info('Demande refusée. Rien n’a été envoyé.');
+      deps.ui.info('Demande refusée. Rien n’a été modifié ni envoyé.');
       return 'declined';
     }
-    const { scanPc, formatFindings } = await import('./repairPc.js');
-    deps.ui.info('Diagnostic en cours (lecture seule)…');
-    const findings = await scanPc(deps.runner);
-    const worst = WORST_ORDER.find((s) => findings.some((f) => f.severity === s)) ?? 'ok';
-    await deps.api.answerRequest(token, req.id, { status: 'done', worst, summary: formatFindings(findings).slice(0, 3000) });
+    const { scanPc, formatFindings, repairMyPc } = await import('./repairPc.js');
+    let summary: string;
+    let worst: (typeof WORST_ORDER)[number];
+    if (repair) {
+      const noop = { async report() {} } as unknown as import('./types.js').Reporter;
+      const out = await repairMyPc({ runner: deps.runner, ui: deps.ui, reporter: deps.reporter ?? noop, machine: deps.machine ?? 'PC' });
+      const label = { nothing_to_fix: 'Rien à corriger', declined: 'Réparation refusée par l’utilisateur', repaired: 'Réparé', partial: 'Réparé en partie (un technicien peut être nécessaire)' }[out.status];
+      const findings = 'after' in out ? out.after : out.findings;
+      summary = `${label}${'actionsDone' in out ? ` — ${out.actionsDone.length} action(s)` : ''}\n${formatFindings(findings)}`;
+      worst = WORST_ORDER.find((s) => findings.some((f) => f.severity === s)) ?? 'ok';
+    } else {
+      deps.ui.info('Diagnostic en cours (lecture seule)…');
+      const findings = await scanPc(deps.runner);
+      summary = formatFindings(findings);
+      worst = WORST_ORDER.find((s) => findings.some((f) => f.severity === s)) ?? 'ok';
+    }
+    await deps.api.answerRequest(token, req.id, { status: 'done', worst, summary: summary.slice(0, 3000) });
     deps.ui.info(`Résumé envoyé à ${req.companyName}.`);
     return 'done';
   } catch (err) {
-    deps.ui.info(err instanceof Error ? err.message : 'Le diagnostic demandé n’a pas pu être envoyé.');
+    deps.ui.info(err instanceof Error ? err.message : 'La demande de l’entreprise n’a pas pu être traitée.');
     return 'none';
   }
 }

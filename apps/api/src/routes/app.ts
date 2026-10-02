@@ -238,13 +238,13 @@ appRouter.post('/app/company/heartbeat', limiter, requireAppInstall, validateBod
 /** Demande de diagnostic en attente pour ce PC (valable 7 jours). Le programme la montre à l'utilisateur, qui accepte ou refuse. */
 appRouter.get('/app/company/requests', limiter, requireAppInstall, async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT r.id, c.name AS company_name FROM company_diagnostic_requests r
+    `SELECT r.id, r.kind, c.name AS company_name FROM company_diagnostic_requests r
      JOIN company_devices d ON d.id = r.device_id JOIN companies c ON c.id = r.company_id
      WHERE d.app_install_id = $1 AND r.status = 'pending' AND r.created_at > now() - interval '7 days'
      ORDER BY r.created_at ASC LIMIT 1`,
     [req.appInstall!.id],
   );
-  res.json({ request: rows[0] ? { id: rows[0].id, companyName: rows[0].company_name } : null });
+  res.json({ request: rows[0] ? { id: rows[0].id, kind: rows[0].kind, companyName: rows[0].company_name } : null });
 });
 
 const answerSchema = z.object({

@@ -202,4 +202,28 @@ describe('rattachement d’un PC à une entreprise', () => {
     const res = await request(app).post('/api/company/devices/00000000-0000-0000-0000-000000000000/diagnostic').set('Authorization', `Bearer ${emp}`);
     expect(res.status).toBe(403);
   });
+
+  it('action de groupe et réparation : une demande par poste rattaché, jamais deux en attente', async () => {
+    const c = await company('Kassy SARL', 'kassy_admin', '+2250700009999');
+    const adm = { Authorization: `Bearer ${c.token}` };
+    const pcs: { Authorization: string }[] = [];
+    for (const name of ['PC-1', 'PC-2']) {
+      const { code } = (await request(app).post('/api/company/join-codes').set(adm)).body;
+      const auth = await registerApp();
+      await request(app).post('/api/app/company/join').set(auth).send({ code, deviceName: name });
+      pcs.push(auth);
+    }
+    // un poste saisi à la main, sans programme : ignoré
+    await request(app).post('/api/company/devices/heartbeat').set(adm).send({ deviceName: 'PC-MANUEL', platform: 'windows' });
+
+    const first = await request(app).post('/api/company/devices/requests/all').set(adm).send({ kind: 'repair' });
+    expect(first.status).toBe(201);
+    expect(first.body.created).toBe(2);
+    expect((await request(app).post('/api/company/devices/requests/all').set(adm).send({ kind: 'repair' })).body.created).toBe(0);
+
+    const pending = (await request(app).get('/api/app/company/requests').set(pcs[0]!)).body.request;
+    expect(pending.kind).toBe('repair');
+    expect((await request(app).post('/api/company/devices/requests/all').send({})).status).toBe(401);
+    expect((await request(app).post('/api/company/devices/requests/all').set(adm).send({ kind: 'format' })).status).toBe(400);
+  });
 });

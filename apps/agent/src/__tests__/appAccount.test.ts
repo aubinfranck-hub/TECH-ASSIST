@@ -186,3 +186,18 @@ describe('demande de diagnostic de l’entreprise', () => {
     expect(ui.said).toContain('Résumé envoyé à Kassy SARL');
   });
 });
+
+describe('demande de réparation de l’entreprise', () => {
+  it('le texte annonce l’accord par action ; un refus ne lance rien', async () => {
+    const { answerCompanyRequest } = await import('../appAccount.js');
+    const answers: unknown[] = [];
+    const api = { pendingRequest: async () => ({ id: 'r2', kind: 'repair', companyName: 'Kassy SARL' }), answerRequest: async (_t: string, _id: string, b: unknown) => { answers.push(b); return { ok: true }; } };
+    const runner = new ScriptedRunner([]);
+    const ui = new ScriptedConversation({ picks: [1] });
+    expect(await answerCompanyRequest({ ui, api: api as never, runner }, 'tok')).toBe('declined');
+    expect(ui.choices[0]!.question).toMatch(/chaque correction vous est expliquée/);
+    expect(ui.choices[0]!.options[0]).toBe('Oui, réparer');
+    expect(answers).toEqual([{ status: 'declined' }]);
+    expect(runner.calls).toHaveLength(0);
+  });
+});
