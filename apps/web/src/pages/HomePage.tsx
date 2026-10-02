@@ -15,7 +15,7 @@ const FAQ = [
   ['Le technicien peut-il voir mes fichiers personnels ?', 'Non, sauf nécessité explicite liée au problème signalé et avec votre accord. Les actions sont journalisées.'],
   ['Comment puis-je arrêter une session ?', 'Un bouton « Arrêter » permet de couper immédiatement l’assistance pendant la session.'],
   ['Et si mon problème est matériel ?', 'Une panne matérielle peut nécessiter une intervention sur place. Vous pouvez demander un déplacement.'],
-  ['Comment se fait le paiement ?', 'L’abonnement de 10 000 FCFA par mois se règle par Mobile Money depuis l’application.'],
+  ['Comment se fait le paiement ?', 'Par Mobile Money. Vous choisissez un forfait (500, 2 000 ou 5 000 FCFA) selon votre besoin, vous payez, un technicien confirme la réception, et l’assistance démarre. Les entreprises ont un contrat de 10 000 FCFA par mois.'],
 ];
 
 export function HomePage() {
@@ -106,7 +106,7 @@ export function HomePage() {
       </section>
 
       <section className="ta-container ta-section" id="tarifs">
-        <div className="mx-auto max-w-2xl text-center"><p className="ta-eyebrow">Tarifs transparents</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Commencez sans engagement.</h2><p className="mt-3 text-slate-600">Votre première assistance est offerte. Ensuite, choisissez la formule adaptée à votre besoin.</p></div>
+        <div className="mx-auto max-w-2xl text-center"><p className="ta-eyebrow">Tarifs transparents</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Commencez sans engagement.</h2><p className="mt-3 text-slate-600">Votre première assistance est offerte. Ensuite, vous payez uniquement l’assistance dont vous avez besoin.</p></div>
         <div className="mt-9"><PricingTable /></div>
       </section>
 

@@ -60,7 +60,7 @@ export interface PricingPlan {
   price_fcfa: number;
   duration_minutes: number | null;
   description: string;
-  metadata?: { subscription?: boolean; periodDays?: number };
+  metadata?: { subscription?: boolean; periodDays?: number; scope?: 'diagnostic' | 'fix' | 'full' };
 }
 
 export interface Order {

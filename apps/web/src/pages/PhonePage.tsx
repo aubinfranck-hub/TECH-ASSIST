@@ -13,6 +13,19 @@ interface Entitlements {
   freeOfferAvailable: boolean;
   subscription: { endsAt: string } | null;
   companyCovered?: boolean;
+  paidForfait?: { orderId: string; name: string; scope: string } | null;
+}
+
+const FORFAITS = [
+  { planId: 'diagnostic_express', label: 'Diagnostic', price: '500', text: 'Nous cherchons la cause et vous expliquons quoi faire.' },
+  { planId: 'assistance_rapide', label: 'Dépannage', price: '2 000', text: 'Un problème précis réglé avec vous, pas à pas.' },
+  { planId: 'session_maintenance', label: 'Intervention complète', price: '5 000', text: 'Accompagnement complet jusqu’à résolution.' },
+];
+interface Payment {
+  orderId: string;
+  reference: string;
+  amount: number;
+  instructions: string;
 }
 interface Turn {
   role: 'user' | 'assistant';
@@ -182,13 +195,14 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
   }, [refresh]);
   useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [turns]);
 
-  const covered = ent && (ent.freeOfferAvailable || ent.subscription || ent.companyCovered);
+  const covered = ent && (ent.freeOfferAvailable || ent.subscription || ent.companyCovered || ent.paidForfait);
+  const [payment, setPayment] = useState<Payment | null>(null);
 
-  async function start() {
+  async function start(orderId?: string) {
     setError(null);
     setBusy(true);
     try {
-      const r = await call<{ session: { id: string }; fallbackToHuman: boolean }>('/app/assistance', { mode: 'ia' }, token);
+      const r = await call<{ session: { id: string }; fallbackToHuman: boolean }>('/app/assistance', { mode: 'ia', ...(orderId ? { orderId } : {}) }, token);
       onSession(r.session.id);
       setTurns([{ role: 'assistant', text: r.fallbackToHuman ? 'L’assistant en ligne n’est pas disponible pour le moment : un technicien vous répondra. Décrivez votre problème.' : 'Bonjour, je suis l’assistant Tech Assist. Quel est le problème avec votre téléphone ? Dites la marque et le modèle si vous les connaissez.' }]);
     } catch (e) {
@@ -199,18 +213,37 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
     }
   }
 
-  async function subscribe() {
+  async function order(planId: string) {
     setBusy(true);
     setError(null);
     try {
-      const r = await call<{ order: { id: string; amount_fcfa: number } }>('/app/subscribe', {}, token);
-      setInfo(`Demande enregistrée (référence ${r.order.id.slice(0, 8)}, ${r.order.amount_fcfa.toLocaleString('fr-FR')} FCFA). Après votre paiement Mobile Money et sa confirmation, revenez ici.`);
+      const r = await call<{ order: { id: string }; payment: { amountFcfa: number; reference: string; instructions: string } }>('/app/orders', { planId }, token);
+      setPayment({ orderId: r.order.id, reference: r.payment.reference, amount: r.payment.amountFcfa, instructions: r.payment.instructions });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Impossible d’enregistrer la demande.');
+      setError(e instanceof Error ? e.message : 'Impossible de créer la commande.');
     } finally {
       setBusy(false);
     }
   }
+
+  // Attente de la confirmation du paiement : l'assistance démarre dès qu'un technicien l'a confirmé.
+  useEffect(() => {
+    if (!payment) return;
+    const timer = setInterval(async () => {
+      try {
+        const r = await call<{ order: { status: string } }>(`/app/orders/${payment.orderId}`, null, token, 'GET');
+        if (r.order.status === 'paid') {
+          clearInterval(timer);
+          setPayment(null);
+          start(payment.orderId);
+        }
+      } catch {
+        /* réseau instable : nouvel essai au prochain tour */
+      }
+    }, 8000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payment]);
 
   async function send() {
     const message = text.trim();
@@ -251,19 +284,42 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
     return (
       <Shell title="Assistant téléphone">
         {!ent && !error && <p className="text-slate-600">Chargement…</p>}
-        {ent && covered && (
+        {ent && covered && !payment && (
           <>
             <p className="text-slate-600">
-              {ent.companyCovered ? 'Votre entreprise couvre cette assistance.' : ent.subscription ? 'Votre abonnement est actif.' : 'Votre première assistance est offerte.'}
+              {ent.companyCovered
+                ? 'Votre entreprise couvre cette assistance.'
+                : ent.subscription
+                  ? 'Votre abonnement est actif.'
+                  : ent.paidForfait
+                    ? `Votre forfait « ${ent.paidForfait.name} » est payé.`
+                    : 'Votre première assistance est offerte.'}
             </p>
-            <button className="ta-button-primary mt-5" onClick={start} disabled={busy}>{busy ? 'Un instant…' : 'Démarrer l’assistance'}</button>
+            <button className="ta-button-primary mt-5" onClick={() => start(ent.paidForfait?.orderId)} disabled={busy}>{busy ? 'Un instant…' : 'Démarrer l’assistance'}</button>
           </>
         )}
-        {ent && !covered && (
+        {ent && !covered && !payment && (
           <>
-            <p className="text-slate-600">Votre assistance offerte a été utilisée. L’abonnement coûte 10 000 FCFA par mois (assistant IA ou technicien).</p>
-            <button className="ta-button-primary mt-5" onClick={subscribe} disabled={busy}>Demander l’abonnement</button>
+            <p className="text-slate-600">Votre assistance offerte a été utilisée. Choisissez un forfait, vous ne payez que ce que vous utilisez.</p>
+            <ul className="mt-4 space-y-3">
+              {FORFAITS.map((f) => (
+                <li key={f.planId}>
+                  <button className="w-full rounded-xl border border-slate-300 bg-white p-4 text-left hover:border-brand-600 disabled:opacity-60" disabled={busy} onClick={() => order(f.planId)}>
+                    <span className="flex items-baseline justify-between gap-3"><span className="font-extrabold">{f.label}</span><span className="font-extrabold text-brand-700">{f.price} FCFA</span></span>
+                    <span className="mt-1 block text-sm text-slate-600">{f.text}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </>
+        )}
+        {payment && (
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <p className="font-extrabold">{payment.amount.toLocaleString('fr-FR')} FCFA à payer</p>
+            <p className="mt-2 text-sm text-slate-700">Référence : <strong>{payment.reference}</strong></p>
+            <p className="mt-2 text-sm text-slate-600">{payment.instructions}</p>
+            <p className="mt-3 text-sm text-slate-600">Gardez cette page ouverte : l’assistance démarre dès que le paiement est confirmé par un technicien.</p>
+          </div>
         )}
         {info && <p className="mt-4 text-sm text-slate-700">{info}</p>}
         {error && <p className="mt-4 text-sm font-medium text-brand-700">{error}</p>}
