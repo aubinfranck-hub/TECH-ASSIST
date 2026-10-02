@@ -1,9 +1,11 @@
 name: Agent Windows (.exe)
 
-# Se déclenche en poussant une étiquette « agent-v… » (ex. agent-v0.1.0) ou à la main.
+# Se déclenche quand le code de l'agent change sur la branche de production, ou à la main.
+# Le fichier est publié dans la release fixe « agent-latest » : le lien de téléchargement ne change jamais.
 on:
   push:
-    tags: ['agent-v*']
+    branches: [claude/ecstatic-maxwell-z0gk4g]
+    paths: ['apps/agent/**', '.github/workflows/build-agent-windows.yml']
   workflow_dispatch:
 
 permissions:
@@ -33,7 +35,8 @@ jobs:
       - name: Publier
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Agent Windows ${{ github.ref_name }}
+          tag_name: agent-latest
+          target_commitish: ${{ github.sha }}
+          name: Agent Windows (dernière version)
           files: tech-assist-agent.exe
           make_latest: true
