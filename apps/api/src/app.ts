@@ -10,6 +10,7 @@ import { assistanceRouter } from './routes/assistance.js';
 import { companyRouter } from './routes/company.js';
 import { companyAuthRouter } from './routes/companyAuth.js';
 import { diagnosticsRouter } from './routes/diagnostics.js';
+import { emailVerificationRouter } from './routes/emailVerification.js';
 import { healthRouter } from './routes/health.js';
 import { leadsRouter } from './routes/leads.js';
 import { ordersRouter } from './routes/orders.js';
@@ -71,6 +72,7 @@ export function createApp() {
   app.use('/api/health', healthRouter);
   app.use('/api/pricing', pricingRouter);
   app.use('/api/orders', ordersRouter);
+  app.use('/api', emailVerificationRouter);
   app.use('/api', assistanceRouter);
   app.use('/api', diagnosticsRouter);
   app.use('/api', sessionsRouter);

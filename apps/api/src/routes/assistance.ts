@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { validateBody } from '../middleware/validate.js';
 import { logAudit } from '../utils/audit.js';
+import { parseEmailVerificationToken } from './emailVerification.js';
 import { createSessionForOrder } from './sessions.js';
 
 export const assistanceRouter = Router();
@@ -32,30 +33,49 @@ export function aiAgentAvailable(): boolean {
   return process.env.AI_AGENT_ENABLED === 'true';
 }
 
-async function activeSubscription(phone: string) {
+async function activeSubscription(email: string) {
   const { rows } = await pool.query(
     `SELECT id, starts_at, ends_at FROM subscriptions
-     WHERE client_phone = $1 AND status = 'active' AND ends_at > now()
+     WHERE client_email = $1 AND status = 'active' AND ends_at > now()
      ORDER BY ends_at DESC LIMIT 1`,
-    [phone],
+    [email],
   );
   return rows[0] as { id: string; starts_at: Date; ends_at: Date } | undefined;
 }
 
-async function freeOfferUsed(phone: string): Promise<boolean> {
+/** L'offre est unique par adresse email vérifiée ET par numéro de téléphone (si connu). */
+async function freeOfferUsed(email: string, phone?: string): Promise<boolean> {
   const { rows } = await pool.query(
-    `SELECT 1 FROM orders WHERE client_phone = $1 AND plan_id = $2 AND status <> 'cancelled' LIMIT 1`,
-    [phone, FREE_OFFER_PLAN_ID],
+    `SELECT 1 FROM orders
+     WHERE plan_id = $1 AND status <> 'cancelled' AND (client_email = $2 OR ($3::text IS NOT NULL AND client_phone = $3))
+     LIMIT 1`,
+    [FREE_OFFER_PLAN_ID, email, phone ?? null],
   );
   return rows.length > 0;
 }
 
-const eligibilitySchema = z.object({ clientPhone: phoneSchema });
+/** Adresse vérifiée portée par le jeton, ou une réponse 401 si le jeton manque ou a expiré. */
+function verifiedEmailOr401(token: string, res: import('express').Response): string | null {
+  const email = parseEmailVerificationToken(token);
+  if (!email) {
+    res.status(401).json({
+      error: 'Vérifiez d\'abord votre adresse email.',
+      code: 'email_verification_required',
+    });
+    return null;
+  }
+  return email;
+}
+
+const tokenField = z.string().min(20, 'Vérification email requise');
+
+const eligibilitySchema = z.object({ verificationToken: tokenField });
 
 /** Ce à quoi le client a droit : assistance offerte, abonnement en cours, agent IA disponible. */
 assistanceRouter.post('/assistance/eligibility', limiter, validateBody(eligibilitySchema), async (req, res) => {
-  const { clientPhone } = req.body as z.infer<typeof eligibilitySchema>;
-  const [subscription, used] = await Promise.all([activeSubscription(clientPhone), freeOfferUsed(clientPhone)]);
+  const email = verifiedEmailOr401((req.body as z.infer<typeof eligibilitySchema>).verificationToken, res);
+  if (!email) return;
+  const [subscription, used] = await Promise.all([activeSubscription(email), freeOfferUsed(email)]);
   res.json({
     freeOfferAvailable: !used,
     subscription: subscription ? { endsAt: subscription.ends_at } : null,
@@ -64,6 +84,7 @@ assistanceRouter.post('/assistance/eligibility', limiter, validateBody(eligibili
 });
 
 const startSchema = z.object({
+  verificationToken: tokenField,
   clientPhone: phoneSchema,
   clientName: z.string().max(120).optional(),
   // L'agent IA est le mode par défaut ; le technicien humain reste un choix.
@@ -77,22 +98,24 @@ const startSchema = z.object({
  * serveur — le client ne choisit jamais lui-même une formule à 0 FCFA.
  */
 assistanceRouter.post('/assistance', limiter, validateBody(startSchema), async (req, res) => {
-  const { clientPhone, clientName, mode, platform } = req.body as z.infer<typeof startSchema>;
+  const { verificationToken, clientPhone, clientName, mode, platform } = req.body as z.infer<typeof startSchema>;
+  const email = verifiedEmailOr401(verificationToken, res);
+  if (!email) return;
 
   const client = await pool.connect();
   let order: { id: string; status: string; amount_fcfa: number };
   let coverage: 'subscription' | 'free_offer';
   try {
     await client.query('BEGIN');
-    // Sérialise les demandes d'un même numéro : pas de double offre gratuite en parallèle.
-    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [clientPhone]);
+    // Sérialise les demandes d'une même adresse : pas de double offre gratuite en parallèle.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [email]);
 
-    const subscription = await activeSubscription(clientPhone);
+    const subscription = await activeSubscription(email);
     let planId: string;
     if (subscription) {
       coverage = 'subscription';
       planId = SUBSCRIBER_PLAN_ID;
-    } else if (!(await freeOfferUsed(clientPhone))) {
+    } else if (!(await freeOfferUsed(email, clientPhone))) {
       coverage = 'free_offer';
       planId = FREE_OFFER_PLAN_ID;
     } else {
@@ -105,10 +128,10 @@ assistanceRouter.post('/assistance', limiter, validateBody(startSchema), async (
     }
 
     const inserted = await client.query(
-      `INSERT INTO orders (client_phone, client_name, plan_id, amount_fcfa, status, paid_at, platform, mode)
-       VALUES ($1, $2, $3, 0, 'paid', now(), $4, $5)
+      `INSERT INTO orders (client_phone, client_name, client_email, plan_id, amount_fcfa, status, paid_at, platform, mode)
+       VALUES ($1, $2, $3, $4, 0, 'paid', now(), $5, $6)
        RETURNING id, status, amount_fcfa`,
-      [clientPhone, clientName ?? null, planId, platform, mode],
+      [clientPhone, clientName ?? null, email, planId, platform, mode],
     );
     order = inserted.rows[0];
     await client.query('COMMIT');
@@ -124,7 +147,7 @@ assistanceRouter.post('/assistance', limiter, validateBody(startSchema), async (
 
   await logAudit(pool, {
     actorType: 'client',
-    actorId: clientPhone,
+    actorId: email,
     orderId: order.id,
     sessionId: result.session.id,
     action: 'assistance.started',
@@ -141,6 +164,7 @@ assistanceRouter.post('/assistance', limiter, validateBody(startSchema), async (
 });
 
 const subscribeSchema = z.object({
+  verificationToken: tokenField,
   clientPhone: phoneSchema,
   clientName: z.string().max(120).optional(),
   platform: z.enum(['web', 'windows', 'android']).default('web'),
@@ -151,7 +175,9 @@ const subscribeSchema = z.object({
  * manuelle D3) ; l'abonnement s'active quand le paiement est confirmé.
  */
 assistanceRouter.post('/subscriptions', limiter, validateBody(subscribeSchema), async (req, res) => {
-  const { clientPhone, clientName, platform } = req.body as z.infer<typeof subscribeSchema>;
+  const { verificationToken, clientPhone, clientName, platform } = req.body as z.infer<typeof subscribeSchema>;
+  const email = verifiedEmailOr401(verificationToken, res);
+  if (!email) return;
 
   const planResult = await pool.query(
     'SELECT id, price_fcfa FROM pricing_plans WHERE id = $1 AND active = TRUE',
@@ -164,21 +190,21 @@ assistanceRouter.post('/subscriptions', limiter, validateBody(subscribeSchema), 
   try {
     await client.query('BEGIN');
     const orderResult = await client.query(
-      `INSERT INTO orders (client_phone, client_name, plan_id, amount_fcfa, platform)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, status, amount_fcfa, created_at`,
-      [clientPhone, clientName ?? null, plan.id, plan.price_fcfa, platform],
+      `INSERT INTO orders (client_phone, client_name, client_email, plan_id, amount_fcfa, platform)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, status, amount_fcfa, created_at`,
+      [clientPhone, clientName ?? null, email, plan.id, plan.price_fcfa, platform],
     );
     const order = orderResult.rows[0];
     await client.query(
-      `INSERT INTO subscriptions (client_phone, client_name, plan_id, order_id)
-       VALUES ($1, $2, $3, $4)`,
-      [clientPhone, clientName ?? null, plan.id, order.id],
+      `INSERT INTO subscriptions (client_phone, client_name, client_email, plan_id, order_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [clientPhone, clientName ?? null, email, plan.id, order.id],
     );
     await client.query('COMMIT');
 
     await logAudit(pool, {
       actorType: 'client',
-      actorId: clientPhone,
+      actorId: email,
       orderId: order.id,
       action: 'subscription.requested',
     });

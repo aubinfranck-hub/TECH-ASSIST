@@ -118,7 +118,7 @@ ordersRouter.post(
         `WITH base AS (
            SELECT s.id,
                   GREATEST(now(), COALESCE((SELECT max(x.ends_at) FROM subscriptions x
-                                            WHERE x.client_phone = s.client_phone AND x.status = 'active'), now())) AS start_at,
+                                            WHERE x.client_email = s.client_email AND x.status = 'active'), now())) AS start_at,
                   COALESCE((p.metadata->>'periodDays')::int, 30) AS days
            FROM subscriptions s JOIN pricing_plans p ON p.id = s.plan_id
            WHERE s.order_id = $1 AND s.status = 'pending_payment'
