@@ -142,6 +142,76 @@ describe('Application : inscription par email, assistance offerte en base, abonn
     });
   });
 
+  describe('forfaits à l\'usage', () => {
+    async function useFreeOffer(r: Registered) {
+      expect((await request(app).post('/api/app/assistance').set(auth(r)).send({})).status).toBe(201);
+    }
+
+    it('commande, paiement confirmé par un technicien, puis assistance démarrée une seule fois', async () => {
+      const r = await register();
+      await useFreeOffer(r);
+      const tech = await technicianToken();
+
+      const order = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'assistance_rapide' });
+      expect(order.status).toBe(201);
+      expect(order.body.order.amount_fcfa).toBe(2000);
+      expect(order.body.plan.scope).toBe('fix');
+      expect(order.body.payment.reference).toHaveLength(8);
+
+      // Avant paiement : pas d'assistance.
+      const early = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id });
+      expect(early.status).toBe(402);
+      expect(early.body.code).toBe('payment_required');
+
+      const status = await request(app).get(`/api/app/orders/${order.body.order.id}`).set(auth(r));
+      expect(status.body.order.status).toBe('pending_payment');
+
+      await request(app).post(`/api/orders/${order.body.order.id}/confirm-payment`).set('Authorization', `Bearer ${tech}`).expect(200);
+      expect((await request(app).get(`/api/app/orders/${order.body.order.id}`).set(auth(r))).body.order.status).toBe('paid');
+
+      const started = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id });
+      expect(started.status).toBe(201);
+      expect(started.body.coverage).toBe('paid_forfait');
+      expect(started.body.scope).toBe('fix');
+      expect(started.body.session.duration_minutes).toBe(20);
+
+      // Le forfait est consommé : impossible de le réutiliser.
+      const again = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id });
+      expect(again.status).toBe(402);
+    });
+
+    it('le diagnostic à 500 FCFA donne la portée « diagnostic »', async () => {
+      const r = await register();
+      const tech = await technicianToken();
+      const order = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'diagnostic_express' });
+      expect(order.status).toBe(201);
+      expect(order.body.plan.scope).toBe('diagnostic');
+      await request(app).post(`/api/orders/${order.body.order.id}/confirm-payment`).set('Authorization', `Bearer ${tech}`).expect(200);
+      const started = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id });
+      expect(started.status).toBe(201);
+      expect(started.body.scope).toBe('diagnostic');
+    });
+
+    it('refuse les formules gratuites, abonnement et PME, et la commande d\'un autre appareil', async () => {
+      const r = await register();
+      for (const planId of ['assistance_offerte', 'abonnement_mensuel', 'assistance_abonne', 'pme_pro', 'inconnu']) {
+        expect((await request(app).post('/api/app/orders').set(auth(r)).send({ planId })).status).toBe(404);
+      }
+      const order = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'assistance_rapide' });
+      const other = await register();
+      expect((await request(app).get(`/api/app/orders/${order.body.order.id}`).set(auth(other))).status).toBe(404);
+      expect((await request(app).post('/api/app/assistance').set(auth(other)).send({ orderId: order.body.order.id })).status).toBe(402);
+    });
+
+    it('une nouvelle commande en attente remplace la précédente au lieu de s\'empiler', async () => {
+      const r = await register();
+      const a = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'assistance_rapide' });
+      const b = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'session_maintenance' });
+      expect(b.body.order.id).toBe(a.body.order.id);
+      expect(b.body.order.amount_fcfa).toBe(5000);
+    });
+  });
+
   describe('assistance offerte (retenue en base)', () => {
     it('offre la première assistance sans paiement, puis la base s\'en souvient', async () => {
       const r = await register();

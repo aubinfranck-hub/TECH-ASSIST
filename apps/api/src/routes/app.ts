@@ -269,6 +269,74 @@ appRouter.post('/app/company/requests/:id/answer', limiter, requireAppInstall, v
 const startSchema = z.object({
   // L'agent IA est le mode par défaut ; le technicien humain reste un choix.
   mode: z.enum(['ia', 'humain']).default('ia'),
+  /** Forfait déjà payé (voir POST /app/orders) : démarre l'assistance correspondante. */
+  orderId: z.string().regex(/^[0-9a-f-]{36}$/i).optional(),
+});
+
+const orderSchema = z.object({ planId: z.string().min(1).max(60) });
+
+/** Commande d'un forfait à l'usage (500 / 2 000 / 5 000 FCFA) ; payée par Mobile Money, confirmée par un technicien. */
+appRouter.post('/app/orders', limiter, requireAppInstall, validateBody(orderSchema), async (req, res) => {
+  const install = req.appInstall!;
+  const { planId } = req.body as z.infer<typeof orderSchema>;
+  const planResult = await pool.query(
+    `SELECT id, name, price_fcfa, metadata FROM pricing_plans
+     WHERE id = $1 AND active = TRUE AND segment = 'particulier' AND price_fcfa > 0 AND duration_minutes IS NOT NULL`,
+    [planId],
+  );
+  const plan = planResult.rows[0];
+  if (!plan || plan.metadata?.subscription || plan.metadata?.coveredBySubscription || plan.metadata?.freePerPhone) {
+    return res.status(404).json({ error: 'Forfait inconnu' });
+  }
+  // Une seule commande en attente à la fois : évite l'empilement de demandes de paiement.
+  const pending = await pool.query(
+    `SELECT id FROM orders WHERE app_install_id = $1 AND status = 'pending_payment' AND created_at > now() - interval '2 hours'`,
+    [install.id],
+  );
+  const reuse = pending.rows[0];
+  let order;
+  if (reuse) {
+    const upd = await pool.query(
+      `UPDATE orders SET plan_id = $2, amount_fcfa = $3 WHERE id = $1
+       RETURNING id, status, amount_fcfa, plan_id, created_at`,
+      [reuse.id, plan.id, plan.price_fcfa],
+    );
+    order = upd.rows[0];
+  } else {
+    const ins = await pool.query(
+      `INSERT INTO orders (client_phone, client_name, client_email, app_install_id, plan_id, amount_fcfa, platform, mode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'ia') RETURNING id, status, amount_fcfa, plan_id, created_at`,
+      [install.phone, install.name, install.email, install.id, plan.id, plan.price_fcfa, install.platform],
+    );
+    order = ins.rows[0];
+    await logAudit(pool, { actorType: 'client', actorId: install.email, orderId: order.id, action: 'order.created', details: { planId } });
+  }
+  res.status(201).json({
+    order,
+    plan: { id: plan.id, name: plan.name, scope: plan.metadata?.scope ?? 'fix' },
+    payment: {
+      amountFcfa: plan.price_fcfa,
+      reference: String(order.id).slice(0, 8).toUpperCase(),
+      instructions:
+        process.env.PAYMENT_INSTRUCTIONS ??
+        'Envoyez le montant par Mobile Money au numéro indiqué par notre équipe en précisant la référence. Un technicien confirme la réception, puis votre assistance démarre.',
+    },
+  });
+});
+
+/** Suivi d'une commande (le client attend la confirmation du paiement). */
+appRouter.get('/app/orders/:id', limiter, requireAppInstall, async (req, res) => {
+  const install = req.appInstall!;
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'Commande introuvable' });
+  const { rows } = await pool.query(
+    `SELECT o.id, o.status, o.amount_fcfa, o.plan_id, p.name AS plan_name, p.metadata->>'scope' AS scope,
+            EXISTS (SELECT 1 FROM sessions s WHERE s.order_id = o.id) AS used
+     FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
+     WHERE o.id = $1 AND o.app_install_id = $2`,
+    [req.params.id, install.id],
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable' });
+  res.json({ order: rows[0] });
 });
 
 /**
@@ -277,12 +345,13 @@ const startSchema = z.object({
  */
 appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(startSchema), async (req, res) => {
   const install = req.appInstall!;
-  const { mode } = req.body as z.infer<typeof startSchema>;
+  const { mode, orderId } = req.body as z.infer<typeof startSchema>;
 
   const client = await pool.connect();
   let order: { id: string; status: string; amount_fcfa: number };
   let session: Extract<Awaited<ReturnType<typeof createSessionForOrder>>, { ok: true }>['session'];
-  let coverage: 'subscription' | 'company' | 'free_offer';
+  let coverage: 'subscription' | 'company' | 'free_offer' | 'paid_forfait';
+  let scope: string | null = null;
   try {
     await client.query('BEGIN');
     // Sérialise les demandes d'un même email ou d'un même appareil : pas de double offre en parallèle.
@@ -293,9 +362,30 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
     }
 
     // Toutes les lectures passent par `client` : une seule connexion par requête (pas d'attente croisée sur le pool).
-    const subscription = await activeSubscription(client, install.email);
+    let paidOrder: { id: string; plan_id: string; scope: string | null } | undefined;
+    if (orderId) {
+      const found = await client.query(
+        `SELECT o.id, o.plan_id, p.metadata->>'scope' AS scope
+         FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
+         WHERE o.id = $1 AND o.app_install_id = $2 AND o.status = 'paid'
+           AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.order_id = o.id)
+         FOR UPDATE OF o`,
+        [orderId, install.id],
+      );
+      paidOrder = found.rows[0];
+      if (!paidOrder) {
+        await client.query('ROLLBACK');
+        return res.status(402).json({ error: 'Forfait non payé ou déjà utilisé.', code: 'payment_required' });
+      }
+    }
+
+    const subscription = paidOrder ? null : await activeSubscription(client, install.email);
     let planId: string;
-    if (subscription) {
+    if (paidOrder) {
+      coverage = 'paid_forfait';
+      planId = paidOrder.plan_id;
+      scope = paidOrder.scope;
+    } else if (subscription) {
       coverage = 'subscription';
       planId = SUBSCRIBER_PLAN_ID;
     } else if (await companyCovers(client, install.id)) {
@@ -308,19 +398,25 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
     } else {
       await client.query('ROLLBACK');
       return res.status(402).json({
-        error: 'Votre assistance offerte a déjà été utilisée. Abonnez-vous pour continuer.',
+        error: 'Votre assistance offerte a déjà été utilisée. Choisissez un forfait pour continuer.',
         code: 'subscription_required',
         subscriptionPlanId: SUBSCRIPTION_PLAN_ID,
+        forfaitPlanIds: ['diagnostic_express', 'assistance_rapide', 'session_maintenance'],
       });
     }
 
-    const inserted = await client.query(
-      `INSERT INTO orders (client_phone, client_name, client_email, app_install_id, plan_id, amount_fcfa, status, paid_at, platform, mode)
-       VALUES ($1, $2, $3, $4, $5, 0, 'paid', now(), $6, $7)
-       RETURNING id, status, amount_fcfa`,
-      [install.phone, install.name, install.email, install.id, planId, install.platform, mode],
-    );
-    order = inserted.rows[0];
+    if (paidOrder) {
+      const existing = await client.query('UPDATE orders SET mode = $2 WHERE id = $1 RETURNING id, status, amount_fcfa', [paidOrder.id, mode]);
+      order = existing.rows[0];
+    } else {
+      const inserted = await client.query(
+        `INSERT INTO orders (client_phone, client_name, client_email, app_install_id, plan_id, amount_fcfa, status, paid_at, platform, mode)
+         VALUES ($1, $2, $3, $4, $5, 0, 'paid', now(), $6, $7)
+         RETURNING id, status, amount_fcfa`,
+        [install.phone, install.name, install.email, install.id, planId, install.platform, mode],
+      );
+      order = inserted.rows[0];
+    }
 
     // La session est créée dans la même transaction : si elle échoue, l'offerte n'est pas consommée.
     const created = await createSessionForOrder(order.id, install.platform, mode, client);
@@ -350,6 +446,8 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
     order,
     session,
     coverage,
+    // Portée de l'assistance : diagnostic (aucune modification), fix (un problème précis) ou full (jusqu'à résolution).
+    scope: scope ?? 'full',
     // true : l'agent IA a été demandé mais n'est pas activé, un technicien prend le relais.
     fallbackToHuman: mode === 'ia' && session.mode === 'humain',
   });
@@ -409,6 +507,7 @@ const EVENT_TYPES = [
   'user_request',
 ] as const;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const eventSchema = z.object({
