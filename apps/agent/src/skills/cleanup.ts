@@ -54,6 +54,21 @@ const MB = 1024 ** 2;
 /** En dessous, le nettoyage n'apporterait rien : on ne dérange pas le client. */
 const WORTH_CLEANING = 300 * MB;
 
+/**
+ * Suppression prudente, commune aux nettoyages : refuse une racine de disque ou le dossier du profil (variable d'environnement
+ * détournée), et ne touche à aucun fichier atteint à travers un lien (jonction, lien symbolique) qui pourrait mener ailleurs.
+ */
+export const SAFE_DELETE = String.raw`function Remove-FilesSafely([string]$Dir, [datetime]$OlderThan) {
+  if (-not $Dir -or -not (Test-Path -LiteralPath $Dir)) { return }
+  $full = (Resolve-Path -LiteralPath $Dir).ProviderPath.TrimEnd('\')
+  if ($full -match '^[A-Za-z]:$' -or $full -ieq $env:USERPROFILE.TrimEnd('\') -or $full -ieq $env:windir.TrimEnd('\')) { return }
+  $links = @(Get-ChildItem -LiteralPath $full -Directory -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } | ForEach-Object { $_.FullName.TrimEnd('\') + '\' })
+  Get-ChildItem -LiteralPath $full -Recurse -Force -File | Where-Object {
+    $path = $_.FullName
+    $_.LastWriteTime -lt $OlderThan -and -not ($links | Where-Object { $path.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) })
+  } | Remove-Item -Force -ErrorAction SilentlyContinue
+}`;
+
 const cleanTempAction = (bytes: number): Action => ({
   id: 'clean_temp',
   title: 'Supprimer les fichiers temporaires',
@@ -64,11 +79,10 @@ const cleanTempAction = (bytes: number): Action => ({
     runScript(
       runner,
       guarded(String.raw`$ErrorActionPreference = 'SilentlyContinue'
+${SAFE_DELETE}
 $limit = (Get-Date).AddDays(-1)
 foreach ($dir in @($env:TEMP, (Join-Path $env:windir 'Temp'))) {
-  if (Test-Path -LiteralPath $dir) {
-    Get-ChildItem -LiteralPath $dir -Recurse -Force -File | Where-Object { $_.LastWriteTime -lt $limit } | Remove-Item -Force -ErrorAction SilentlyContinue
-  }
+  Remove-FilesSafely -Dir $dir -OlderThan $limit
 }
 Write-Output 'OK'`),
       10 * 60_000,
@@ -85,9 +99,9 @@ const browserCacheAction = (bytes: number): Action => ({
     runScript(
       runner,
       guarded(String.raw`$ErrorActionPreference = 'SilentlyContinue'
+${SAFE_DELETE}
 foreach ($rel in @('Google\Chrome\User Data\Default\Cache', 'Microsoft\Edge\User Data\Default\Cache', 'BraveSoftware\Brave-Browser\User Data\Default\Cache')) {
-  $dir = Join-Path $env:LOCALAPPDATA $rel
-  if (Test-Path -LiteralPath $dir) { Get-ChildItem -LiteralPath $dir -Recurse -Force -File | Remove-Item -Force -ErrorAction SilentlyContinue }
+  Remove-FilesSafely -Dir (Join-Path $env:LOCALAPPDATA $rel) -OlderThan ([datetime]::MaxValue)
 }
 Write-Output 'OK'`),
       5 * 60_000,

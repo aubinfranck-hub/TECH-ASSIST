@@ -83,7 +83,8 @@ export function formatFindings(findings: Finding[]): string {
 export type RepairOutcome =
   | { status: 'nothing_to_fix'; findings: Finding[] }
   | { status: 'declined'; findings: Finding[] }
-  | { status: 'repaired' | 'partial'; before: Finding[]; after: Finding[]; actionsDone: string[]; reboot: 'accepted' | 'declined' | 'none' };
+  /** `escalated` : un technicien a été prévenu ET le serveur l'a enregistré. */
+  | { status: 'repaired' | 'partial'; before: Finding[]; after: Finding[]; actionsDone: string[]; reboot: 'accepted' | 'declined' | 'none'; escalated: boolean };
 
 export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR_STEPS): Promise<RepairOutcome> {
   const now = ctx.now ?? Date.now;
@@ -110,9 +111,10 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
 
   const log = new Recording(ctx.ui, ctx.reporter);
   const done: string[] = [];
-  const subCtx: AgentContext = { ...ctx, ui: log.ui, reporter: log.reporter, prepared: new Set<string>(), quiet: true, deferReboot: true };
+  const subCtx: AgentContext = { ...ctx, ui: log.ui, reporter: log.reporter, prepared: new Set<string>(), quiet: true, deferReboot: true, skipConfirm: true };
   let rebootNeeded = false;
   let handedOff = false;
+  let recorded = false;
 
   if (fixable.length > 0) {
     const go = await ctx.ui.confirmAction(
@@ -132,6 +134,7 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
       ctx.ui.info(`— ${f.label} —`);
       const outcome: Outcome = await runSkill(step.build(), subCtx);
       done.push(...outcome.actionsDone);
+      if (outcome.status === 'escalated' && outcome.recorded) recorded = true;
       if (outcome.status === 'reboot_needed') rebootNeeded = true;
     }
   }
@@ -139,8 +142,9 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
   // Les problèmes hors de portée : un seul passage de main, honnête sur ce qui a été enregistré.
   if (critical.length > 0) {
     ctx.ui.info(`À confier à un technicien : ${critical.map((f) => f.label).join(', ')}.`);
-    await escalate(ctx, report, done, `Réparer mon PC : ${critical.map((f) => `${f.label} (${f.summary.split('\n')[0]})`).join(' ; ')}`);
+    const esc = await escalate(ctx, report, done, `Réparer mon PC : ${critical.map((f) => `${f.label} (${f.summary.split('\n')[0]})`).join(' ; ')}`);
     handedOff = true;
+    recorded = esc.status === 'escalated' && esc.recorded;
   }
 
   let reboot: 'accepted' | 'declined' | 'none' = 'none';
@@ -169,7 +173,7 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
       durationMs: now() - started,
     }),
   );
-  return { status: status === 'resolved' ? 'repaired' : 'partial', before, after, actionsDone: done, reboot };
+  return { status: status === 'resolved' ? 'repaired' : 'partial', before, after, actionsDone: done, reboot, escalated: recorded };
 }
 
 /** Observe l'interface et le journal pendant les corrections, pour dresser la liste des actions du rapport global. */

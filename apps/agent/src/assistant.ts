@@ -4,6 +4,31 @@ export interface ChatTurn {
   text: string;
 }
 
+/** Capture d'écran jointe par le client (déjà réduite par la page de conversation). */
+export interface Attachment {
+  mime: 'image/png' | 'image/jpeg';
+  /** Base64 sans préfixe. */
+  data: string;
+}
+
+/** Plafond partagé avec le serveur (800 000 caractères en base64). */
+export const MAX_ATTACHMENT_CHARS = 800_000;
+
+export type TrainingStepId = 'cours' | 'exercice' | 'correction' | 'bilan';
+
+/** Demande de formation : identifiants d'un catalogue fermé, le texte des consignes est côté serveur. */
+export interface LessonRequest {
+  track: string;
+  level: 1 | 2 | 3 | 4;
+  step: TrainingStepId;
+  index: number;
+}
+
+export interface AnswerOptions {
+  lesson?: LessonRequest;
+  image?: Attachment;
+}
+
 export type AssistantReply = { available: true; text: string } | { available: false };
 
 /**
@@ -12,7 +37,7 @@ export type AssistantReply = { available: true; text: string } | { available: fa
  * l'appareil passent uniquement par les compétences à liste blanche.
  */
 export interface Assistant {
-  answer(message: string, history: ChatTurn[]): Promise<AssistantReply>;
+  answer(message: string, history: ChatTurn[], options?: AnswerOptions): Promise<AssistantReply>;
 }
 
 /** Assistant fourni par l'API Tech Assist (route de chat de la session). */
@@ -24,12 +49,17 @@ export class HttpAssistant implements Assistant {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  async answer(message: string, history: ChatTurn[]): Promise<AssistantReply> {
+  async answer(message: string, history: ChatTurn[], options: AnswerOptions = {}): Promise<AssistantReply> {
     try {
       const res = await this.fetchImpl(`${this.apiBase.replace(/\/$/, '')}/api/app/sessions/${this.sessionId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
-        body: JSON.stringify({ message: message.slice(0, 1000), history: history.slice(-8) }),
+        body: JSON.stringify({
+          message: message.slice(0, 1000),
+          history: history.slice(-8),
+          ...(options.lesson ? { lesson: options.lesson } : {}),
+          ...(options.image && options.image.data.length <= MAX_ATTACHMENT_CHARS ? { image: options.image } : {}),
+        }),
       });
       if (!res.ok) return { available: false };
       const body = (await res.json()) as { answer?: unknown };

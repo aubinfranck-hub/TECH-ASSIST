@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process';
+import { hostname } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { runSkill } from './agent.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
 import { ChatUi } from './chatServer.js';
 import { converse } from './conversation.js';
 import { PowerShellRunner } from './powershell.js';
+import { repairMyPc } from './repairPc.js';
 import { CompositeReporter, ConsoleReporter, HttpReporter } from './reporters.js';
 import { resolveSkill, SKILL_MENU } from './skills/index.js';
 import type { Action, ConversationUi, Reporter } from './types.js';
@@ -59,17 +61,26 @@ async function main() {
   const reporter = new CompositeReporter(reporters);
   const assistant: Assistant | undefined = online ? new HttpAssistant(apiBase!, token!, sessionId!) : undefined;
   const runner = new PowerShellRunner();
+  // Nom de l'ordinateur pour l'en-tête des rapports (affichage seulement ; jamais utilisé dans un script).
+  const machine = hostname().replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 40) || undefined;
 
   // Mode direct : une compétence précise, dans le terminal.
   const direct = arg('skill') ?? (arg('service') ? `service:${arg('service')}` : undefined);
+  if (direct === 'repair') {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const outcome = await repairMyPc({ runner, ui: consoleUi(rl), reporter, machine });
+    console.log(`\nRésultat : ${outcome.status}`);
+    rl.close();
+    process.exit(0);
+  }
   if (direct) {
     const skill = resolveSkill(direct);
     if (!skill) {
-      console.error(`Compétence inconnue : ${direct}. Disponibles : ${SKILL_MENU.map((c) => c.id).join(', ')}, service:<nom>`);
+      console.error(`Compétence inconnue : ${direct}. Disponibles : repair, ${SKILL_MENU.map((c) => c.id).join(', ')}, server:<hôte>, install:<logiciel>, service:<nom>`);
       process.exit(2);
     }
     const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const outcome = await runSkill(skill, { runner, ui: consoleUi(rl), reporter });
+    const outcome = await runSkill(skill, { runner, ui: consoleUi(rl), reporter, machine });
     console.log(`\nRésultat : ${outcome.status}`);
     rl.close();
     process.exit(0);
@@ -78,7 +89,7 @@ async function main() {
   // Mode conversation (par défaut) : page de chat dans le navigateur, ou terminal avec --console.
   if (flag('console')) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const result = await converse({ runner, ui: consoleUi(rl), reporter, assistant });
+    const result = await converse({ runner, ui: consoleUi(rl), reporter, assistant, machine });
     console.log(`\nConversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);
     rl.close();
     process.exit(0);
@@ -90,7 +101,7 @@ async function main() {
   };
   console.log(`Ouverture de l'assistant dans votre navigateur : ${chat.url}`);
   if (!flag('no-browser')) openBrowser(chat.url);
-  const result = await converse({ runner, ui: chat, reporter, assistant });
+  const result = await converse({ runner, ui: chat, reporter, assistant, machine });
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();
   console.log(`Conversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);

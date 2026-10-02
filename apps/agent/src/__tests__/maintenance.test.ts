@@ -88,6 +88,20 @@ describe('nettoyage', () => {
     expect(temp).toContain('AddDays(-1)');
   });
 
+  it('suppression prudente : refuse racine de disque, profil et dossier Windows ; ignore tout ce qui passe par un lien', async () => {
+    const runner = new ScriptedRunner([{ label: 'any', test: () => true, reply: () => ok() }]);
+    for (const a of diagnoseCleanup(cleanFacts({ tempBytes: 1 * GB, browserCacheBytes: 1 * GB })).actions) await a.run(runner);
+    expect(runner.calls).toHaveLength(2);
+    for (const c of runner.calls) {
+      expect(c.script).toContain('Remove-FilesSafely');
+      expect(c.script).toContain('ReparsePoint');
+      expect(c.script).toContain('$env:USERPROFILE');
+      expect(c.script).toContain("'^[A-Za-z]:$'");
+      // un seul endroit supprime, et c'est la fonction prudente
+      expect(c.script.match(/Remove-Item/g)).toHaveLength(1);
+    }
+  });
+
   it('de bout en bout : accord, nettoyage, relecture, confirmation', async () => {
     const state = { cleaned: false };
     const runner = new ScriptedRunner([

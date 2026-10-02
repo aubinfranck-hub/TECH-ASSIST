@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { MAX_ATTACHMENT_CHARS, type Attachment } from './assistant.js';
 import type { Action, ConversationUi } from './types.js';
 
 /**
@@ -34,6 +35,20 @@ interface Pending {
 
 const MAX_BODY = 10_000;
 const MAX_TEXT = 2_000;
+/** Une capture d'écran réduite par la page tient largement en 1 Mo ; au-delà, le corps est refusé. */
+const MAX_ATTACH_BODY = 1_000_000;
+
+/** Le type annoncé doit correspondre à la signature réelle du fichier (JPEG « FF D8 FF », PNG « 89 50 4E 47 »). */
+export function validAttachment(value: unknown): Attachment | null {
+  if (!value || typeof value !== 'object') return null;
+  const { mime, data } = value as { mime?: unknown; data?: unknown };
+  if ((mime !== 'image/png' && mime !== 'image/jpeg') || typeof data !== 'string') return null;
+  if (data.length === 0 || data.length > MAX_ATTACHMENT_CHARS || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) return null;
+  const head = Buffer.from(data.slice(0, 16), 'base64');
+  const jpeg = head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+  const png = head.length >= 4 && head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
+  return (mime === 'image/jpeg' ? jpeg : png) ? { mime, data } : null;
+}
 
 const sha = (s: string) => createHash('sha256').update(s).digest();
 
@@ -52,6 +67,7 @@ export class ChatUi implements ConversationUi {
   private closed = false;
   private handoff = false;
   private counter = 0;
+  private attachment: Attachment | null = null;
 
   static async start(options: { port?: number } = {}): Promise<ChatUi> {
     const ui = new ChatUi();
@@ -98,6 +114,13 @@ export class ChatUi implements ConversationUi {
 
   wasHandedOff(): boolean {
     return this.handoff;
+  }
+
+  /** La dernière capture jointe, une seule fois : elle n'est ni conservée ni renvoyée ensuite. */
+  takeAttachment(): Attachment | null {
+    const a = this.attachment;
+    this.attachment = null;
+    return a;
   }
 
   /** Le client demande un technicien : toutes les questions en attente sont closes, la conversation s'arrête. */
@@ -215,7 +238,7 @@ export class ChatUi implements ConversationUi {
       return;
     }
 
-    if (req.method === 'POST' && (url.pathname === '/reply' || url.pathname === '/handoff')) {
+    if (req.method === 'POST' && (url.pathname === '/reply' || url.pathname === '/handoff' || url.pathname === '/attach')) {
       const origin = req.headers.origin;
       if (origin !== undefined && origin !== `http://127.0.0.1:${this.port}` && origin !== `http://localhost:${this.port}`) {
         res.writeHead(403).end();
@@ -225,11 +248,12 @@ export class ChatUi implements ConversationUi {
         res.writeHead(415).end();
         return;
       }
+      const maxBody = url.pathname === '/attach' ? MAX_ATTACH_BODY : MAX_BODY;
       let body = '';
       let tooLarge = false;
       req.on('data', (chunk: Buffer) => {
         body += chunk.toString('utf8');
-        if (body.length > MAX_BODY) {
+        if (body.length > maxBody) {
           tooLarge = true;
           req.destroy();
         }
@@ -239,6 +263,18 @@ export class ChatUi implements ConversationUi {
         if (url.pathname === '/handoff') {
           this.requestHandoff();
           res.writeHead(204).end();
+          return;
+        }
+        if (url.pathname === '/attach') {
+          try {
+            const valid = this.closed || this.handoff ? null : validAttachment(JSON.parse(body));
+            if (!valid) return void res.writeHead(400).end();
+            this.attachment = valid;
+            this.push({ type: 'user', text: "📎 Capture d'écran jointe" });
+            res.writeHead(204).end();
+          } catch {
+            res.writeHead(400).end();
+          }
           return;
         }
         try {
@@ -284,7 +320,7 @@ main { max-width:680px; margin:0 auto; padding:16px 16px 260px; }
 .row { display:flex; gap:8px; flex-wrap:wrap; }
 button.act { flex:1; min-height:44px; border:0; border-radius:10px; font:inherit; font-weight:600; cursor:pointer; background:var(--brand); color:#fff; padding:10px 14px; }
 button.yes { background:var(--ok); } button.no { background:var(--no); } button.opt { background:var(--card); color:var(--ink); border:1px solid var(--brand); text-align:left; flex-basis:100%; }
-form { display:flex; gap:8px; } input[type=text] { flex:1; min-height:44px; padding:8px 12px; border-radius:10px; border:1px solid var(--muted); font:inherit; background:var(--bg); color:var(--ink); }
+form { display:flex; gap:8px; flex-wrap:wrap; } .attach { flex-basis:100%; font-size:.85rem; color:var(--muted); } .attach button { background:transparent; border:1px solid var(--muted); color:var(--ink); border-radius:8px; padding:6px 10px; font:inherit; font-size:.85rem; cursor:pointer; margin-right:6px; } input[type=text] { flex:1; min-height:44px; padding:8px 12px; border-radius:10px; border:1px solid var(--muted); font:inherit; background:var(--bg); color:var(--ink); }
 </style>
 </head>
 <body>
@@ -303,11 +339,36 @@ form { display:flex; gap:8px; } input[type=text] { flex:1; min-height:44px; padd
   }
   function clearControls() { controls.replaceChildren(); }
   function reply(id, value) { post('/reply', { id: id, value: value }); }
+  /* Réduit la capture (1280 px, JPEG) dans le navigateur, puis l'envoie à l'agent local. */
+  function sendImage(f, note) {
+    if (!window.createImageBitmap) { note.textContent = "Ce navigateur ne peut pas joindre de capture."; return; }
+    createImageBitmap(f).then(function (bmp) {
+      var scale = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+      var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      c.toBlob(function (blob) {
+        if (!blob) { note.textContent = "Capture illisible."; return; }
+        var r = new FileReader();
+        r.onload = function () {
+          var data = String(r.result).split(',')[1] || '';
+          post('/attach', { mime: 'image/jpeg', data: data }).then(function (res) { note.textContent = res.ok ? 'Capture jointe : elle sera envoyée avec votre prochain message.' : 'Capture refusée (trop lourde ?).'; });
+        };
+        r.readAsDataURL(blob);
+      }, 'image/jpeg', 0.7);
+    }).catch(function () { note.textContent = "Ce fichier n'est pas une image lisible."; });
+  }
   function showAsk(ev) {
     var box = el('div'); box.appendChild(el('p', '', ev.text));
     var form = el('form'); var input = el('input'); input.type = 'text'; input.maxLength = 1000; input.autocomplete = 'off'; input.setAttribute('aria-label', ev.text);
     var send = el('button', 'act', 'Envoyer'); send.type = 'submit';
     form.appendChild(input); form.appendChild(send);
+    var attach = el('div', 'attach');
+    var pick = el('button', '', "📎 Joindre une capture d'écran"); pick.type = 'button';
+    var file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg'; file.style.display = 'none';
+    pick.onclick = function () { file.click(); };
+    file.onchange = function () { if (file.files && file.files[0]) sendImage(file.files[0], note); };
+    var note = el('span', '', "Masquez d'abord les mots de passe et les données personnelles.");
+    attach.appendChild(pick); attach.appendChild(file); attach.appendChild(note); form.appendChild(attach);
     form.onsubmit = function (e) { e.preventDefault(); if (input.value.trim()) reply(ev.id, input.value); };
     box.appendChild(form); controls.replaceChildren(box); input.focus();
   }

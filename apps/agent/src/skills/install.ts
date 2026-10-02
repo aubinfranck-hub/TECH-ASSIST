@@ -10,17 +10,19 @@ export interface CatalogApp {
   key: string;
   label: string;
   wingetId: string;
+  /** Mots (sans accents, minuscules) par lesquels le client désigne le logiciel. */
+  keywords?: string[];
 }
 
 export const INSTALL_CATALOG: readonly CatalogApp[] = [
-  { key: 'chrome', label: 'Google Chrome', wingetId: 'Google.Chrome' },
-  { key: 'firefox', label: 'Mozilla Firefox', wingetId: 'Mozilla.Firefox' },
-  { key: '7zip', label: '7-Zip (fichiers compressés)', wingetId: '7zip.7zip' },
-  { key: 'vlc', label: 'VLC (vidéo et musique)', wingetId: 'VideoLAN.VLC' },
-  { key: 'acrobat', label: 'Adobe Acrobat Reader (PDF)', wingetId: 'Adobe.Acrobat.Reader.64-bit' },
-  { key: 'libreoffice', label: 'LibreOffice (bureautique gratuite)', wingetId: 'TheDocumentFoundation.LibreOffice' },
-  { key: 'notepadpp', label: 'Notepad++', wingetId: 'Notepad++.Notepad++' },
-  { key: 'zoom', label: 'Zoom (visioconférence)', wingetId: 'Zoom.Zoom' },
+  { key: 'chrome', keywords: ['chrome', 'google chrome'], label: 'Google Chrome', wingetId: 'Google.Chrome' },
+  { key: 'firefox', keywords: ['firefox'], label: 'Mozilla Firefox', wingetId: 'Mozilla.Firefox' },
+  { key: '7zip', keywords: ['7zip', '7-zip', 'winrar', 'zip'], label: '7-Zip (fichiers compressés)', wingetId: '7zip.7zip' },
+  { key: 'vlc', keywords: ['vlc'], label: 'VLC (vidéo et musique)', wingetId: 'VideoLAN.VLC' },
+  { key: 'acrobat', keywords: ['acrobat', 'adobe reader', 'lecteur pdf'], label: 'Adobe Acrobat Reader (PDF)', wingetId: 'Adobe.Acrobat.Reader.64-bit' },
+  { key: 'libreoffice', keywords: ['libreoffice', 'libre office'], label: 'LibreOffice (bureautique gratuite)', wingetId: 'TheDocumentFoundation.LibreOffice' },
+  { key: 'notepadpp', keywords: ['notepad++', 'notepad'], label: 'Notepad++', wingetId: 'Notepad++.Notepad++' },
+  { key: 'zoom', keywords: ['zoom'], label: 'Zoom (visioconférence)', wingetId: 'Zoom.Zoom' },
 ];
 
 export function findApp(key: string): CatalogApp | undefined {

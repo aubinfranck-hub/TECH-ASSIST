@@ -10,10 +10,13 @@ import { consumeEmailCode, emailField } from './emailVerification.js';
 import {
   AssistantUnavailableError,
   MAX_HISTORY_TURNS,
+  MAX_IMAGE_BASE64_CHARS,
   MAX_MESSAGE_CHARS,
   MAX_TURN_CHARS,
   askOfficeAssistant,
+  imageMatchesMime,
 } from '../assistant/officeAssistant.js';
+import { TRAINING_STEPS, TRAINING_TRACK_IDS, findTrack } from '../assistant/trainingCatalog.js';
 import { createSessionForOrder } from './sessions.js';
 
 /**
@@ -341,6 +344,16 @@ appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateB
 
 const chatSchema = z.object({
   message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
+  /** Mode formation : identifiants d'un catalogue fermé (le texte des consignes vient du serveur). */
+  lesson: z
+    .object({
+      track: z.enum(TRAINING_TRACK_IDS),
+      level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+      step: z.enum(TRAINING_STEPS),
+      index: z.number().int().min(1).max(50),
+    })
+    .optional(),
+  image: z.object({ mime: z.enum(['image/png', 'image/jpeg']), data: z.string().min(1).max(MAX_IMAGE_BASE64_CHARS) }).optional(),
   history: z
     .array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(MAX_TURN_CHARS) }))
     .max(MAX_HISTORY_TURNS)
@@ -389,9 +402,16 @@ appRouter.post('/app/sessions/:id/chat', chatLimiter, requireAppInstall, validat
     });
   }
 
+  if (body.image && !imageMatchesMime(body.image)) {
+    return res.status(400).json({ error: "L'image jointe n'est pas une capture PNG ou JPEG valide." });
+  }
+
   let answer: { text: string; model: string };
   try {
-    answer = await askOfficeAssistant(body.message, body.history);
+    answer = await askOfficeAssistant(body.message, body.history, {
+      image: body.image,
+      lesson: body.lesson ? { track: findTrack(body.lesson.track)!, level: body.lesson.level, step: body.lesson.step, index: body.lesson.index } : undefined,
+    });
   } catch (err) {
     if (!(err instanceof AssistantUnavailableError)) throw err;
     console.error(`[assistant] indisponible : ${err.message}`);
@@ -404,7 +424,13 @@ appRouter.post('/app/sessions/:id/chat', chatLimiter, requireAppInstall, validat
     sessionId: session.id,
     orderId: session.order_id,
     action: 'agent.chat',
-    details: { question: body.message.slice(0, 300), answer: answer.text.slice(0, 500), model: answer.model },
+    details: {
+      question: body.message.slice(0, 300),
+      answer: answer.text.slice(0, 500),
+      model: answer.model,
+      ...(body.lesson ? { lesson: body.lesson } : {}),
+      ...(body.image ? { image: true } : {}), // l'image elle-même n'est jamais conservée
+    },
   });
   res.json({ answer: answer.text });
 });

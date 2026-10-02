@@ -127,6 +127,20 @@ describe('RÉPARER MON PC', () => {
     expect(ui.said).toContain('○ refusée : Action fix_a');
   });
 
+  it('pas de question « est-ce réglé ? » à chaque étape : la seconde analyse fait foi', async () => {
+    const a = fakeStep('a');
+    const b = fakeStep('b');
+    const ui = new ScriptedConversation();
+    await repairMyPc(ctx(ui), [a.step, b.step]);
+    expect(ui.questions).toEqual([]);
+  });
+
+  it('un échec d’action enregistré par le serveur compte comme passage de main pour la conversation', async () => {
+    const a = fakeStep('a', { fails: true });
+    const out = await repairMyPc(ctx(new ScriptedConversation()), [a.step]);
+    expect(out).toMatchObject({ escalated: true });
+  });
+
   it('un échec est dans le rapport et ne bloque pas les autres étapes', async () => {
     const a = fakeStep('a', { fails: true });
     const b = fakeStep('b');

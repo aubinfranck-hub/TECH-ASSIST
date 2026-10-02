@@ -43,7 +43,7 @@ describe('converse — déroulement général', () => {
     const ui = new ScriptedConversation();
     const out = await converse({ runner: noRunner, ui, reporter: new Recorder() });
     expect(out).toEqual({ turns: 0, handedOver: false, outcomes: [] });
-    expect(ui.infos[0]).toMatch(/^Bonjour, je suis l'assistant Tech Assist/);
+    expect(ui.infos[0]).toMatch(/^Bonjour, je suis AI PC/);
     expect(ui.infos.at(-1)).toMatch(/Merci/);
     expect(ui.prompts).toEqual(['Que puis-je faire pour vous ?']);
   });
@@ -135,16 +135,23 @@ describe('converse — choix et menu', () => {
 
   it('demande incomprise : menu complet, le client choisit une compétence', async () => {
     const asked: string[] = [];
-    const ui = new ScriptedConversation({ asks: ['bidule truc machin', null], picks: [0] });
+    const ui = new ScriptedConversation({ asks: ['bidule truc machin', null], picks: [1, 0] });
     await converse({ runner: noRunner, ui, reporter: new Recorder(), resolve: resolver({ sound: stubSkill('sound') }, asked) });
-    const options = ui.choices[0]!.options;
-    expect(options.slice(0, SKILL_MENU.length)).toEqual(SKILL_MENU.map((c) => c.label));
-    expect(options.slice(SKILL_MENU.length)).toEqual(['Désinstaller un logiciel', 'Poser une question (Office, Windows…)', 'Parler à un technicien']);
+    expect(ui.choices[0]!.options).toEqual([
+      'Réparer mon PC (analyse complète)',
+      'Un problème précis (son, Internet, imprimante, Outlook…)',
+      'Installer un logiciel',
+      'Me former (Windows, Office, mon métier)',
+      'Désinstaller un logiciel',
+      'Poser une question (Office, Windows…)',
+      'Parler à un technicien',
+    ]);
+    expect(ui.choices[1]!.options.slice(0, SKILL_MENU.length)).toEqual(SKILL_MENU.map((c) => c.label));
     expect(asked).toEqual(['sound']);
   });
 
   it('demande incomprise : « Parler à un technicien » passe la main', async () => {
-    const ui = new ScriptedConversation({ asks: ['bidule truc machin'], picks: [SKILL_MENU.length + 2] });
+    const ui = new ScriptedConversation({ asks: ['bidule truc machin'], picks: [6] });
     const reporter = new Recorder();
     const out = await converse({ runner: noRunner, ui, reporter });
     expect(out.handedOver).toBe(true);
@@ -153,7 +160,7 @@ describe('converse — choix et menu', () => {
 
   it('demande incomprise : le menu mène aussi à la désinstallation et aux questions', async () => {
     const assistant = new FakeAssistant([{ available: true, text: 'Voici.' }]);
-    const ui = new ScriptedConversation({ asks: ['bidule truc machin', 'Quelque chose', null], picks: [SKILL_MENU.length + 1] });
+    const ui = new ScriptedConversation({ asks: ['bidule truc machin', 'Quelque chose', null], picks: [5] });
     await converse({ runner: noRunner, ui, reporter: new Recorder(), assistant });
     expect(assistant.calls.map((c) => c.message)).toEqual(['Quelque chose']);
   });

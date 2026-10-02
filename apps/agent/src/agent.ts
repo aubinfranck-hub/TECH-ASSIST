@@ -27,6 +27,8 @@ export interface AgentContext {
   prepared?: Set<string>;
   /** Ne pas imprimer le rapport de cette compétence (l'appelant en produit un global). */
   quiet?: boolean;
+  /** Une relecture saine suffit à conclure (pas de question « est-ce réglé ? » au client) : l'appelant refait une analyse complète à la fin. */
+  skipConfirm?: boolean;
   /** Ne pas proposer le redémarrage tout de suite : l'appelant le propose une fois, à la fin. */
   deferReboot?: boolean;
 }
@@ -175,6 +177,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
     await report({ type: 'verified', message: after.summary, details: { healthy: after.healthy, problems: after.problems } });
 
     if (after.healthy) {
+      if (ctx.skipConfirm) return { status: 'fixed', actionsDone: done };
       const ok = await ctx.ui.confirmFixed(skill.verifyQuestion);
       trace.test += ok ? ' Confirmé par le client.' : ' Le problème persiste pour le client.';
       if (ok) return { status: 'fixed', actionsDone: done };

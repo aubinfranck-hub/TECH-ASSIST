@@ -15,6 +15,7 @@ redéploiement depuis l'administration.
 | D7 | Paliers d'abonnement PME | **Tranché (par défaut)** | Voir tableau ci-dessous |
 | D8 | Visites sur place : forfaits ou devis | **Tranché (par défaut)** | Forfaits fixes par type d'intervention (voir tableau) |
 | D9 | Modes d'assistance et abonnement particulier | **Tranché** (demande du porteur) | Agent IA par défaut + technicien humain ; 1re assistance offerte (e-mail vérifié + appareil) ; abonnement 10 000 FCFA/mois ; tout dans l'application, le site est le miroir |
+| D10 | Infrastructure et parc d'entreprise (« administrateur IT IA ») | **Proposé — non commencé** | Connecteurs par constructeur, passerelle sur site, espace société, validation humaine : voir D10 plus bas |
 
 Les décisions marquées « par défaut » sont des choix raisonnables pour
 avancer, pas des arbitrages métier définitifs — à valider ou ajuster
@@ -86,6 +87,8 @@ observe, propose chaque correction, attend le « oui » du client, agit, vérifi
 des techniciens ; l'agent (événement `escalated`) ou le client
 (`POST /api/sessions/:id/escalate`) peut passer à un technicien.
 
+**Trois rôles dans l'agent** (demande du porteur) : *maintenance* (analyse, gravité, bouton « Réparer mon PC »), *IT à la demande* (serveur, lecteur réseau, imprimante, installation de logiciels d'un catalogue fermé) et *formation* (Windows, Office, métiers, niveaux 1 à 4, capture d'écran). Niveaux d'autorisation : lecture (sans accord), réparation (accord par action), sensible (point de restauration + accord) ; mots de passe, comptes, domaine, bureau à distance : jamais automatisés. Détail et limites : `docs/agent.md`.
+
 **Limites connues.**
 - L'empreinte matérielle est fournie par l'application : un client malveillant
   peut la falsifier. Elle est un frein, pas une preuve ; l'e-mail vérifié reste
@@ -94,3 +97,22 @@ des techniciens ; l'agent (événement `escalated`) ou le client
   changer d'appareil. Le coût d'une assistance offerte (30 min) borne ce risque.
 - La vérification par e-mail exige un SMTP configuré (`SMTP_*`) : sans lui, la
   production refuse d'envoyer des codes (erreur explicite, pas de contournement).
+
+## D10 — Infrastructure et parc d'entreprise (proposé, non commencé)
+
+Le porteur veut que « AI PC » devienne aussi un administrateur IT : serveurs Windows
+(AD, DNS, DHCP, GPO, sauvegardes), routeurs, commutateurs, Wi-Fi, pare-feu, VPN
+(MikroTik, Ubiquiti, TP-Link, Cisco, Fortinet, Aruba, Huawei), cartographie et
+surveillance proactive, mode « IT autonome », et une vue de parc (« 42 PC OK, 5 à
+intervenir, 2 critiques » ; « corrige tous les problèmes non critiques »).
+
+**Ce n'est pas une extension de l'agent PC**, pour des raisons de sûreté et d'architecture :
+
+- il faut des **connecteurs par constructeur** (API, SSH, WinRM), chacun avec une liste blanche d'opérations en lecture d'abord ;
+- il faut stocker des **identifiants d'équipements** : chiffrés au repos (comme `SESSION_SECRETS_KEY`), jamais montrés à l'IA, jamais dans les journaux ;
+- une **passerelle** installée sur le réseau du client (l'API cloud ne joint pas un routeur privé), avec exécution sortante seulement ;
+- un **espace société** côté API (société, machines, rôles, droits par machine) et des agents rattachés ; la vue de parc et le traitement « machine par machine » en dépendent ;
+- une **validation humaine** obligatoire pour tout changement réseau/pare-feu/VPN/domaine, un point de retour (sauvegarde de configuration avant) et un journal d'audit par équipement ;
+- surveillance proactive = un service qui tourne en continu (alertes), donc une exploitation, pas un script.
+
+Ordre proposé : (1) espace société + rattachement des PC + vue de parc en lecture seule ; (2) passerelle + découverte réseau en lecture seule (cartographie) ; (3) un premier connecteur en lecture seule (Windows Server via WinRM, ou MikroTik) ; (4) actions à validation humaine. En attendant, l'agent le dit franchement au client et propose un technicien (`router.ts`, intention `human_only`).
