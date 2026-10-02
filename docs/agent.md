@@ -113,3 +113,12 @@ API : `GEMINI_API_KEY` (et `GEMINI_MODEL`, défaut `gemini-2.0-flash`) pour l'as
 - Cmdlets/classes à confirmer sur machine réelle : `Get-PhysicalDisk` + `MSStorageDriver_FailurePredictStatus`, `Win32_Printer.PrinterStatus` (codes 6/7 hors ligne), `Repair-WindowsImage -CheckHealth`, `Get-MpComputerStatus` quand un antivirus tiers est présent, `winget list` (code de sortie) en contexte administrateur.
 - La formation repose sur une IA : exactitude non garantie ; pas d'avancement persistant ; pas de contrôle de la réussite autre que la déclaration du client.
 - Pas d'installateur (EXE signé, APK) ni d'empreinte matérielle côté client ; Android non commencé.
+
+
+## Programme Windows (.exe) et connexion
+
+- **Fabrication** : `.github/workflows/build-agent-windows.yml` empaquette l'agent (esbuild) puis fabrique `tech-assist-agent.exe` (Node SEA) avec icône, nom « Tech Assist » et éditeur. Il est publié dans la release fixe `agent-latest` ; le lien du site (`VITE_APP_WINDOWS_URL`) ne change donc jamais. Déclenchement : push sur la branche de production touchant `apps/agent/**`, ou à la main.
+- **Non signé** : Windows SmartScreen affiche un avertissement. Signature de code : à faire plus tard (certificat à acheter, puis une étape à ajouter au workflow).
+- **Double-clic** : ouvre le chat dans le navigateur, puis connexion par email (`appAccount.ts`) : code à 6 chiffres envoyé par l'API (`/api/app/email-code`), numéro de téléphone, inscription (`/api/app/register`) avec l'empreinte de l'appareil (SHA-256 de MachineGuid), jeton gardé dans `%APPDATA%\TechAssist\compte.json`. L'assistance offerte n'est consommée qu'après accord du client ; offerte déjà utilisée → proposition d'abonnement (10 000 FCFA/mois). Sans compte : réparations seulement.
+- **Prérequis serveur** : `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` (ex. Gmail + mot de passe d'application) sinon l'envoi du code échoue (503) ; `GEMINI_API_KEY` pour le chat/formation/captures.
+- **Non validé** : le `.exe` n'a pas été lancé sur un vrai Windows.
