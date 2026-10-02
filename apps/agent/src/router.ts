@@ -53,6 +53,7 @@ const MEMORY_CPU = /\b(memoire|ram|processeur|cpu|surchauffe\w*|ventilateur)\b/;
 
 const SKILL_RULES: { skillId: string; pattern: RegExp }[] = [
   { skillId: 'windows', pattern: /\b(analyse (complete|globale)|verifi\w* tout|tout verifier|diagnostic complet|check-?up)\b/ },
+  { skillId: 'lan-map', pattern: /\b(cartographie|carte du reseau|appareils? (connectes?|sur (le|mon) reseau)|qui est connecte|qui utilise mon (wi-?fi|reseau)|qui (se )?connecte (a|sur) mon)\b/ },
   { skillId: 'network', pattern: /\b(internet|wi-?fi|reseau|connexion|ethernet|dns|box|navigu\w*|wlan|pas de connexion)\b/ },
   { skillId: 'print', pattern: /\b(imprim\w*|spool\w*)\b/ },
   { skillId: 'performance', pattern: MEMORY_CPU },
@@ -179,7 +180,7 @@ export function routeIntent(original: string): Intent[] {
     add({ kind: 'chat' });
   }
   // « Accès au serveur » et « lecteur réseau » parlent de réseau sans être une panne d'Internet : on ne propose pas les deux.
-  if (out.some((i) => i.kind === 'server' || i.kind === 'mapdrive')) {
+  if (out.some((i) => i.kind === 'server' || i.kind === 'mapdrive' || (i.kind === 'skill' && (i as { skillId: string }).skillId === 'lan-map'))) {
     for (let i = out.length - 1; i >= 0; i--) if (out[i]!.kind === 'skill' && (out[i] as { skillId: string }).skillId === 'network') out.splice(i, 1);
   }
   return out;

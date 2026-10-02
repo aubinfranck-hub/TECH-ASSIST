@@ -59,6 +59,7 @@ Diagnostic complet (réseau, sécurité, disque, nettoyage, fichiers système, p
 | `crashes` | Plantages 30 jours (événements 41/1001/6008 comptés) | ≥ 5 : matériel probable → technicien |
 | `security` | Defender, antivirus tiers, pare-feu, âge des mises à jour | **réactive seulement** ; ne désactive rien, ne touche pas aux exclusions |
 | `battery` | Usure | informatif |
+| `lan-map` | Carte du réseau local : passerelle + appareils déjà vus par Windows (table des voisins) | informatif, passif : aucun balayage, aucune connexion aux autres appareils |
 | `server:<hôte>` | DNS, ping, ports 445/3389/80/443 → tableau 🟢/🔴 + cause | lecture seule ; aucune connexion ni mot de passe |
 | (conversation) lecteur réseau | `New-PSDrive -Persist` vers `\\serveur\partage` | jamais de mot de passe ; ne remplace pas un lecteur existant |
 | `install:<logiciel>` | Catalogue **fermé** via winget (Chrome, Firefox, 7-Zip, VLC, Acrobat Reader, LibreOffice, Notepad++, Zoom) | un autre logiciel → technicien |

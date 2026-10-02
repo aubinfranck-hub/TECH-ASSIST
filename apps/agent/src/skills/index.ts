@@ -4,6 +4,7 @@ import { crashesSkill } from './crashes.js';
 import { diskSkill } from './disk.js';
 import { driversSkill } from './drivers.js';
 import { batterySkill } from './battery.js';
+import { networkMapSkill } from './networkMap.js';
 import { installSkill } from './install.js';
 import { malwareSkill } from './malware.js';
 import { serverCheckSkill } from './serverCheck.js';
@@ -30,6 +31,7 @@ export const SKILL_MENU: SkillChoice[] = [
   { id: 'sound', label: 'Pas de son', build: () => soundSkill },
   { id: 'print', label: "Imprimante : l'impression ne fonctionne plus", build: printerSkill },
   { id: 'network', label: 'Internet / Wi-Fi / réseau', build: networkSkill },
+  { id: 'lan-map', label: 'Réseau local : appareils connectés', build: networkMapSkill },
   { id: 'malware', label: 'Virus ou logiciel malveillant', build: malwareSkill },
   { id: 'office', label: 'Office / Outlook : plante ou ne répond plus', build: () => officeSkill() },
   { id: 'performance', label: 'Performances : mémoire et processeur', build: performanceSkill },
