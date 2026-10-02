@@ -331,3 +331,36 @@ describe('converse — questions d’usage (assistant en ligne)', () => {
     expect(noRunner.calls).toEqual([]);
   });
 });
+
+describe('converse — portée du forfait', () => {
+  const broken = (id: string): Skill => ({
+    id,
+    title: id,
+    verifyQuestion: 'ok ?',
+    diagnose: async () =>
+      diagnosis({ healthy: false, summary: 'Problème constaté.', actions: [{ id: 'fix', title: 'Réparer la chose', explain: 'x', run: async () => ({ ok: true, message: 'fait' }) } as never] }),
+  });
+
+  it('Diagnostic : le problème est expliqué, rien n’est modifié, aucune confirmation d’action demandée', async () => {
+    const ui = new ScriptedConversation({ asks: ['mon internet est coupé'] });
+    const out = await converse({ runner: noRunner, ui, reporter: new Recorder(), scope: 'diagnostic', resolve: () => broken('network') });
+    expect(out.outcomes[0]!.status).toBe('declined');
+    expect(ui.infos.join('\n')).toMatch(/Réparer la chose/);
+    expect(ui.infos.join('\n')).toMatch(/n'inclut pas la réparation/);
+    expect(ui.infos.join('\n')).not.toMatch(/Parfait/);
+  });
+
+  it('Diagnostic : installer un logiciel est refusé avec explication', async () => {
+    const ui = new ScriptedConversation({ asks: ['installe VLC'] });
+    await converse({ runner: noRunner, ui, reporter: new Recorder(), scope: 'diagnostic' });
+    expect(ui.infos.join('\n')).toMatch(/forfait Diagnostic/);
+    expect(noRunner.calls).toHaveLength(0);
+  });
+
+  it('Dépannage : la réparation complète du PC renvoie vers un problème précis ou l’intervention complète', async () => {
+    const ui = new ScriptedConversation({ asks: ['répare mon pc'] });
+    await converse({ runner: noRunner, ui, reporter: new Recorder(), scope: 'fix' });
+    expect(ui.infos.join('\n')).toMatch(/Intervention complète/);
+    expect(noRunner.calls).toHaveLength(0);
+  });
+});

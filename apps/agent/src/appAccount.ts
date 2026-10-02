@@ -66,13 +66,25 @@ export interface Entitlements {
   subscription: { endsAt: string } | null;
   /** Poste couvert par l'abonnement de la société. */
   companyCovered?: boolean;
+  /** Forfait payé, pas encore démarré. */
+  paidForfait?: { orderId: string; name: string; scope: Scope } | null;
   aiAgentAvailable: boolean;
 }
+
+export type Scope = 'diagnostic' | 'fix' | 'full';
+
+/** Les forfaits à l'usage des particuliers (prix lus du serveur à l'affichage ; ceux-ci sont l'ordre et les libellés). */
+export const FORFAITS: { planId: string; label: string; price: number; scope: Scope; text: string }[] = [
+  { planId: 'diagnostic_express', label: 'Diagnostic', price: 500, scope: 'diagnostic', text: "j'analyse votre PC et je vous explique, sans rien modifier" },
+  { planId: 'assistance_rapide', label: 'Dépannage', price: 2000, scope: 'fix', text: 'un problème précis réglé avec vous (Windows, Office, Outlook, imprimante, Wi-Fi…)' },
+  { planId: 'session_maintenance', label: 'Intervention complète', price: 5000, scope: 'full', text: "analyse et réparation complètes, jusqu'à résolution, avec un technicien si besoin" },
+];
 
 export interface StartedSession {
   token: string;
   sessionId: string;
-  coverage: 'subscription' | 'company' | 'free_offer';
+  scope: Scope;
+  coverage: 'subscription' | 'company' | 'free_offer' | 'paid_forfait';
   fallbackToHuman: boolean;
 }
 
@@ -121,12 +133,23 @@ export class AppApi {
   me(token: string) {
     return this.call<{ email: string; entitlements: Entitlements }>('/app/me', null, token, 'GET');
   }
-  startAssistance(token: string) {
+  startAssistance(token: string, orderId?: string) {
     return this.call<{
       session: { id: string };
-      coverage: 'subscription' | 'company' | 'free_offer';
+      coverage: 'subscription' | 'company' | 'free_offer' | 'paid_forfait';
+      scope?: Scope;
       fallbackToHuman: boolean;
-    }>('/app/assistance', { mode: 'ia' }, token);
+    }>('/app/assistance', { mode: 'ia', ...(orderId ? { orderId } : {}) }, token);
+  }
+  orderForfait(token: string, planId: string) {
+    return this.call<{
+      order: { id: string; amount_fcfa: number };
+      plan: { name: string; scope: Scope };
+      payment: { amountFcfa: number; reference: string; instructions: string };
+    }>('/app/orders', { planId }, token);
+  }
+  orderStatus(token: string, id: string) {
+    return this.call<{ order: { status: string; used: boolean } }>(`/app/orders/${encodeURIComponent(id)}`, null, token, 'GET');
   }
   joinCompany(token: string, code: string, deviceName: string) {
     return this.call<{ companyName: string }>('/app/company/join', { code, deviceName }, token);
@@ -233,37 +256,83 @@ export async function signIn(deps: AccountDeps): Promise<{ token: string; entitl
   return null;
 }
 
-/** Démarre l'assistance couverte (offerte, ou abonnement). Rend la session, ou null si rien n'est démarré. */
-export async function startCovered(deps: AccountDeps, login: { token: string; entitlements: Entitlements }): Promise<StartedSession | null> {
+const fcfa = (n: number) => `${n.toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ')} FCFA`;
+
+export interface StartDeps extends AccountDeps {
+  /** Attente entre deux vérifications du paiement (tests : instantanée). */
+  wait?: (ms: number) => Promise<void>;
+  pollMs?: number;
+  /** Durée maximale d'attente du paiement avant de rendre la main. */
+  maxWaitMs?: number;
+}
+
+/**
+ * Démarre l'assistance : abonnement ou entreprise, forfait déjà payé, assistance offerte — sinon le client choisit
+ * un forfait (500 / 2 000 / 5 000 FCFA), paie par Mobile Money, et l'assistance démarre dès la confirmation.
+ */
+export async function startCovered(deps: StartDeps, login: { token: string; entitlements: Entitlements }): Promise<StartedSession | null> {
   const { ui, api } = deps;
   const { entitlements, token } = login;
 
-  if (!entitlements.freeOfferAvailable && !entitlements.subscription && !entitlements.companyCovered) {
-    ui.info('Votre assistance offerte a déjà été utilisée. Pour continuer : abonnement de 10 000 FCFA par mois (agent IA ou technicien).');
-    const pick = await ui.choose("Souhaitez-vous demander l'abonnement ?", ["Oui, demander l'abonnement", 'Non, plus tard']);
-    if (pick === 0) {
-      try {
-        const sub = await api.subscribe(token);
-        ui.info(`Demande enregistrée (référence ${sub.order.id.slice(0, 8)}, ${sub.order.amount_fcfa} FCFA). Après votre paiement Mobile Money et sa confirmation, relancez le programme.`);
-      } catch (err) {
-        ui.info(err instanceof Error ? err.message : "Impossible d'enregistrer la demande.");
-      }
+  const begin = async (orderId?: string, fallbackScope: Scope = 'full'): Promise<StartedSession | null> => {
+    try {
+      const started = await api.startAssistance(token, orderId);
+      return { token, sessionId: started.session.id, scope: started.scope ?? fallbackScope, coverage: started.coverage, fallbackToHuman: started.fallbackToHuman };
+    } catch (err) {
+      ui.info(err instanceof Error ? err.message : "Impossible de démarrer l'assistance.");
+      return null;
     }
-    return null;
+  };
+
+  // Abonnement ou entreprise : tout est couvert, aucune question.
+  if (entitlements.subscription || entitlements.companyCovered) return begin();
+
+  // Forfait déjà payé mais pas encore utilisé (programme fermé entre-temps).
+  if (entitlements.paidForfait) {
+    ui.info(`Votre forfait « ${entitlements.paidForfait.name} » est payé : je démarre votre assistance.`);
+    return begin(entitlements.paidForfait.orderId, entitlements.paidForfait.scope);
   }
 
-  if (!entitlements.subscription) {
+  if (entitlements.freeOfferAvailable) {
     const go = await ui.choose('Vous avez une assistance offerte. La démarrer maintenant ?', ['Oui, la démarrer', 'Non, plus tard']);
     if (go !== 0) return null;
+    return begin(undefined, 'fix');
   }
 
+  ui.info('Votre assistance offerte a déjà été utilisée. Choisissez le forfait qui correspond à votre besoin, vous ne payez que ce que vous utilisez :');
+  const options = FORFAITS.map((f) => `${f.label} — ${fcfa(f.price)} : ${f.text}`);
+  const pick = await ui.choose('Quel forfait souhaitez-vous ?', [...options, 'Plus tard']);
+  if (pick === null || pick >= FORFAITS.length) return null;
+  const forfait = FORFAITS[pick]!;
+
+  let ordered;
   try {
-    const started = await api.startAssistance(token);
-    return { token, sessionId: started.session.id, coverage: started.coverage, fallbackToHuman: started.fallbackToHuman };
+    ordered = await api.orderForfait(token, forfait.planId);
   } catch (err) {
-    ui.info(err instanceof Error ? err.message : "Impossible de démarrer l'assistance.");
+    ui.info(err instanceof Error ? err.message : 'Impossible de créer votre commande.');
     return null;
   }
+  ui.info(`Forfait « ${ordered.plan.name} » : ${fcfa(ordered.payment.amountFcfa)}. Référence de paiement : ${ordered.payment.reference}.`);
+  ui.info(ordered.payment.instructions);
+  ui.info("J'attends la confirmation de votre paiement par un technicien. Vous pouvez laisser cette fenêtre ouverte.");
+
+  const wait = deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const pollMs = deps.pollMs ?? 10_000;
+  const maxWait = deps.maxWaitMs ?? 15 * 60_000;
+  for (let waited = 0; waited <= maxWait; waited += pollMs) {
+    try {
+      const status = await api.orderStatus(token, ordered.order.id);
+      if (status.order.status === 'paid') {
+        ui.info('Paiement confirmé, merci. Je démarre votre assistance.');
+        return begin(ordered.order.id, ordered.plan.scope);
+      }
+    } catch {
+      // réseau instable : on réessaie au prochain tour
+    }
+    await wait(pollMs);
+  }
+  ui.info('Je n\'ai pas encore reçu la confirmation de votre paiement. Relancez le programme une fois payé : votre forfait sera retrouvé automatiquement.');
+  return null;
 }
 
 

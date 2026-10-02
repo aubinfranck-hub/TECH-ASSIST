@@ -128,15 +128,57 @@ describe('démarrage de l\'assistance', () => {
     expect(ui.choices).toEqual([]);
   });
 
-  it('offerte déjà utilisée : propose l\'abonnement de 10 000 FCFA et l\'enregistre si accepté', async () => {
+  const USED = { ...ENT, freeOfferAvailable: false };
+  const noWait = { wait: async () => undefined, pollMs: 1, maxWaitMs: 3 };
+
+  it('offerte utilisée : propose les 3 forfaits, attend la confirmation du paiement puis démarre avec la bonne portée', async () => {
+    let polls = 0;
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
     const api = new AppApi('https://x.test', fakeFetch({
-      '/app/subscribe': () => ({ status: 201, json: { order: { id: 'abcdef12-0000', amount_fcfa: 10000 } } }),
-    }));
+      '/app/orders/ord-1': () => ({ status: 200, json: { order: { status: ++polls >= 2 ? 'paid' : 'pending_payment', used: false } } }),
+      '/app/orders': () => ({ status: 201, json: { order: { id: 'ord-1', amount_fcfa: 2000 }, plan: { name: 'Dépannage', scope: 'fix' }, payment: { amountFcfa: 2000, reference: 'ABCDEF12', instructions: 'Payez par Mobile Money.' } } }),
+      '/app/assistance': () => ({ status: 201, json: { session: { id: 'S9' }, coverage: 'paid_forfait', scope: 'fix', fallbackToHuman: false } }),
+    }, calls));
+    const ui = new ScriptedConversation({ picks: [1] });
+    const started = await startCovered({ ui, api, store: memoryStore(), ...noWait }, { token: 'T', entitlements: USED });
+    expect(started).toMatchObject({ sessionId: 'S9', coverage: 'paid_forfait', scope: 'fix' });
+    expect(ui.choices[0]!.options).toHaveLength(4);
+    expect(ui.choices[0]!.options[0]).toContain('500 FCFA');
+    expect(ui.choices[0]!.options[2]).toContain('5 000 FCFA');
+    expect(ui.said).toContain('ABCDEF12');
+    expect(calls.find((c) => c.path === '/app/orders')!.body.planId).toBe('assistance_rapide');
+    expect(calls.find((c) => c.path === '/app/assistance')!.body.orderId).toBe('ord-1');
+  });
+
+  it('paiement jamais confirmé : rend la main sans démarrer, et le dit', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/orders/ord-2': () => ({ status: 200, json: { order: { status: 'pending_payment', used: false } } }),
+      '/app/orders': () => ({ status: 201, json: { order: { id: 'ord-2', amount_fcfa: 500 }, plan: { name: 'Diagnostic', scope: 'diagnostic' }, payment: { amountFcfa: 500, reference: 'R', instructions: 'Payez.' } } }),
+    }, calls));
     const ui = new ScriptedConversation({ picks: [0] });
-    const started = await startCovered({ ui, api, store: memoryStore() }, { token: 'T', entitlements: { ...ENT, freeOfferAvailable: false } });
-    expect(started).toBeNull();
-    expect(ui.said).toContain('10 000 FCFA');
-    expect(ui.said).toContain('abcdef12');
+    expect(await startCovered({ ui, api, store: memoryStore(), ...noWait }, { token: 'T', entitlements: USED })).toBeNull();
+    expect(ui.said).toContain('Relancez le programme');
+    expect(calls.some((c) => c.path === '/app/assistance')).toBe(false);
+  });
+
+  it('« Plus tard » : aucune commande créée', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({}, calls));
+    const ui = new ScriptedConversation({ picks: [3] });
+    expect(await startCovered({ ui, api, store: memoryStore(), ...noWait }, { token: 'T', entitlements: USED })).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('forfait déjà payé : démarre sans repayer, avec sa portée', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/assistance': () => ({ status: 201, json: { session: { id: 'S3' }, coverage: 'paid_forfait', scope: 'diagnostic', fallbackToHuman: false } }),
+    }, calls));
+    const ui = new ScriptedConversation();
+    const started = await startCovered({ ui, api, store: memoryStore() }, { token: 'T', entitlements: { ...USED, paidForfait: { orderId: 'ord-3', name: 'Diagnostic', scope: 'diagnostic' } } });
+    expect(started?.scope).toBe('diagnostic');
+    expect(calls[0]!.body.orderId).toBe('ord-3');
   });
 });
 

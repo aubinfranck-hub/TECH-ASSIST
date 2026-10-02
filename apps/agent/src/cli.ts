@@ -105,6 +105,7 @@ async function main() {
   let conversationReporter: Reporter = reporter;
   let conversationAssistant: Assistant | undefined = assistant;
   let companyDeps: Parameters<typeof converse>[0]['company'];
+  let conversationScope: Parameters<typeof converse>[0]['scope'];
   if (!online && !flag('offline')) {
     const api = new AppApi(apiBase ?? DEFAULT_API_BASE);
     const deps = { ui: chat, api, store: new FileAccountStore(), hardwareHash: await readHardwareHash(runner) };
@@ -118,6 +119,7 @@ async function main() {
       await answerCompanyRequest({ ui: chat, api, runner, reporter, machine }, token).catch(() => undefined);
     }
     const started = login ? await startCovered(deps, login) : null;
+    conversationScope = started?.scope;
     if (started) {
       const base = apiBase ?? DEFAULT_API_BASE;
       conversationReporter = new CompositeReporter([new ConsoleReporter(), new HttpReporter(base, started.token, started.sessionId)]);
@@ -129,7 +131,11 @@ async function main() {
             ? 'Votre assistance offerte est démarrée.'
             : started.coverage === 'company'
               ? "L'abonnement de votre entreprise couvre ce poste."
-              : 'Votre abonnement est actif.',
+              : started.coverage === 'paid_forfait'
+                ? started.scope === 'diagnostic'
+                  ? 'Votre forfait Diagnostic est actif : j\'analyse et j\'explique, sans rien modifier.'
+                  : 'Votre forfait est actif.'
+                : 'Votre abonnement est actif.',
       );
     } else {
       chat.info("Je continue sans compte : je peux réparer votre PC, mais l'assistant en ligne (questions, formation) n'est pas disponible.");
@@ -139,7 +145,7 @@ async function main() {
   chat.onHandoff = () => {
     conversationReporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
   };
-  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps });
+  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps, scope: conversationScope });
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();
   console.log(`Conversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);

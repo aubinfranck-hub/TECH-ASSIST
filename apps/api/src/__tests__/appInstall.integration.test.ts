@@ -169,9 +169,13 @@ describe('Application : inscription par email, assistance offerte en base, abonn
       await request(app).post(`/api/orders/${order.body.order.id}/confirm-payment`).set('Authorization', `Bearer ${tech}`).expect(200);
       expect((await request(app).get(`/api/app/orders/${order.body.order.id}`).set(auth(r))).body.order.status).toBe('paid');
 
+      const me = await request(app).get('/api/app/me').set(auth(r));
+      expect(me.body.entitlements.paidForfait).toMatchObject({ orderId: order.body.order.id, scope: 'fix' });
+
       const started = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id });
       expect(started.status).toBe(201);
       expect(started.body.coverage).toBe('paid_forfait');
+      expect((await request(app).get('/api/app/me').set(auth(r))).body.entitlements.paidForfait).toBeNull();
       expect(started.body.scope).toBe('fix');
       expect(started.body.session.duration_minutes).toBe(20);
 

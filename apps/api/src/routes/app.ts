@@ -55,6 +55,8 @@ interface Entitlements {
   subscription: { endsAt: Date } | null;
   /** Poste rattaché à une société dont l'abonnement est actif. */
   companyCovered: boolean;
+  /** Forfait payé, pas encore démarré. */
+  paidForfait: { orderId: string; name: string; scope: string } | null;
   aiAgentAvailable: boolean;
 }
 
@@ -96,7 +98,19 @@ async function entitlementsFor(install: { id?: string; email: string; hardwareHa
     activeSubscription(pool, install.email),
     install.id ? companyCovers(pool, install.id) : Promise.resolve(false),
   ]);
-  return { freeOfferAvailable: !used, subscription, companyCovered, aiAgentAvailable: aiAgentAvailable() };
+  // Forfait payé et pas encore utilisé : le client peut démarrer son assistance (ex. après avoir fermé le programme).
+  const paid = install.id
+    ? await pool.query(
+        `SELECT o.id, p.name, p.metadata->>'scope' AS scope
+         FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
+         WHERE o.app_install_id = $1 AND o.status = 'paid' AND o.amount_fcfa > 0
+           AND p.metadata ? 'scope' AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.order_id = o.id)
+         ORDER BY o.paid_at DESC NULLS LAST LIMIT 1`,
+        [install.id],
+      )
+    : { rows: [] };
+  const paidForfait = paid.rows[0] ? { orderId: paid.rows[0].id as string, name: paid.rows[0].name as string, scope: paid.rows[0].scope as string } : null;
+  return { freeOfferAvailable: !used, subscription, companyCovered, paidForfait, aiAgentAvailable: aiAgentAvailable() };
 }
 
 const registerSchema = z.object({

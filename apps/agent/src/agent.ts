@@ -31,6 +31,8 @@ export interface AgentContext {
   skipConfirm?: boolean;
   /** Ne pas proposer le redémarrage tout de suite : l'appelant le propose une fois, à la fin. */
   deferReboot?: boolean;
+  /** Forfait « diagnostic » : on analyse et on explique, on ne modifie rien. */
+  readOnly?: boolean;
 }
 
 /** Ce que l'agent a constaté et fait, pour le rapport d'intervention. */
@@ -104,6 +106,17 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
     trace.test = ok ? 'Rien d\'anormal côté Windows ; confirmé par le client.' : 'Rien d\'anormal côté Windows ; le problème persiste pour le client.';
     if (ok) return { status: 'fixed', actionsDone: done };
     return escalate(ctx, report, done, 'Le système semble correct mais le problème persiste pour le client');
+  }
+
+  if (ctx.readOnly) {
+    // Forfait Diagnostic : ce qu'on ferait est expliqué, mais rien n'est modifié.
+    if (diagnosis.actions.length > 0) {
+      ctx.ui.info('Voici ce que je ferais pour corriger cela :');
+      for (const a of diagnosis.actions) ctx.ui.info(`• ${a.title}`);
+    }
+    ctx.ui.info("Votre forfait Diagnostic n'inclut pas la réparation : rien n'a été modifié. Avec un forfait Dépannage, je l'applique avec vous.");
+    trace.test = 'Diagnostic seul : aucune modification (forfait Diagnostic).';
+    return { status: 'declined', actionsDone: done };
   }
 
   const attempted = new Set<string>();

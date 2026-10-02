@@ -24,6 +24,8 @@ export interface ConversationDeps {
   /** Nom de l'ordinateur, imprimé en tête des rapports. */
   machine?: string;
   /** Rattachement à une entreprise ; absent si le client n'est pas connecté à son compte. */
+  /** Portée du forfait payé : diagnostic (lecture seule), fix (un problème précis), full (tout). Absent = tout. */
+  scope?: 'diagnostic' | 'fix' | 'full';
   company?: { join(code: string, deviceName: string): Promise<{ ok: true; companyName: string } | { ok: false; error: string }> };
 }
 
@@ -176,7 +178,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   }
 
   async function runAndNote(skill: Skill): Promise<Outcome> {
-    const outcome = await runSkill(skill, { runner, ui, reporter, machine: deps.machine });
+    const outcome = await runSkill(skill, { runner, ui, reporter, machine: deps.machine, readOnly: deps.scope === 'diagnostic' });
     // Si le serveur n'a pas enregistré la demande, la conversation continue : le client peut réessayer ou utiliser le bouton.
     if (outcome.status === 'escalated' && outcome.recorded) handedOver = true;
     else if (outcome.status === 'fixed') ui.info('Parfait, c\'est réglé.');
@@ -216,7 +218,29 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     }
   }
 
+  /** Ce que le forfait n'inclut pas : dit clairement, sans rien lancer. */
+  function outOfScope(what: string): boolean {
+    if (deps.scope === 'diagnostic' && what !== 'repair') {
+      ui.info("Cette action modifie votre ordinateur : elle n'est pas comprise dans le forfait Diagnostic (500 FCFA). Prenez un forfait Dépannage pour que je la fasse avec vous.");
+      return true;
+    }
+    return false;
+  }
+
   async function handleRepair() {
+    if (deps.scope === 'diagnostic') {
+      // Analyse complète, lecture seule : le client voit l'état de son PC, rien n'est modifié.
+      const { scanPc, formatFindings } = await import('./repairPc.js');
+      ui.info('Je lis l\'état de votre ordinateur (rien n\'est modifié)…');
+      const findings = await scanPc(runner);
+      ui.info(formatFindings(findings));
+      ui.info("Votre forfait Diagnostic s'arrête là. Pour corriger ces points avec moi : forfait Dépannage ou Intervention complète.");
+      return;
+    }
+    if (deps.scope === 'fix') {
+      ui.info("L'analyse et la réparation complète du PC font partie du forfait Intervention complète (5 000 FCFA). Avec votre forfait Dépannage, décrivez un problème précis (Internet, imprimante, Outlook, lenteur…).");
+      return;
+    }
     const out = await repairMyPc({ runner, ui, reporter, machine: deps.machine });
     if (out.status === 'repaired' || out.status === 'partial') {
       if (out.escalated) handedOver = true;
@@ -258,6 +282,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   }
 
   async function handleMapDrive(letter?: string, unc?: string) {
+    if (outOfScope('mapdrive')) return;
     const path = await askValid('Quel est le chemin du dossier partagé ? (par exemple \\\\serveur\\Compta)', (v) => UNC_PATH.test(v), 'Le chemin doit avoir la forme \\\\serveur\\partage.', unc);
     if (!path) return;
     const drive = await askValid('Quelle lettre de lecteur voulez-vous ? (de D à Z, par exemple Z)', (v) => DRIVE_LETTER.test(v.replace(/:$/, '').toUpperCase()), 'La lettre doit aller de D à Z.', letter);
@@ -283,6 +308,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   }
 
   async function handleInstall(app?: string) {
+    if (outOfScope('install')) return;
     let key = app;
     if (!key) {
       ui.info('Je peux installer ces logiciels gratuits depuis le dépôt officiel de Microsoft (winget). Pour un autre logiciel, un technicien vous aidera.');
@@ -303,6 +329,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   }
 
   async function handleUninstall(query: string) {
+    if (outOfScope('uninstall')) return;
     let programs: InstalledProgram[];
     try {
       programs = await listInstalledPrograms(runner);
