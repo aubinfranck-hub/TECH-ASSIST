@@ -32,7 +32,7 @@ export function HomePage() {
         <div className="ta-container relative py-8 sm:py-12 lg:py-16">
           <div className="relative min-h-[520px] overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900 shadow-2xl">
             <img
-              src="https://assets.zyrosite.com/cdn-cgi/image/format%3Dauto%2Cw%3D1536%2Ch%3D900%2Cfit%3Dcrop/jl6el4uMpAe2TySk/5a63946a-c873-4cc3-8190-b1df4e6becad-4iXbdJ44xqTMF7zN.jpg"
+              src="https://nyota.work/talent-2.jpg"
               alt="Technicien informatique travaillant sur un laptop et un écran"
               className="absolute inset-0 h-full w-full object-cover object-center opacity-80"
             />
@@ -82,10 +82,10 @@ export function HomePage() {
         </div>
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ['https://assets.zyrosite.com/cdn-cgi/image/format%3Dauto%2Cw%3D900%2Ch%3D650%2Cfit%3Dcrop/jl6el4uMpAe2TySk/5a63946a-c873-4cc3-8190-b1df4e6becad-4iXbdJ44xqTMF7zN.jpg','PC & Laptop','Dépannage Windows, lenteurs, pilotes, logiciels et performances.'],
-            ['https://pcsunlimited.co.uk/assets/onsite-support-bg-BFhK_F52.png','Réseau & Internet','Wi-Fi, routeurs, connexion, partage réseau et configuration.'],
-            ['https://www.stuermer-maschinen.de/fileadmin/_processed_/c/0/csm_14_Junior_Web_Entwickler_IMG_4131_dc9fb269b6.jpg','Windows & Office','Installation, configuration, Microsoft 365 et accompagnement utilisateur.'],
-            ['https://bcomservices.com/images/computer-repair-service-gold-coast-1.webp','Sécurité & Maintenance','Virus, optimisation, maintenance et problèmes matériels.'],
+            ['https://www.ems-rdc.com/assets/images/references/2.jpg','PC & Laptop','Dépannage Windows, lenteurs, pilotes, logiciels et performances.'],
+            ['https://a.storyblok.com/f/238191/1440x1080/0bc9c17cff/cyber_security_8_1440x1080px.jpg','Réseau & Internet','Wi-Fi, routeurs, connexion, partage réseau et configuration.'],
+            ['https://media.licdn.com/dms/image/v2/D4D22AQE3a4lJZN_9Lw/feedshare-shrink_800/B4DZoA4KjXHwAg-/0/1760951324280?e=2147483647&t=OPjhwO0hLaFc3NEUG_lqwOORcTvwcMkU0nFB8wnPDIw&v=beta','Windows & Office','Installation, configuration, Microsoft 365 et accompagnement utilisateur.'],
+            ['https://imagenes.elpais.com/resizer/v2/STEUUWHKVVBXZNMBPTC6ACGIJY.jpg?auth=044b71db3279a1d5b2dbf94fd3c3941d3859d07956c2ed0ba8da0b643a19cb78&height=1470&smart=true&width=1960','Sécurité & Maintenance','Virus, optimisation, maintenance et problèmes matériels.'],
           ].map(([image,title,text]) => (
             <article key={title} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl">
               <div className="h-44 overflow-hidden bg-slate-100"><img src={image} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /></div>
