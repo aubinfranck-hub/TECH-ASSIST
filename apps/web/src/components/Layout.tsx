@@ -26,7 +26,8 @@ export function Layout() {
             <Link to="/diagnostic" className={`ta-nav-link ${location.pathname === '/diagnostic' ? 'ta-nav-link-active' : ''}`}>Diagnostic</Link>
             <Link to="/session" className={`ta-nav-link ${location.pathname === '/session' ? 'ta-nav-link-active' : ''}`}>Ma session</Link>
             <Link to="/entreprise" className={`ta-nav-link ${location.pathname === '/entreprise' ? 'ta-nav-link-active' : ''}`}>Entreprises</Link>
-            <Link to="/technicien" className="ml-2 rounded-xl bg-[#14181f] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800">Espace technicien</Link>
+            <Link to="/technicien" className="ml-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">Espace technicien</Link>
+            <Link to="/assistance" className="ml-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-brand-700">Commencer maintenant</Link>
           </nav>
 
           <details className="group relative md:hidden">
@@ -39,6 +40,7 @@ export function Layout() {
               <Link to="/diagnostic" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Diagnostic</Link>
               <Link to="/session" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Ma session</Link>
               <Link to="/entreprise" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Entreprises</Link>
+              <Link to="/telephone" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Assistant téléphone</Link>
               <Link to="/technicien" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Espace technicien</Link>
             </nav>
           </details>

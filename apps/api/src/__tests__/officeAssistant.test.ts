@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AssistantUnavailableError,
   MAX_ANSWER_CHARS,
+  PHONE_SYSTEM_PROMPT,
   SYSTEM_PROMPT,
   askOfficeAssistant,
   buildContents,
@@ -105,6 +106,16 @@ describe('askOfficeAssistant', () => {
     expect(SYSTEM_PROMPT).toMatch(/Ne donne pas de commandes/);
     expect(SYSTEM_PROMPT).toMatch(/Ne demande jamais de mot de passe/);
     expect(SYSTEM_PROMPT).toMatch(/Office, d'Outlook, de Microsoft 365 et de Windows/);
+  });
+
+  it('téléphone : consignes de guidage seul, jamais de mot de passe ni de code', async () => {
+    const { impl, calls } = fakeFetch(() => json(gemini('ok')));
+    await askOfficeAssistant('Mon téléphone est plein', [], { env: { GEMINI_API_KEY: 'k' }, fetchImpl: impl, platform: 'android' });
+    const body = JSON.parse(String(calls[0]!.init.body)) as Record<string, any>;
+    expect(body.systemInstruction.parts[0].text).toBe(PHONE_SYSTEM_PROMPT);
+    expect(PHONE_SYSTEM_PROMPT).toMatch(/AUCUN accès au téléphone/);
+    expect(PHONE_SYSTEM_PROMPT).toMatch(/Ne demande JAMAIS de mot de passe, de code PIN/);
+    expect(PHONE_SYSTEM_PROMPT).toMatch(/Mobile Money/);
   });
 
   it('plafonne la longueur de la réponse', async () => {

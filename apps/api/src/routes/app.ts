@@ -526,6 +526,7 @@ appRouter.post('/app/sessions/:id/chat', chatLimiter, requireAppInstall, validat
   try {
     answer = await askOfficeAssistant(body.message, body.history, {
       image: body.image,
+      platform: install.platform === 'android' ? 'android' : 'windows',
       lesson: body.lesson ? { track: findTrack(body.lesson.track)!, level: body.lesson.level, step: body.lesson.step, index: body.lesson.index } : undefined,
     });
   } catch (err) {

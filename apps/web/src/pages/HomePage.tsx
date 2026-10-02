@@ -4,17 +4,11 @@ import { PricingTable } from '../components/PricingTable.js';
 import { TechnicianApplyForm } from '../components/TechnicianApplyForm.js';
 import { VisitRequestForm } from '../components/VisitRequestForm.js';
 
-const SERVICES = [
-  { icon: '⚡', title: 'PC lent ou instable', text: 'Démarrage lent, disque plein, mises à jour, pilotes, batterie et performances.' },
-  { icon: '◉', title: 'Réseau & Wi-Fi', text: 'Internet, Wi-Fi, serveur, lecteur réseau, imprimante et problèmes de connexion.' },
-  { icon: '▣', title: 'Windows & Office', text: 'Windows, Outlook, Word, Excel, logiciels bloqués ou qui plantent.' },
-  { icon: '✓', title: 'Sécurité', text: 'Antivirus, pare-feu, programmes suspects et contrôles de sécurité.' },
-];
 
 const STEPS = [
-  { n: '01', title: 'Diagnostic', text: 'L’agent examine votre PC et vous explique ce qu’il trouve avant toute action.' },
-  { n: '02', title: 'Votre accord', text: 'Chaque correction est expliquée. Rien n’est modifié sans votre « oui ».' },
-  { n: '03', title: 'Vérification', text: 'L’agent contrôle le résultat et passe la main à un technicien si nécessaire.' },
+  { n: '01', title: 'Vous lancez l’assistance', text: 'Téléchargez notre outil ou utilisez le diagnostic en ligne.' },
+  { n: '02', title: 'L’agent analyse, vous validez', text: 'Il vous explique chaque correction. Rien n’est modifié sans votre accord.' },
+  { n: '03', title: 'Votre problème est résolu', text: 'Il vérifie le résultat et passe la main à un technicien si nécessaire.' },
 ];
 
 const FAQ = [
@@ -27,80 +21,87 @@ const FAQ = [
 export function HomePage() {
   return (
     <div>
-      <section className="relative overflow-hidden bg-[#0b1220] text-white">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,rgba(239,68,68,.20),transparent_34%),linear-gradient(90deg,#07101d_0%,#0b1220_48%,rgba(11,18,32,.42)_100%)]" />
-        <div className="ta-container relative py-8 sm:py-12 lg:py-16">
-          <div className="relative min-h-[520px] overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900 shadow-2xl">
-            <img
-              src="https://nyota.work/talent-2.jpg"
-              alt="Technicien informatique travaillant sur un laptop et un écran"
-              className="absolute inset-0 h-full w-full object-cover object-center opacity-80"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#07101d] via-[#07101d]/90 to-[#07101d]/15" />
-            <div className="relative z-10 flex min-h-[520px] max-w-2xl flex-col justify-center p-7 sm:p-10 lg:p-14">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[.16em] text-slate-200 backdrop-blur">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" /> Assistance informatique professionnelle
-              </div>
-              <h1 className="mt-6 font-display text-[2.8rem] font-extrabold leading-[.98] tracking-[-.045em] sm:text-6xl lg:text-[4.5rem]">
-                Votre informatique.<br /><span className="text-brand-500">Toujours opérationnelle.</span>
-              </h1>
-              <p className="mt-6 max-w-xl text-base leading-7 text-slate-200 sm:text-lg">
-                Assistance à distance pour PC et laptops, diagnostic, Windows, réseau et sécurité. Une aide rapide, claire et sécurisée, avec un technicien quand c’est nécessaire.
-              </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link to="/assistance" className="ta-button bg-brand-600 text-white shadow-xl shadow-red-950/30 hover:-translate-y-0.5 hover:bg-brand-500">Démarrer une assistance <span aria-hidden>→</span></Link>
-                <Link to="/diagnostic" className="ta-button border border-white/20 bg-white/10 text-white backdrop-blur hover:bg-white/15">Lancer un diagnostic</Link>
-              </div>
-              <div className="mt-8 grid max-w-xl grid-cols-3 gap-3 border-t border-white/10 pt-5">
-                <div><p className="text-sm font-extrabold">PC & Laptop</p><p className="mt-1 text-xs text-slate-400">Windows & logiciels</p></div>
-                <div><p className="text-sm font-extrabold">Réseau</p><p className="mt-1 text-xs text-slate-400">Wi-Fi & Internet</p></div>
-                <div><p className="text-sm font-extrabold">Humain + IA</p><p className="mt-1 text-xs text-slate-400">Relais technicien</p></div>
-              </div>
-            </div>
-            <div className="absolute bottom-6 right-6 z-10 hidden rounded-2xl border border-white/15 bg-slate-950/75 p-4 shadow-xl backdrop-blur sm:block">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">✓</span>
-                <div><p className="text-sm font-bold">Assistance sécurisée</p><p className="text-xs text-slate-400">Vous gardez le contrôle</p></div>
-              </div>
+      <section className="relative overflow-hidden bg-[#07101d] text-white">
+        <img
+          src="/img/hero.jpg"
+          alt="Technicien Tech Assist au casque, devant un ordinateur, dans un centre d’assistance"
+          className="h-56 w-full object-cover object-[70%_center] sm:h-72 lg:absolute lg:inset-y-0 lg:right-0 lg:h-full lg:w-[66%] lg:object-center"
+          fetchPriority="high"
+        />
+        <div className="pointer-events-none absolute inset-x-0 top-0 hidden h-full bg-gradient-to-r from-[#07101d] from-35% via-[#07101d]/70 to-transparent lg:block" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-transparent via-transparent to-[#07101d] sm:h-72 lg:hidden" />
+        <div className="ta-container relative">
+          <div className="max-w-xl pb-10 pt-2 lg:py-16">
+            <p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-300 sm:text-sm">Assistance informatique professionnelle</p>
+            <h1 className="mt-3 font-display text-[2.5rem] font-extrabold leading-[1.02] sm:text-6xl">
+              Votre support IT partout <span className="text-brand-500">en Afrique</span>
+            </h1>
+            <p className="mt-4 max-w-md text-base leading-7 text-slate-200 sm:text-lg">
+              Assistance à distance et sur site pour particuliers, PME et entreprises. Nos techniciens vous accompagnent en temps réel pour résoudre tous vos problèmes informatiques.
+            </p>
+            <ul className="mt-6 grid gap-4 sm:grid-cols-3">
+              {[
+                ['Sécurisé', 'Connexions chiffrées'],
+                ['Rapide', 'Prise en main en quelques secondes'],
+                ['Techniciens africains', 'Disponibles et qualifiés'],
+              ].map(([t, d]) => (
+                <li key={t} className="text-sm"><p className="font-bold">{t}</p><p className="mt-0.5 text-xs text-slate-400">{d}</p></li>
+              ))}
+            </ul>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Link to="/assistance" className="ta-button bg-brand-600 text-white hover:bg-brand-500 sm:px-7">Démarrer une assistance <span aria-hidden className="ml-2">→</span></Link>
+              <Link to="/diagnostic" className="ta-button border border-white/30 text-white hover:bg-white/10 sm:px-7">Lancer un diagnostic</Link>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="border-b border-slate-200 bg-white">
-        <div className="ta-container grid grid-cols-2 divide-x divide-slate-200 sm:grid-cols-4">
+      <section className="ta-container pt-8 sm:pt-10">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ['24/7', 'Accès à l’assistance'], ['IA + humain', 'Deux niveaux d’aide'], ['100%', 'Actions contrôlées'], ['CI', 'Service local'],
-          ].map(([value, label]) => <div key={label} className="px-3 py-5 text-center sm:px-6"><p className="font-display text-xl font-extrabold text-slate-950 sm:text-2xl">{value}</p><p className="mt-1 text-[11px] font-medium text-slate-500 sm:text-xs">{label}</p></div>)}
-        </div>
-      </section>
-
-      <section className="ta-container ta-section">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div><p className="ta-eyebrow">Nos interventions</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Les problèmes du quotidien, simplement.</h2></div>
-          <Link to="/assistance" className="text-sm font-bold text-brand-700 hover:underline">Voir l’assistance →</Link>
-        </div>
-        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ['https://www.ems-rdc.com/assets/images/references/2.jpg','PC & Laptop','Dépannage Windows, lenteurs, pilotes, logiciels et performances.'],
-            ['https://a.storyblok.com/f/238191/1440x1080/0bc9c17cff/cyber_security_8_1440x1080px.jpg','Réseau & Internet','Wi-Fi, routeurs, connexion, partage réseau et configuration.'],
-            ['https://media.licdn.com/dms/image/v2/D4D22AQE3a4lJZN_9Lw/feedshare-shrink_800/B4DZoA4KjXHwAg-/0/1760951324280?e=2147483647&t=OPjhwO0hLaFc3NEUG_lqwOORcTvwcMkU0nFB8wnPDIw&v=beta','Windows & Office','Installation, configuration, Microsoft 365 et accompagnement utilisateur.'],
-            ['https://imagenes.elpais.com/resizer/v2/STEUUWHKVVBXZNMBPTC6ACGIJY.jpg?auth=044b71db3279a1d5b2dbf94fd3c3941d3859d07956c2ed0ba8da0b643a19cb78&height=1470&smart=true&width=1960','Sécurité & Maintenance','Virus, optimisation, maintenance et problèmes matériels.'],
-          ].map(([image,title,text]) => (
-            <article key={title} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl">
-              <div className="h-44 overflow-hidden bg-slate-100"><img src={image} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /></div>
-              <div className="p-5"><h3 className="text-lg font-extrabold">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{text}</p><Link to="/assistance" className="mt-4 inline-flex text-sm font-bold text-brand-700">En savoir plus →</Link></div>
-            </article>
+            ['/img/pc.jpg', 'PC & Laptop', 'Dépannage, optimisation, mises à jour, remplacement de pièces, installation…'],
+            ['/img/reseau.jpg', 'Réseau & Internet', 'Configuration, Wi-Fi, routeurs, partage de connexion, VPN, serveur…'],
+            ['/img/office.jpg', 'Windows & Office', 'Installation, configuration, formation, dépannage de vos logiciels…'],
+            ['/img/securite.jpg', 'Sécurité & Maintenance', 'Suppression de virus, sauvegarde de données, surveillance, maintenance…'],
+          ].map(([image, title, text]) => (
+            <Link key={title} to="/assistance" className="group flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card sm:flex-col">
+              <img src={image} alt="" loading="lazy" className="h-auto w-32 shrink-0 object-cover sm:aspect-[343/103] sm:w-full" />
+              <div className="flex flex-1 items-start justify-between gap-3 p-4">
+                <div><h3 className="font-extrabold">{title}</h3><p className="mt-1 text-sm leading-5 text-slate-600">{text}</p></div>
+                <span aria-hidden className="mt-0.5 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-brand-600 transition group-hover:bg-brand-600 group-hover:text-white sm:flex">›</span>
+              </div>
+            </Link>
           ))}
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-white">
-        <div className="ta-container grid gap-12 py-16 lg:grid-cols-[.8fr_1.2fr] lg:py-24">
-          <div><p className="ta-eyebrow">Simple & sécurisé</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Vous gardez toujours la main.</h2><p className="mt-4 max-w-md leading-7 text-slate-600">Tech Assist ne doit pas être une boîte noire. Vous savez ce qui est analysé, ce qui va être modifié et pourquoi.</p></div>
-          <div className="grid gap-3">
-            {STEPS.map((step) => <div key={step.n} className="flex gap-5 rounded-2xl border border-slate-200 p-5 sm:p-6"><span className="font-display text-sm font-extrabold text-brand-600">{step.n}</span><div><h3 className="font-extrabold">{step.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{step.text}</p></div></div>)}
-          </div>
+      <section className="ta-container ta-section">
+        <h2 className="font-display text-3xl font-extrabold">Comment ça marche ?</h2>
+        <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr_1fr_1.1fr] lg:items-stretch">
+          {STEPS.map((step, i) => (
+            <div key={step.title} className="flex gap-4">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-600 font-display text-lg font-extrabold text-white">{i + 1}</span>
+              <div><h3 className="font-extrabold">{step.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{step.text}</p></div>
+            </div>
+          ))}
+          <Link to="/entreprise" className="flex items-center gap-4 rounded-xl border border-red-100 bg-red-50 p-5 hover:bg-red-100">
+            <div className="flex-1"><p className="font-extrabold text-brand-700">Pour les entreprises (PME)</p><p className="mt-1 text-sm leading-5 text-slate-600">Support IT pour vos équipes, maintenance, déploiement et gestion de parc informatique.</p></div>
+            <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-brand-600">›</span>
+          </Link>
+        </div>
+      </section>
+
+      <section className="bg-[#07101d] text-white">
+        <div className="ta-container grid grid-cols-2 gap-x-4 gap-y-5 py-6 lg:grid-cols-[repeat(4,1fr)_auto] lg:items-center">
+          {[
+            ['100%', 'Connexions sécurisées'],
+            ['Techniciens qualifiés', 'Disponibles en Afrique'],
+            ['Assistance rapide', 'En quelques minutes'],
+            ['Support humain', 'Des vrais techniciens'],
+          ].map(([t, d]) => (
+            <div key={t}><p className="font-extrabold">{t}</p><p className="mt-0.5 text-xs text-slate-400">{d}</p></div>
+          ))}
+          <Link to="/assistance" className="ta-button col-span-2 bg-brand-600 text-white hover:bg-brand-500 lg:col-span-1">Commencer maintenant <span aria-hidden className="ml-2">→</span></Link>
         </div>
       </section>
 

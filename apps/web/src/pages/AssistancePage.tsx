@@ -73,6 +73,9 @@ export function AssistancePage() {
             L'application arrive bientôt. En attendant, le diagnostic en ligne reste disponible.
           </p>
         )}
+        <Link to="/telephone" className="mt-4 mr-5 inline-block text-sm font-semibold text-brand-700 hover:underline">
+          Sur téléphone : ouvrir l’assistant, sans installation
+        </Link>
         <Link to="/diagnostic" className="mt-4 inline-block text-sm font-medium text-brand-700 hover:underline">
           Faire d'abord un diagnostic en ligne
         </Link>
