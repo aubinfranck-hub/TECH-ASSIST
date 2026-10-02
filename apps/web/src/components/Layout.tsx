@@ -8,8 +8,8 @@ function Brand({ dark = false }: { dark?: boolean }) {
         alt=""
         className="h-9 w-9 shrink-0 rounded-[10px] object-contain sm:h-10 sm:w-10"
       />
-      <span className={`text-[17px] font-black tracking-[-0.04em] sm:text-[19px] ${dark ? 'text-white' : 'text-slate-950'}`}>
-        TECH <span className="text-brand-600">ASSIST</span>
+      <span className={`font-display text-[18px] font-extrabold tracking-[-0.03em] sm:text-[20px] ${dark ? 'text-white' : 'text-slate-950'}`}>
+        Tech<span className="text-brand-600">Assist</span>
       </span>
     </span>
   );
@@ -17,7 +17,7 @@ function Brand({ dark = false }: { dark?: boolean }) {
 
 export function Layout() {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-[#f6f7f9]">
       <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl">
         <div className="ta-container flex h-16 items-center justify-between gap-3 sm:h-[72px]">
           <Link to="/" aria-label="Tech Assist - Accueil" className="shrink-0">
@@ -28,7 +28,7 @@ export function Layout() {
             <Link to="/assistance" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-brand-50 hover:text-brand-700">Assistance</Link>
             <Link to="/session" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-brand-50 hover:text-brand-700">Ma session</Link>
             <Link to="/entreprise" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-brand-50 hover:text-brand-700">Entreprises</Link>
-            <Link to="/technicien" className="ml-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Espace technicien</Link>
+            <Link to="/technicien" className="ml-2 rounded-lg bg-[#14181f] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Espace technicien</Link>
           </nav>
 
           <Link to="/assistance" className="ta-button-primary min-h-10 w-auto px-4 py-2 text-xs sm:text-sm md:hidden">
@@ -48,7 +48,7 @@ export function Layout() {
 
       <main className="flex-1"><Outlet /></main>
 
-      <footer className="mt-14 border-t border-slate-200 bg-slate-950 text-slate-300 sm:mt-16">
+      <footer className="mt-14 border-t border-slate-200 bg-[#14181f] text-slate-300 sm:mt-16">
         <div className="ta-container grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-4 lg:py-12">
           <div className="lg:col-span-2">
             <Brand dark />

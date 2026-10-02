@@ -25,17 +25,17 @@ export function PricingTable() {
 
   return (
     <>
-    <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-5 text-center">
+    <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-5">
       <p className="font-bold text-green-900">Première assistance offerte</p>
       <p className="mt-1 text-sm text-green-800">Agent IA ou technicien, sans paiement, pour essayer.</p>
       <Link to="/assistance" className="ta-button-primary mt-4">Installer l’application</Link>
     </div>
     <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
       {particuliers.map((plan) => (
-        <article key={plan.id} className="ta-card flex flex-col p-6 transition hover:-translate-y-1 hover:shadow-soft">
+        <article key={plan.id} className="ta-card flex flex-col p-6 transition ">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-600">Particulier</p>
+              <p className="text-sm font-semibold text-brand-700">Particulier</p>
               <h3 className="mt-2 text-xl font-black text-slate-950">{plan.name}</h3>
             </div>
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">

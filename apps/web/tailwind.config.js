@@ -3,6 +3,9 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        display: ['"Bricolage Grotesque"', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
       colors: {
         brand: {
           50: '#fff5f5',
@@ -16,8 +19,8 @@ export default {
         },
       },
       boxShadow: {
-        soft: '0 12px 35px rgba(15, 23, 42, 0.08)',
-        card: '0 8px 24px rgba(15, 23, 42, 0.06)',
+        soft: '0 10px 30px rgba(20, 24, 31, 0.08)',
+        card: '0 1px 2px rgba(20, 24, 31, 0.04)',
       },
     },
   },

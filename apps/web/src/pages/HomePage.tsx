@@ -5,16 +5,16 @@ import { TechnicianApplyForm } from '../components/TechnicianApplyForm.js';
 import { VisitRequestForm } from '../components/VisitRequestForm.js';
 
 const STEPS = [
-  { number: '01', title: 'Décrivez votre problème', text: 'Expliquez simplement ce qui ne fonctionne pas. Le diagnostic vous guide.' },
-  { number: '02', title: 'Choisissez votre assistance', text: 'Sélectionnez la formule adaptée et effectuez votre paiement.' },
-  { number: '03', title: 'Travaillez avec un technicien', text: 'Une session sécurisée vous permet d’être accompagné à distance.' },
+  { title: 'Diagnostic', text: 'L’agent examine votre PC sans rien modifier et vous dit ce qu’il trouve, avec un niveau de gravité.' },
+  { title: 'Votre accord', text: 'Chaque correction vous est expliquée. Rien n’est fait sans votre « oui ».' },
+  { title: 'Vérification', text: 'L’agent contrôle que le problème a disparu. Sinon, un technicien prend le relais.' },
 ];
 
 const SERVICES = [
-  { title: 'Ordinateur', text: 'Windows, logiciels, performances et configuration.', icon: '▣' },
-  { title: 'Téléphone', text: 'Aide à la configuration et résolution des problèmes courants.', icon: '▯' },
-  { title: 'Sécurité', text: 'Accompagnement pour les problèmes de sécurité et de protection.', icon: '◈' },
-  { title: 'Réseau', text: 'Connexion, configuration et dépannage réseau.', icon: '⌁' },
+  { title: 'Ordinateur lent ou qui plante', text: 'Disque plein, démarrage long, mises à jour, pilotes, batterie.' },
+  { title: 'Internet, Wi-Fi et imprimante', text: 'Connexion coupée, lecteur réseau, accès au serveur, imprimante qui ne répond plus.' },
+  { title: 'Outlook, Excel et Word', text: 'Application bloquée, plantages répétés, messagerie qui ne s’ouvre plus.' },
+  { title: 'Sécurité', text: 'Antivirus, pare-feu, programmes suspects.' },
 ];
 
 const FAQ = [
@@ -32,80 +32,52 @@ const FAQ = [
   },
   {
     q: 'Comment se fait le paiement ?',
-    a: 'Le projet prévoit le paiement par Mobile Money avant le début de la session.',
+    a: 'L’abonnement de 10 000 FCFA par mois se règle par Mobile Money depuis l’application.',
   },
 ];
 
 export function HomePage() {
   return (
     <div>
-      <section className="relative overflow-hidden bg-slate-950">
-        <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-600/20 blur-3xl" />
-        <div className="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-brand-500/10 blur-3xl" />
-        <div className="ta-container relative grid gap-10 py-12 sm:py-20 lg:grid-cols-[1.15fr_.85fr] lg:items-center lg:py-24">
+      <section className="border-b border-slate-200 bg-white">
+        <div className="ta-container grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:gap-14 lg:py-24">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300">
-              <span className="h-2 w-2 rounded-full bg-brand-500" />
-              Assistance informatique à distance
-            </div>
-            <h1 className="mt-6 max-w-3xl text-[2.35rem] font-black leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Votre problème informatique.
-              <span className="block text-brand-500">Notre assistance.</span>
+            <h1 className="max-w-xl font-display text-[2.4rem] font-extrabold leading-[1.04] text-[#14181f] sm:text-5xl lg:text-[3.6rem]">
+              Un technicien informatique, dans votre PC, quand vous en avez besoin.
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-              Diagnostic, accompagnement et prise en main à distance avec un parcours simple,
-              sécurisé et pensé pour les particuliers comme pour les PME.
+            <p className="mt-5 max-w-lg text-base leading-7 text-slate-600 sm:text-lg">
+              Installez Tech Assist sur Windows. L’agent trouve la panne, vous explique ce qu’il va faire, corrige avec votre accord, puis vérifie. Un technicien reste disponible.
             </p>
-            <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row">
-              <Link to="/assistance" className="ta-button-primary">
-                Installer l’application — 1re assistance offerte
-              </Link>
-              <a href="#tarifs" className="ta-button-secondary border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-                Voir les tarifs
-              </a>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Link to="/assistance" className="ta-button-primary">Installer l’application</Link>
+              <a href="#tarifs" className="ta-button-secondary">Voir les tarifs</a>
             </div>
-            <div className="mt-7 grid grid-cols-1 gap-2 sm:mt-8 sm:flex sm:flex-wrap sm:gap-x-6 sm:gap-y-2 text-xs font-medium text-slate-400">
-              <span>✓ Parcours guidé</span>
-              <span>✓ Consentement avant contrôle</span>
-              <span>✓ Arrêt de session à tout moment</span>
-            </div>
+            <p className="mt-4 text-sm text-slate-500">La première assistance est offerte.</p>
           </div>
 
-          <div className="lg:pl-8">
-            <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-3 shadow-2xl backdrop-blur">
-              <div className="rounded-2xl bg-white p-5 sm:p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tech Assist</p>
-                    <p className="mt-1 text-lg font-bold text-slate-950">Assistance en cours</p>
-                  </div>
-                  <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">Sécurisée</span>
+          <div className="mx-auto w-full max-w-md lg:max-w-none">
+            <div
+              className="rounded-2xl border border-slate-200 bg-[#f6f7f9] p-4 shadow-soft sm:p-5"
+              role="img"
+              aria-label="Exemple de conversation entre un client et l’agent Tech Assist"
+            >
+              <div className="space-y-3 text-[15px] leading-6">
+                <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-brand-600 px-4 py-2.5 text-white">
+                  Mon PC est très lent depuis ce matin.
                 </div>
-                <div className="mt-6 rounded-2xl bg-slate-50 p-4">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-100 font-black text-brand-700">TA</span>
-                    <div>
-                      <p className="font-semibold text-slate-900">Session assistée</p>
-                      <p className="text-xs text-slate-500">Contrôle soumis à votre consentement</p>
-                    </div>
-                  </div>
-                  <div className="mt-5 h-2 rounded-full bg-slate-200">
-                    <div className="h-2 w-2/3 rounded-full bg-brand-600" />
-                  </div>
-                  <div className="mt-2 flex justify-between text-xs text-slate-500">
-                    <span>Connexion</span>
-                    <span>Assistance</span>
-                    <span>Terminé</span>
-                  </div>
+                <div className="max-w-[92%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-slate-800">
+                  <p>J’ai examiné votre PC, rien n’a été modifié.</p>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    <li>🟠 Disque presque plein : 3 Go libres</li>
+                    <li>🟡 14 programmes se lancent au démarrage</li>
+                    <li>🟢 Antivirus actif, Windows à jour</li>
+                  </ul>
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-slate-200 p-3">
-                    <p className="text-xs text-slate-500">Accès</p>
-                    <p className="mt-1 text-sm font-bold text-slate-900">Contrôlé</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3">
-                    <p className="text-xs text-slate-500">Session</p>
-                    <p className="mt-1 text-sm font-bold text-slate-900">Temporaire</p>
+                <div className="max-w-[92%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-slate-800">
+                  <p>Je peux supprimer les fichiers temporaires et libérer environ 9 Go. Vos documents ne sont pas touchés.</p>
+                  <div className="mt-3 flex gap-2">
+                    <span className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Oui, nettoyer</span>
+                    <span className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Non merci</span>
                   </div>
                 </div>
               </div>
@@ -115,100 +87,66 @@ export function HomePage() {
       </section>
 
       <section className="ta-container ta-section">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {SERVICES.map((service) => (
-            <div key={service.title} className="ta-card p-5 transition hover:-translate-y-0.5 hover:shadow-soft">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-lg font-black text-brand-700">
-                {service.icon}
-              </div>
-              <h2 className="mt-4 font-bold text-slate-950">{service.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">{service.text}</p>
+        <h2 className="max-w-xl font-display text-3xl font-extrabold sm:text-4xl">Ce que nous réglons à distance</h2>
+        <div className="mt-8 grid border-t border-slate-300 sm:grid-cols-2">
+          {SERVICES.map((service, i) => (
+            <div key={service.title} className={`border-b border-slate-300 py-6 sm:pr-8 ${i % 2 === 1 ? 'sm:border-l sm:pl-8' : ''}`}>
+              <h3 className="text-lg font-bold">{service.title}</h3>
+              <p className="mt-1.5 max-w-sm text-slate-600">{service.text}</p>
             </div>
           ))}
         </div>
+        <p className="mt-5 text-sm text-slate-500">Une panne matérielle (écran cassé, disque mort) demande une intervention sur place : voir plus bas.</p>
       </section>
 
-      <section className="bg-white py-14 sm:py-16 lg:py-20" id="tarifs">
-        <div className="ta-container">
-          <div className="mx-auto max-w-2xl text-center">
-            <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Tarifs particuliers</span>
-            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Une formule claire avant de commencer</h2>
-            <p className="mt-3 text-slate-500">Les prix affichés sont ceux configurés dans la plateforme.</p>
-          </div>
-          <div className="mt-9">
-            <PricingTable />
-          </div>
-        </div>
-      </section>
-
-      <section className="ta-container ta-section">
-        <div className="grid gap-10 lg:grid-cols-[.8fr_1.2fr] lg:items-start">
+      <section className="border-y border-slate-200 bg-white py-14 sm:py-16 lg:py-24">
+        <div className="ta-container grid gap-10 lg:grid-cols-[.8fr_1.2fr]">
           <div>
-            <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Simple</span>
-            <h2 className="mt-2 text-3xl font-black tracking-tight">De la demande à l’assistance.</h2>
-            <p className="mt-3 text-slate-500">Un parcours conçu pour éviter les étapes inutiles.</p>
+            <h2 className="font-display text-3xl font-extrabold sm:text-4xl">Vous gardez la main</h2>
+            <p className="mt-3 max-w-sm text-slate-600">Chaque assistance suit le même chemin, du début à la fin.</p>
           </div>
-          <div className="grid gap-4">
-            {STEPS.map((step) => (
-              <div key={step.number} className="ta-card flex gap-4 p-5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-xs font-black text-white">{step.number}</span>
-                <div>
-                  <h3 className="font-bold text-slate-950">{step.title}</h3>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">{step.text}</p>
-                </div>
-              </div>
+          <ol className="relative space-y-8 border-l-2 border-brand-600/30 pl-7">
+            {STEPS.map((step, i) => (
+              <li key={step.title} className="relative">
+                <span className="absolute -left-[41px] top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">{i + 1}</span>
+                <h3 className="text-lg font-bold">{step.title}</h3>
+                <p className="mt-1 max-w-md text-slate-600">{step.text}</p>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       </section>
 
-      <section className="bg-slate-100 py-14 sm:py-16 lg:py-20" id="pme">
+      <section className="ta-container ta-section" id="tarifs">
+        <h2 className="max-w-xl font-display text-3xl font-extrabold sm:text-4xl">Des prix annoncés avant de commencer</h2>
+        <div className="mt-8">
+          <PricingTable />
+        </div>
+      </section>
+
+      <section className="bg-[#14181f] py-14 text-white sm:py-16 lg:py-24" id="pme">
         <div className="ta-container grid gap-10 lg:grid-cols-2 lg:items-start">
           <div>
-            <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">PME</span>
-            <h2 className="mt-2 text-3xl font-black tracking-tight">Un besoin informatique récurrent ?</h2>
-            <p className="mt-3 max-w-lg leading-7 text-slate-500">
-              Présentez votre besoin. L’espace entreprise prévoit le suivi des demandes,
-              le parc informatique et les rapports pour les comptes concernés.
+            <h2 className="max-w-md font-display text-3xl font-extrabold sm:text-4xl">Une entreprise, plusieurs PC, un seul suivi</h2>
+            <p className="mt-4 max-w-md leading-7 text-slate-300">
+              Vos employés rejoignent avec un code. Vous voyez l’état de chaque poste, les demandes d’aide et un rapport mensuel.
             </p>
-            <div className="mt-6 rounded-2xl bg-slate-950 p-5 text-sm text-slate-300">
-              <p className="font-semibold text-white">Espace entreprise</p>
-              <p className="mt-2 leading-6">Demandes d’aide, historique, parc et informations de suivi dans un même espace.</p>
-              <Link to="/entreprise" className="mt-4 inline-flex font-semibold text-brand-400 hover:text-brand-300">
-                Accéder à l’espace entreprise →
-              </Link>
-            </div>
+            <Link to="/entreprise" className="mt-6 inline-flex font-semibold text-white underline decoration-brand-500 decoration-2 underline-offset-4 hover:decoration-white">
+              Ouvrir l’espace entreprise
+            </Link>
           </div>
-          <div className="ta-card p-5 sm:p-7">
+          <div className="rounded-xl bg-white p-5 text-slate-900 sm:p-7">
             <PmeRequestForm />
           </div>
         </div>
       </section>
 
-      <section id="technicien" className="ta-container ta-section">
-        <div className="ta-card overflow-hidden">
-          <div className="grid lg:grid-cols-2">
-            <div className="bg-slate-950 p-7 sm:p-10">
-              <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-400">Techniciens</span>
-              <h2 className="mt-2 text-3xl font-black text-white">Rejoignez le réseau Tech Assist</h2>
-              <p className="mt-4 leading-7 text-slate-400">
-                Candidatez pour assister les clients et travailler depuis la console technicien.
-              </p>
-            </div>
-            <div className="p-5 sm:p-8">
-              <TechnicianApplyForm />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="visite" className="bg-white ta-section">
-        <div className="ta-container grid gap-10 lg:grid-cols-2">
+      <section id="visite" className="ta-container ta-section">
+        <div className="grid gap-10 lg:grid-cols-2">
           <div>
-            <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Sur place</span>
-            <h2 className="mt-2 text-3xl font-black tracking-tight">Le problème nécessite un déplacement ?</h2>
-            <p className="mt-3 leading-7 text-slate-500">
-              Pour les interventions qui ne peuvent pas être résolues à distance, envoyez une demande d’intervention sur place.
+            <h2 className="max-w-md font-display text-3xl font-extrabold sm:text-4xl">Si le problème est matériel, nous nous déplaçons</h2>
+            <p className="mt-3 max-w-md leading-7 text-slate-600">
+              Écran, clavier, disque, câblage : décrivez la panne et votre quartier, nous vous répondons avec un devis.
             </p>
           </div>
           <div className="ta-card p-5 sm:p-7">
@@ -217,20 +155,31 @@ export function HomePage() {
         </div>
       </section>
 
+      <section id="technicien" className="border-t border-slate-200 bg-white py-14 sm:py-16 lg:py-24">
+        <div className="ta-container grid gap-10 lg:grid-cols-2">
+          <div>
+            <h2 className="max-w-md font-display text-3xl font-extrabold sm:text-4xl">Vous êtes technicien ?</h2>
+            <p className="mt-3 max-w-md leading-7 text-slate-600">
+              Candidatez pour reprendre les dossiers que l’agent ne peut pas résoudre, depuis la console technicien.
+            </p>
+          </div>
+          <div className="ta-card p-5 sm:p-7">
+            <TechnicianApplyForm />
+          </div>
+        </div>
+      </section>
+
       <section className="ta-container ta-section">
         <div className="mx-auto max-w-3xl">
-          <div className="text-center">
-            <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">FAQ</span>
-            <h2 className="mt-2 text-3xl font-black tracking-tight">Questions fréquentes</h2>
-          </div>
-          <div className="mt-8 space-y-3">
+          <h2 className="font-display text-3xl font-extrabold sm:text-4xl">Questions fréquentes</h2>
+          <div className="mt-8 divide-y divide-slate-300 border-y border-slate-300">
             {FAQ.map((item) => (
-              <details key={item.q} className="group ta-card p-5">
-                <summary className="cursor-pointer list-none pr-8 font-semibold text-slate-900 marker:hidden">
+              <details key={item.q} className="group py-5">
+                <summary className="cursor-pointer list-none pr-8 font-semibold marker:hidden">
                   {item.q}
                   <span className="float-right text-brand-600 transition group-open:rotate-45">+</span>
                 </summary>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">{item.a}</p>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{item.a}</p>
               </details>
             ))}
           </div>
