@@ -50,6 +50,55 @@ export function validAttachment(value: unknown): Attachment | null {
   return (mime === 'image/jpeg' ? jpeg : png) ? { mime, data } : null;
 }
 
+/** Diapositive affichée pendant que l'agent travaille. Le contenu vient du site (slides.json) : modifiable sans nouvelle version du programme. */
+export interface Slide {
+  title: string;
+  text: string;
+  /** Chemin d'une image du site, ex. /img/hero.jpg */
+  image?: string;
+  /** Petites vignettes (ex. nos métiers). */
+  items?: { image: string; label: string }[];
+}
+
+const IMAGE_PATH = /^\/img\/[A-Za-z0-9._-]{1,60}\.(jpg|jpeg|png|webp)$/;
+const MAX_SLIDES = 10;
+const MAX_IMAGE_BYTES = 800_000;
+export const DEFAULT_SITE = 'https://tech-assist-web.onrender.com';
+
+const str = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim().length > 0 && v.length <= max ? v.trim() : null);
+
+/** Ne garde que des diapositives bien formées : texte court, images du site uniquement. Tout le reste est ignoré. */
+export function parseSlides(json: unknown): Slide[] {
+  const list = Array.isArray(json) ? json : json && typeof json === 'object' && Array.isArray((json as { slides?: unknown }).slides) ? (json as { slides: unknown[] }).slides : [];
+  const out: Slide[] = [];
+  for (const raw of list.slice(0, MAX_SLIDES)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    const title = str(r.title, 120);
+    const text = typeof r.text === 'string' && r.text.length <= 280 ? r.text.trim() : '';
+    if (!title) continue;
+    const slide: Slide = { title, text };
+    if (typeof r.image === 'string' && IMAGE_PATH.test(r.image)) slide.image = r.image;
+    if (Array.isArray(r.items)) {
+      const items = r.items
+        .slice(0, 4)
+        .map((i) => (i && typeof i === 'object' ? (i as Record<string, unknown>) : null))
+        .filter((i): i is Record<string, unknown> => !!i && typeof i.image === 'string' && IMAGE_PATH.test(i.image) && !!str(i.label, 40))
+        .map((i) => ({ image: i.image as string, label: (i.label as string).trim() }));
+      if (items.length > 0) slide.items = items;
+    }
+    out.push(slide);
+  }
+  return out;
+}
+
+/** Diapositives de secours (site injoignable) : texte seul, aucune image. */
+export const FALLBACK_SLIDES: Slide[] = [
+  { title: 'Tech Assist, votre technicien informatique', text: "Dépannage de PC, Internet, imprimante, Office, virus… à distance, depuis chez vous." },
+  { title: 'Vos fichiers restent chez vous', text: 'Je ne touche jamais à vos documents, photos ni mots de passe. Tout ce que je fais est noté dans un rapport.' },
+  { title: 'Une entreprise ? Un contrat pour tous vos PC', text: "Contrat mensuel pour votre parc d'ordinateurs : suivi, dépannage et rapports." },
+];
+
 const sha = (s: string) => createHash('sha256').update(s).digest();
 
 export class ChatUi implements ConversationUi {
@@ -68,9 +117,15 @@ export class ChatUi implements ConversationUi {
   private handoff = false;
   private counter = 0;
   private attachment: Attachment | null = null;
+  private site = DEFAULT_SITE;
+  private fetchImpl: typeof fetch = fetch;
+  private slidesCache: { at: number; slides: Slide[] } | null = null;
+  private readonly imageCache = new Map<string, { at: number; type: string; body: Buffer }>();
 
-  static async start(options: { port?: number } = {}): Promise<ChatUi> {
+  static async start(options: { port?: number; site?: string; fetchImpl?: typeof fetch } = {}): Promise<ChatUi> {
     const ui = new ChatUi();
+    if (options.site) ui.site = options.site.replace(/\/$/, '');
+    if (options.fetchImpl) ui.fetchImpl = options.fetchImpl;
     ui.server = createServer((req, res) => ui.handle(req, res));
     await new Promise<void>((resolve, reject) => {
       ui.server.once('error', reject);
@@ -140,6 +195,42 @@ export class ChatUi implements ConversationUi {
     for (const stream of this.streams) stream.end();
     this.streams.clear();
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
+  }
+
+  // --- Diapositives ---
+
+  /** Diapositives du site (cache 30 min) ; en cas d'échec ou de contenu invalide, celles de secours. */
+  async loadSlides(): Promise<Slide[]> {
+    if (this.slidesCache && Date.now() - this.slidesCache.at < 30 * 60_000) return this.slidesCache.slides;
+    let slides: Slide[] = [];
+    try {
+      const res = await this.fetchImpl(`${this.site}/slides.json`, { signal: AbortSignal.timeout(4000), headers: { Accept: 'application/json' } });
+      if (res.ok && String(res.headers.get('content-type') ?? '').includes('json')) slides = parseSlides(await res.json());
+    } catch {
+      slides = [];
+    }
+    if (slides.length === 0) slides = FALLBACK_SLIDES;
+    this.slidesCache = { at: Date.now(), slides };
+    return slides;
+  }
+
+  /** Image du site, relayée par l'agent (la page n'appelle jamais d'autre adresse que 127.0.0.1). */
+  async loadImage(path: string): Promise<{ type: string; body: Buffer } | null> {
+    if (!IMAGE_PATH.test(path)) return null;
+    const hit = this.imageCache.get(path);
+    if (hit && Date.now() - hit.at < 60 * 60_000) return hit;
+    try {
+      const res = await this.fetchImpl(`${this.site}${path}`, { signal: AbortSignal.timeout(5000) });
+      const type = String(res.headers.get('content-type') ?? '').split(';')[0]!.trim();
+      if (!res.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return null;
+      const body = Buffer.from(await res.arrayBuffer());
+      if (body.length === 0 || body.length > MAX_IMAGE_BYTES) return null;
+      const entry = { at: Date.now(), type, body };
+      this.imageCache.set(path, entry);
+      return entry;
+    } catch {
+      return null;
+    }
   }
 
   // --- Interne ---
@@ -222,9 +313,25 @@ export class ChatUi implements ConversationUi {
       const nonce = randomBytes(16).toString('base64');
       res.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
-        'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+        'Content-Security-Policy': `default-src 'none'; img-src 'self'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       });
       res.end(PAGE.replaceAll('__NONCE__', nonce));
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/slides') {
+      this.loadSlides().then(
+        (slides) => res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ slides })),
+        () => res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ slides: FALLBACK_SLIDES })),
+      );
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/slide-image') {
+      this.loadImage(url.searchParams.get('p') ?? '').then((img) => {
+        if (!img) return void res.writeHead(404).end();
+        res.writeHead(200, { 'Content-Type': img.type, 'Cache-Control': 'private, max-age=3600' }).end(img.body);
+      });
       return;
     }
 
@@ -319,6 +426,25 @@ header > div { max-width:760px; margin:0 auto; padding:10px 16px; display:flex; 
 .typing i:nth-child(2) { animation-delay:.2s; } .typing i:nth-child(3) { animation-delay:.4s; }
 @keyframes blink { 0%,80%,100% { opacity:.25; } 40% { opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .typing i { animation:none; opacity:.6; } }
+.work { margin:14px 0; background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; box-shadow:var(--shadow); animation:rise .3s ease-out; }
+.work .status-line { display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:.85rem; color:var(--muted); border-bottom:1px solid var(--line); }
+.work .status-line i { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--brand); animation:blink 1.2s infinite ease-in-out; }
+.work .stage { position:relative; overflow:hidden; }
+.work .hero { width:100%; height:190px; object-fit:cover; object-position:100% 40%; display:block; background:var(--line); transform:scale(1.22); transform-origin:100% 40%; }
+.work .stage .hero { margin-bottom:0; }
+.work .body { position:relative; background:var(--card); }
+.work .body { padding:14px 16px 6px; }
+.work h3 { margin:0 0 4px; font-size:1.08rem; letter-spacing:-.01em; }
+.work .body p { margin:0; color:var(--muted); font-size:.93rem; }
+.work .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:12px 16px 0; }
+.work .grid figure { margin:0; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--bg); }
+.work .grid img { width:100%; height:64px; object-fit:cover; display:block; }
+.work .grid figcaption { padding:5px 8px; font-size:.78rem; font-weight:600; }
+.work .dots { display:flex; justify-content:center; gap:7px; padding:10px 0 12px; }
+.work .dots button { width:8px; height:8px; padding:0; border:0; border-radius:50%; background:var(--line); cursor:pointer; }
+.work .dots button[aria-current=true] { background:var(--brand); width:20px; border-radius:99px; }
+.work .dots button:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce) { .work { animation:none; } .work .status-line i { animation:none; } }
 .title { flex:1; min-width:0; }
 .title h1 { margin:0; font-size:1rem; font-weight:700; letter-spacing:-.01em; }
 .status { display:flex; align-items:center; gap:6px; font-size:.78rem; color:var(--muted); }
@@ -402,15 +528,60 @@ input[type=text]:focus { border-color:var(--brand); }
     return fetch(path + '?t=' + encodeURIComponent(token), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
   }
   function clearControls() { controls.replaceChildren(); }
-  var typingEl = null;
-  function showTyping() {
-    if (typingEl) return;
-    typingEl = el('div', 'typing'); typingEl.appendChild(avatar());
-    var dots = el('span'); dots.appendChild(el('i')); dots.appendChild(el('i')); dots.appendChild(el('i')); typingEl.appendChild(dots);
-    typingEl.appendChild(el('span', '', 'Je travaille dessus…'));
-    log.appendChild(typingEl); window.scrollTo(0, document.body.scrollHeight);
+  /* Pendant que l'agent travaille : « Je travaille dessus… » puis, après un instant, des diapositives sur Tech Assist. */
+  var typingEl = null, typingTimer = null, slideTimer = null, slidesData = null;
+  fetch('/slides?t=' + encodeURIComponent(token)).then(function (r) { return r.json(); }).then(function (d) { slidesData = d.slides || []; }).catch(function () { slidesData = []; });
+  function img(cls, path) {
+    var i = el('img', cls); i.alt = ''; i.loading = 'lazy'; i.decoding = 'async';
+    i.src = '/slide-image?p=' + encodeURIComponent(path) + '&t=' + encodeURIComponent(token);
+    i.onerror = function () { i.style.display = 'none'; };
+    return i;
   }
-  function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
+  function buildWork() {
+    var card = el('div', 'work');
+    var status = el('div', 'status-line'); status.appendChild(el('i')); status.appendChild(el('span', '', 'Je travaille sur votre ordinateur…')); card.appendChild(status);
+    var stage = el('div', 'stage'); card.appendChild(stage);
+    var dots = el('div', 'dots'); card.appendChild(dots);
+    var slides = slidesData && slidesData.length ? slidesData : [];
+    if (!slides.length) return card;
+    var index = 0;
+    function show(i) {
+      index = (i + slides.length) % slides.length;
+      var sl = slides[index];
+      stage.replaceChildren();
+      if (sl.image) stage.appendChild(img('hero', sl.image));
+      var body = el('div', 'body'); body.appendChild(el('h3', '', sl.title)); if (sl.text) body.appendChild(el('p', '', sl.text)); stage.appendChild(body);
+      if (sl.items && sl.items.length) {
+        var grid = el('div', 'grid');
+        sl.items.forEach(function (it) { var f = el('figure'); f.appendChild(img('', it.image)); f.appendChild(el('figcaption', '', it.label)); grid.appendChild(f); });
+        stage.appendChild(grid);
+      }
+      Array.prototype.forEach.call(dots.children, function (d, k) { d.setAttribute('aria-current', String(k === index)); });
+    }
+    slides.forEach(function (_, k) {
+      var d = el('button'); d.type = 'button'; d.setAttribute('aria-label', 'Diapositive ' + (k + 1));
+      d.onclick = function () { show(k); restart(); }; dots.appendChild(d);
+    });
+    function restart() {
+      clearInterval(slideTimer);
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && slides.length > 1) slideTimer = setInterval(function () { show(index + 1); }, 7000);
+    }
+    show(0); restart();
+    return card;
+  }
+  function showTyping() {
+    if (typingEl || typingTimer) return;
+    /* Pas de diapositives pour une réponse rapide : seulement si l'attente dure plus de 2 secondes. */
+    typingTimer = setTimeout(function () {
+      typingTimer = null;
+      typingEl = buildWork(); log.appendChild(typingEl); window.scrollTo(0, document.body.scrollHeight);
+    }, 2000);
+  }
+  function hideTyping() {
+    if (typingTimer) { clearTimeout(typingTimer); typingTimer = null; }
+    clearInterval(slideTimer);
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+  }
   function reply(id, value) { post('/reply', { id: id, value: value }); }
   /* Réduit la capture (1280 px, JPEG) dans le navigateur, puis l'envoie à l'agent local. */
   function sendImage(f, note) {
