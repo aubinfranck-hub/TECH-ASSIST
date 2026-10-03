@@ -153,3 +153,11 @@ Après l'assistance offerte, l'agent propose les forfaits Diagnostic (500), Dép
 ## Microsoft 365 (Teams, OneDrive, licence Office)
 
 `teams` : ferme Teams s'il ne répond plus et vide son cache (messages et compte intacts). `onedrive` : démarre OneDrive, ou le réinitialise (`/reset`, aucun fichier supprimé) ; signale un disque presque plein, cause fréquente. `office-licence` : lecture seule via `OSPP.VBS /dstatus` ; n'active et ne contourne jamais une licence, indique comment se reconnecter et qui doit renouveler. Les chemins sont fixes (jamais fournis par le serveur ou l'IA). Non validé sur une vraie machine : les actions `teams_clear_cache` et `onedrive_reset` sont marquées `verified: false`.
+
+## Droits administrateur
+
+Au lancement sous Windows, si l'agent n'est pas administrateur, il se relance une fois avec la fenêtre « Contrôle de compte d'utilisateur » (`src/elevate.ts`, drapeau interne `--elevated`). Le client voit et accepte lui-même ; s'il refuse, l'agent continue sans ces droits et le signale (les réparations de services et de fichiers système échouent alors). `--no-elevate` désactive la relance (tests, usage en terminal).
+
+## Veille et verrouillage
+
+Compétence `power` (lecture seule) : Ctrl+Alt+Suppr exigé à la connexion, délais de veille, dernier réveil. Le réglage de verrouillage est un réglage de sécurité : l'agent l'explique mais ne le modifie pas.

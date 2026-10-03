@@ -7,6 +7,7 @@ import { collectFleetHealth } from './skills/fleetStatus.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
 import { ChatUi } from './chatServer.js';
 import { converse } from './conversation.js';
+import { relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
 import { CompositeReporter, ConsoleReporter, HttpReporter } from './reporters.js';
@@ -52,6 +53,9 @@ async function main() {
     console.error("Cet agent fonctionne uniquement sous Windows pour l'instant.");
     process.exit(2);
   }
+
+  // Les réparations exigent les droits administrateur : on les demande une fois (fenêtre de Windows).
+  if (await relaunchAsAdminIfNeeded(process.argv)) process.exit(0);
 
   // Compte rendu au serveur : seulement si l'application a une session ouverte.
   const reporters: Reporter[] = [new ConsoleReporter()];
