@@ -1,3 +1,4 @@
+import type { ResultsView } from './results.js';
 import type { TaskTracker } from './tasks.js';
 
 /** Résultat d'une commande exécutée sur l'appareil du client. */
@@ -19,7 +20,13 @@ export interface CommandRunner {
 export interface ActionResult {
   ok: boolean;
   message: string;
+  /** Ce que l'action a changé, mesuré, en mots simples (« 1,2 Go libérés ») : montré au client et repris dans le rapport. */
+  effect?: string;
 }
+
+/** Mesures relevées pendant une analyse : comparées avant/après pour montrer au client ce qui a changé. */
+export type MetricId = 'freeBytes' | 'reclaimableBytes' | 'startupActive' | 'ramUsedPercent' | 'cpuPercent';
+export type Metrics = Partial<Record<MetricId, number>>;
 
 /** Une action que l'agent peut proposer. Rien ne s'exécute sans l'accord explicite du client. */
 export interface Action {
@@ -59,6 +66,8 @@ export interface Diagnosis {
   healthy: boolean;
   /** Le problème dépasse l'agent : un technicien doit prendre la main. */
   needsHuman: boolean;
+  /** Mesures chiffrées de l'état constaté (espace libre, programmes au démarrage…), pour le « avant / après ». */
+  metrics?: Metrics;
 }
 
 export interface Skill {
@@ -102,6 +111,8 @@ export interface Ui {
   confirmFixed(question: string): Promise<boolean>;
   /** Suivi des tâches (tâche en cours, temps écoulé, durée habituelle) : seule la fenêtre du client l'affiche. */
   tasks?: TaskTracker;
+  /** Résultats chiffrés de l'intervention (avant / après) : seule la fenêtre du client en fait une carte ; les autres affichent le texte du rapport. */
+  results?(view: ResultsView): void;
 }
 
 /** Interface de conversation : en plus des confirmations, l'utilisateur écrit et choisit. */

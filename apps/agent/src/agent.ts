@@ -1,8 +1,9 @@
 import { formatReport, type InterventionReport, type ReportAction, type ReportStatus } from './report.js';
+import { buildSkillResults, formatResultsText, summarizeResults, type ResultsView } from './results.js';
 import { cleanErrorMessage } from './skills/common.js';
 import { confirmOnly, rebootAction } from './skills/safety.js';
 import { DIAGNOSE_TASK, VERIFY_TASK, taskInfoFor, tracked } from './tasks.js';
-import type { Action, ActionResult, AgentEvent, CommandRunner, Diagnosis, Reporter, Skill, Ui } from './types.js';
+import type { Action, ActionResult, AgentEvent, CommandRunner, Diagnosis, Metrics, Reporter, Skill, Ui } from './types.js';
 
 export type Outcome =
   | { status: 'fixed'; actionsDone: string[] }
@@ -47,6 +48,9 @@ interface Trace {
   actions: ReportAction[];
   test: string;
   rebootNeeded: boolean;
+  /** Mesures relevées avant les corrections et après (relecture), pour montrer ce qui a changé. */
+  metricsBefore?: Metrics;
+  metricsAfter?: Metrics;
 }
 
 /**
@@ -67,9 +71,17 @@ export async function runSkill(skill: Skill, ctx: AgentContext): Promise<Outcome
   const outcome = await runCore(skill, ctx, trace);
   if (!ctx.quiet) {
     ctx.ui.tasks?.settle();
-    ctx.ui.info(formatReport(buildReport(skill, outcome, trace, now() - started, ctx.machine)));
+    const results = buildSkillResults(trace.metricsBefore, trace.metricsAfter, trace.actions, trace.rebootNeeded);
+    if (results) await showResults(ctx, skill.id, results);
+    ctx.ui.info(formatReport({ ...buildReport(skill, outcome, trace, now() - started, ctx.machine), ...(results ? { results: formatResultsText(results) } : {}) }));
   }
   return outcome;
+}
+
+/** Carte « Résultats » dans la fenêtre du client (le texte du rapport reprend la même chose), et une ligne dans le journal du technicien. */
+export async function showResults(ctx: { ui: Ui; reporter: Reporter }, skillId: string, view: ResultsView): Promise<void> {
+  ctx.ui.results?.(view);
+  await safeReport(ctx.reporter, { type: 'verified', skill: skillId, message: truncate(summarizeResults(view)), details: { results: true } });
 }
 
 function buildReport(skill: Skill, outcome: Outcome, trace: Trace, durationMs: number, machine?: string): InterventionReport {
@@ -102,6 +114,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
   }
 
   trace.diagnosis = diagnosis.summary;
+  trace.metricsBefore = diagnosis.metrics;
   await report({ type: 'diagnosed', message: diagnosis.summary, details: { problems: diagnosis.problems } });
   ctx.ui.info(diagnosis.summary);
   for (const line of diagnosis.advice) ctx.ui.info(line);
@@ -173,9 +186,11 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
       const result = await tracked(ctx.ui, taskInfoFor(action), () => runAction(action, ctx.runner), (r) => r.ok);
       if (result.ok) {
         done.push(action.id);
-        trace.actions.push({ title: action.title, result: 'done' });
+        trace.actions.push({ title: action.title, result: 'done', ...(result.effect ? { effect: result.effect } : {}) });
         if (action.needsReboot) trace.rebootNeeded = true;
-        await report({ type: 'action_done', action: action.id, message: result.message });
+        await report({ type: 'action_done', action: action.id, message: result.effect ?? result.message, ...(result.effect ? { details: { effect: result.effect } } : {}) });
+        // Ce que l'action a réellement changé, dit tout de suite (jamais une estimation : une mesure avant/après).
+        if (result.effect) ctx.ui.info(`✔ ${action.title} : ${result.effect}`);
         if (action.followUp) ctx.ui.info(action.followUp);
       } else {
         trace.actions.push({ title: action.title, result: 'failed' });
@@ -207,6 +222,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
       return escalate(ctx, report, done, `Vérification impossible : ${err instanceof Error ? err.message : String(err)}`);
     }
     trace.test = `Relecture de Windows : ${after.summary}`;
+    trace.metricsAfter = after.metrics;
     await report({ type: 'verified', message: after.summary, details: { healthy: after.healthy, problems: after.problems } });
 
     if (after.healthy) {

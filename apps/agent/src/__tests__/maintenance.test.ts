@@ -105,7 +105,7 @@ describe('nettoyage', () => {
   it('de bout en bout : accord, nettoyage, relecture, confirmation', async () => {
     const state = { cleaned: false };
     const runner = new ScriptedRunner([
-      { label: 'collect', test: (s) => s.includes('Get-FolderSize'), reply: () => ok(JSON.stringify(cleanFacts({ tempBytes: state.cleaned ? 0 : 2 * GB }))) },
+      { label: 'collect', test: (s) => s.includes('ConvertTo-Json'), reply: () => ok(JSON.stringify(cleanFacts({ tempBytes: state.cleaned ? 0 : 2 * GB }))) },
       { label: 'clean', test: (s) => s.includes('Remove-Item'), reply: () => { state.cleaned = true; return ok(); } },
     ]);
     const ui = new ScriptedConversation();

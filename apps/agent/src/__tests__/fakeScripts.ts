@@ -1,3 +1,4 @@
+import type { ResultsView } from '../results.js';
 import type { Action, AgentEvent, CommandResult, CommandRunner, ConversationUi, Reporter } from '../types.js';
 
 export const ok = (stdout = 'OK'): CommandResult => ({ stdout, stderr: '', exitCode: 0 });
@@ -64,6 +65,7 @@ export class ScriptedConversation implements ConversationUi {
   readonly choices: { question: string; options: string[] }[] = [];
   readonly proposed: string[] = [];
   readonly questions: string[] = [];
+  readonly resultCards: ResultsView[] = [];
   private a = 0;
   private p = 0;
   private f = 0;
@@ -73,6 +75,9 @@ export class ScriptedConversation implements ConversationUi {
 
   info(message: string) {
     this.infos.push(message);
+  }
+  results(view: ResultsView) {
+    this.resultCards.push(view);
   }
   async confirmAction(action: Action) {
     this.proposed.push(action.id);

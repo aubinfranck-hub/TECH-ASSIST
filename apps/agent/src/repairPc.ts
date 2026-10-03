@@ -1,5 +1,6 @@
-import { escalate, offerReboot, runSkill, safeReport, truncate, type AgentContext, type Outcome } from './agent.js';
+import { escalate, offerReboot, runSkill, safeReport, showResults, truncate, type AgentContext, type Outcome } from './agent.js';
 import { formatReport, type ReportAction, type ReportStatus } from './report.js';
+import { buildResults, formatResultsText } from './results.js';
 import { batterySkill } from './skills/battery.js';
 import { cleanupSkill } from './skills/cleanup.js';
 import { crashesSkill } from './skills/crashes.js';
@@ -12,7 +13,7 @@ import { confirmOnly } from './skills/safety.js';
 import { startupSkill } from './skills/startup.js';
 import { windowsRepairSkill } from './skills/windowsRepair.js';
 import { plannedTasks, RESCAN_TASK, SCAN_TASK, tracked, type TaskInfo } from './tasks.js';
-import type { Action, Diagnosis, Reporter, Skill, Ui } from './types.js';
+import type { Action, Diagnosis, Metrics, Reporter, Skill, Ui } from './types.js';
 
 /**
  * « RÉPARER MON PC » : diagnostic complet → classement par gravité → un seul « oui » pour le lot →
@@ -29,6 +30,8 @@ export interface Finding {
   severity: Severity;
   summary: string;
   advice: string[];
+  /** Mesures chiffrées de ce point (espace libre, programmes au démarrage…) : comparées avant/après dans les résultats. */
+  metrics?: Metrics;
 }
 
 export interface RepairStep {
@@ -73,7 +76,7 @@ async function scanPcDetailed(runner: AgentContext['runner'], steps: RepairStep[
   for (const step of steps) {
     try {
       const d = await step.build().diagnose(runner);
-      findings.push({ id: step.id, label: step.label, severity: classify(d), summary: d.summary, advice: d.advice });
+      findings.push({ id: step.id, label: step.label, severity: classify(d), summary: d.summary, advice: d.advice, ...(d.metrics ? { metrics: d.metrics } : {}) });
       if (d.actions.length > 0) plans.set(step.id, plannedTasks(d.actions));
     } catch (err) {
       findings.push({ id: step.id, label: step.label, severity: 'unknown', summary: `Analyse impossible : ${truncate(err instanceof Error ? err.message : String(err), 160)}`, advice: [] });
@@ -188,6 +191,9 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
   const status: ReportStatus =
     reboot === 'accepted' ? 'reboot' : remainingFix === 0 && remainingCrit === 0 ? 'resolved' : done.length > 0 || (fixable.length === 0 && handedOff) ? 'partial' : 'unresolved';
   const actions: ReportAction[] = log.actions();
+  // Ce qui a vraiment changé, chiffré : carte « Résultats » dans la fenêtre, même contenu dans le rapport et le journal du technicien.
+  const results = buildResults(before, after, actions, reboot === 'accepted');
+  if (done.length > 0 || critical.length > 0) await showResults(ctx, 'repair-pc', results);
   ctx.ui.info(
     formatReport({
       machine: ctx.machine,
@@ -197,6 +203,7 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
       test: reboot === 'accepted' ? "Non vérifié : l'ordinateur redémarre, relancez une analyse ensuite." : `Seconde analyse :\n${formatFindings(after)}`,
       status,
       durationMs: now() - started,
+      ...(done.length > 0 ? { results: formatResultsText(results) } : {}),
     }),
   );
   return { status: status === 'resolved' ? 'repaired' : 'partial', before, after, actionsDone: done, reboot, escalated: recorded };
@@ -206,6 +213,7 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
 class Recording {
   private readonly titles = new Map<string, string>();
   private readonly results = new Map<string, ReportAction['result']>();
+  private readonly effects = new Map<string, string>();
   private readonly order: string[] = [];
 
   constructor(
@@ -242,12 +250,16 @@ class Recording {
         const key = `${this.lastProposed.id}|${this.lastProposed.title}`;
         if (e.type === 'action_failed') this.results.set(key, 'failed');
         if (e.type === 'action_declined') this.results.set(key, 'declined'); // ex. refus de continuer sans point de restauration
+        const effect = (e.details as { effect?: unknown } | undefined)?.effect;
+        if (e.type === 'action_done' && typeof effect === 'string') this.effects.set(key, effect);
       }
       await this.outer.event(e);
     },
   };
 
   actions(): ReportAction[] {
-    return this.order.filter((k) => !k.startsWith('confirm_only|')).map((k) => ({ title: this.titles.get(k)!, result: this.results.get(k)! }));
+    return this.order
+      .filter((k) => !k.startsWith('confirm_only|'))
+      .map((k) => ({ title: this.titles.get(k)!, result: this.results.get(k)!, ...(this.effects.has(k) ? { effect: this.effects.get(k)! } : {}) }));
   }
 }

@@ -30,6 +30,8 @@ hors de portée (voir plus bas), l'agent le dit et propose un technicien.
 8. **Passer la main** si l'agent n'y arrive pas (échec, problème persistant, matériel défaillant). Si le serveur n'a pas pu enregistrer le passage de main, le client en est prévenu.
 9. **Rapport d'intervention** montré au client (ordinateur, tâche, diagnostic, actions faites/échouées/refusées, test, statut 🟢/🟠/🔴/🟡/⚪, durée). Il n'est pas envoyé tel quel au serveur : le journal d'événements suffit.
 
+10. **Résultats chiffrés** (`results.ts`) : le client voit ce qui a *vraiment* changé, pas seulement une liste d'actions. Les mesures viennent de la relecture de Windows (jamais de l'IA) : chaque compétence renvoie `Diagnosis.metrics` (espace libre, fichiers récupérables, programmes au démarrage, mémoire, processeur), comparées avant/après ; chaque nettoyage mesure la taille avant puis après et annonce l'effet réel (`FREED:<octets>` → « 3,0 Go libérés »), chaque désactivation compte ce qu'elle a retiré (`DISABLED:<n>`). Une **carte « Résultats »** s'affiche dans la fenêtre (santé /100 avant → après pour « Réparer mon PC », lignes chiffrées, effet de chaque action), le même texte est dans le rapport, et une ligne résumé dans le journal du technicien. Honnêteté : sous la tolérance (50 Mo, bruit de mesure) c'est « inchangé » ; mémoire et processeur (mesures instantanées) ne sont montrés que s'ils s'améliorent ; après un redémarrage en attente, aucun chiffre n'est inventé. L'indicateur de santé : 100 − 25 par problème pour un technicien − 12 par problème corrigeable − 4 par point à surveiller.
+
 Chaque étape est envoyée à `POST /api/app/sessions/:id/events` (audit `agent.<type>`).
 Un journal serveur en panne n'empêche pas le dépannage.
 
@@ -50,10 +52,10 @@ Diagnostic complet (réseau, sécurité, disque, nettoyage, fichiers système, p
 | `print` | Spouleur, file bloquée, imprimante hors ligne, **page de test** | printui.dll (`verified: false`) ; seule la preuve est la page imprimée |
 | `network` | Cartes, DHCP, box, Internet, DNS, https, proxy ; tableau 🟢/🔴 ; chaîne d'hypothèses | Winsock/TCP-IP : sensible + redémarrage |
 | `malware`, `office`, `uninstall` (conversation) | Virus, Office/Outlook, désinstallation | voir fichiers `skills/` |
-| `performance` | RAM, CPU, durée depuis le dernier redémarrage | ne ferme aucun programme du client |
-| `startup` | Programmes au démarrage | ouvre la page Paramètres ; **n'écrit pas dans le registre** |
+| `performance` | RAM, CPU, durée depuis le dernier redémarrage, **mode d'alimentation** | ne ferme aucun programme du client ; « Économie d'énergie » → « Équilibré » (`powercfg /setactive`, réversible) |
+| `startup` | Programmes au démarrage | **désactive** (réversible, rien n'est supprimé) les programmes connus comme inutiles au démarrage (lanceurs de jeux, messageries, mises à jour d'applis…) via la valeur `StartupApproved` du Gestionnaire des tâches ; antivirus, pilotes, sauvegarde, synchronisation et accès à distance jamais touchés ; les raccourcis du dossier Démarrage restent au client (page Paramètres) |
 | `disk` | Espace, santé (SMART/volumes) | **ne répare jamais un disque physique** : prévient et passe la main ; erreurs de système de fichiers : `Repair-Volume` |
-| `cleanup` | Temp, cache navigateurs, corbeille, composants Windows | suppression prudente : refuse racine/profil/Windows, ignore tout ce qui passe par un lien |
+| `cleanup` | Temp, cache navigateurs, corbeille, **caches de Windows** (mises à jour téléchargées, rapports d'erreurs ; admin), composants Windows | espace libéré mesuré ; suppression prudente : refuse racine/profil/Windows, ignore tout ce qui passe par un lien |
 | `windows-repair` | DISM (CheckHealth → RestoreHealth) puis SFC | jugé sur énumération et codes de sortie ; DISM = point de restauration |
 | `drivers` | Appareils en erreur (codes numériques), pilote absent, vieux pilotes | identifiant d'appareil revalidé avant tout script |
 | `crashes` | Plantages 30 jours (événements 41/1001/6008 comptés) | ≥ 5 : matériel probable → technicien |
@@ -110,7 +112,7 @@ API : `GEMINI_API_KEY` (et `GEMINI_MODEL`, défaut `gemini-2.0-flash`) pour l'as
 
 ## Ce qui n'est PAS validé
 
-- **Aucun test sur un vrai Windows.** Les tests (agent : voir `npm test`) utilisent un faux Windows ; les scripts PowerShell sont contrôlés en **structure** seulement (accolades, parenthèses, enveloppe), jamais exécutés. Les actions marquées `verified: false` (sortie audio par COM, point de restauration — limite d'un par 24 h —, `Repair-Volume -SpotFix` sur le lecteur système, SFC par code de sortie, page de test printui) sont les plus fragiles. **À essayer sur une machine de test** avant toute mise en service, en commençant par les collectes (lecture seule), puis les actions une à une.
+- **Aucun test sur un vrai Windows.** Les tests (agent : voir `npm test`) utilisent un faux Windows ; les scripts PowerShell sont contrôlés en **structure** seulement (accolades, parenthèses, enveloppe), jamais exécutés. Les actions marquées `verified: false` (désactivation au démarrage par `StartupApproved`, sortie audio par COM, point de restauration — limite d'un par 24 h —, `Repair-Volume -SpotFix` sur le lecteur système, SFC par code de sortie, page de test printui) sont les plus fragiles. **À essayer sur une machine de test** avant toute mise en service, en commençant par les collectes (lecture seule), puis les actions une à une.
 - Cmdlets/classes à confirmer sur machine réelle : `Get-PhysicalDisk` + `MSStorageDriver_FailurePredictStatus`, `Win32_Printer.PrinterStatus` (codes 6/7 hors ligne), `Repair-WindowsImage -CheckHealth`, `Get-MpComputerStatus` quand un antivirus tiers est présent, `winget list` (code de sortie) en contexte administrateur.
 - La formation repose sur une IA : exactitude non garantie ; pas d'avancement persistant ; pas de contrôle de la réussite autre que la déclaration du client.
 - Pas d'installateur (EXE signé, APK) ni d'empreinte matérielle côté client ; Android non commencé.

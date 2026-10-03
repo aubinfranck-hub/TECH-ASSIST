@@ -5,6 +5,8 @@ export type ReportStatus = 'resolved' | 'partial' | 'unresolved' | 'declined' | 
 export interface ReportAction {
   title: string;
   result: 'done' | 'failed' | 'declined';
+  /** Ce que l'action a changé, mesuré (« 1,2 Go libérés »). */
+  effect?: string;
 }
 
 export interface InterventionReport {
@@ -17,6 +19,8 @@ export interface InterventionReport {
   test: string;
   status: ReportStatus;
   durationMs: number;
+  /** Résultats chiffrés (avant → après), déjà mis en forme. */
+  results?: string;
 }
 
 const STATUS_LABEL: Record<ReportStatus, string> = {
@@ -46,7 +50,8 @@ export function formatReport(report: InterventionReport): string {
   lines.push('TÂCHE', report.task, '', '', 'DIAGNOSTIC', report.diagnosis || 'Aucun diagnostic');
   lines.push('', 'ACTIONS');
   if (report.actions.length === 0) lines.push('Aucune modification effectuée');
-  for (const a of report.actions) lines.push(`${ACTION_MARK[a.result]} ${a.title}`);
+  for (const a of report.actions) lines.push(`${ACTION_MARK[a.result]} ${a.title}${a.effect ? ` — ${a.effect}` : ''}`);
+  if (report.results) lines.push('', report.results);
   lines.push('', 'TEST', report.test || 'Non vérifié', '', 'STATUT', STATUS_LABEL[report.status], '', 'DURÉE', formatDuration(report.durationMs));
   return lines.join('\n');
 }

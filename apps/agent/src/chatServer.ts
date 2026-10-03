@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { MAX_ATTACHMENT_CHARS, type Attachment } from './assistant.js';
+import type { ResultsView } from './results.js';
 import type { TaskInfo, TaskResult, TaskTracker } from './tasks.js';
 import type { Action, ConversationUi } from './types.js';
 
@@ -24,6 +25,7 @@ type ChatEvent =
   | { seq: number; type: 'resolved'; id: string }
   | { seq: number; type: 'step'; n: number }
   | { seq: number; type: 'tasks'; items: TaskView[]; now: number; complete: boolean }
+  | { seq: number; type: 'results'; view: ResultsView }
   | { seq: number; type: 'ended'; text: string };
 
 /** Une tâche telle que la fenêtre l'affiche ; les durées (min, max) sont en secondes, les dates en millisecondes. */
@@ -253,6 +255,12 @@ export class ChatUi implements ConversationUi {
     } catch {
       /* le suivi côté serveur ne doit jamais gêner la fenêtre du client */
     }
+  }
+
+  /** Carte « Résultats » : ce qui a changé sur l'ordinateur, chiffré (avant → après). */
+  results(view: ResultsView): void {
+    if (this.closed) return;
+    this.push({ type: 'results', view });
   }
 
   wasHandedOff(): boolean {
@@ -626,6 +634,30 @@ body.working .step.current .dot::before { opacity:1; animation:turn 1s linear in
 .t-list .name { flex:1; min-width:0; overflow-wrap:anywhere; }
 .t-list .when { flex:none; color:var(--muted); font-variant-numeric:tabular-nums; }
 .t-list .spin { width:14px; height:14px; border-width:2px; }
+/* Résultats de l'intervention : avant → après, mesuré */
+.results { margin:16px 0; padding:16px 18px; border:1px solid #bbf7d0; background:linear-gradient(180deg,#f0fdf4,#fff); border-radius:18px; animation:rise .25s ease-out; }
+.r-title { display:block; font-size:1.05rem; }
+.r-head { margin:4px 0 10px; color:var(--muted); font-size:.9rem; }
+.r-score { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:10px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin-bottom:10px; }
+.r-lab { font-weight:600; }
+.r-nums { white-space:nowrap; }
+.r-nums b { font-size:1.8rem; font-variant-numeric:tabular-nums; }
+.r-nums small { color:var(--muted); margin-left:2px; }
+.r-nums .r-from { color:var(--muted); }
+.r-nums .r-arrow { margin:0 8px; font-style:normal; color:var(--muted); }
+.r-nums .r-to.up { color:var(--ok); }
+.r-rows, .r-acts { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.r-acts { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+.r-rows li { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:2px 12px; font-size:.92rem; }
+.r-rows .r-val { margin-left:auto; text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.r-rows .r-chg { margin-left:6px; font-weight:700; color:var(--muted); }
+.r-rows .better .r-chg { color:var(--ok); }
+.r-rows .worse .r-chg { color:#92400e; }
+.r-acts li { font-size:.9rem; overflow-wrap:anywhere; }
+.r-acts .done::before { content:'✔ '; color:var(--ok); font-weight:700; }
+.r-acts .failed::before { content:'✖ '; color:var(--no); font-weight:700; }
+.r-acts .declined::before { content:'○ '; color:var(--muted); }
+.r-acts b { font-weight:600; }
 @media (prefers-reduced-motion: reduce) { .spin, body.working .step.current .dot::before { animation-duration:3s; } .t-bar i { transition:none; } }
 .panel { flex:1; min-height:0; display:flex; flex-direction:column; width:100%; max-width:820px; margin:0 auto; background:var(--card); border:1px solid var(--line); border-radius:22px; box-shadow:var(--shadow); overflow:hidden; }
 main { flex:1; min-height:0; overflow-y:auto; padding:18px 26px; }
@@ -885,6 +917,49 @@ form button.act { flex:0 0 auto; min-width:170px; }
     if (live && !taskTick) taskTick = setInterval(renderTasks, 1000);
     if (!live && taskTick) { clearInterval(taskTick); taskTick = null; }
   }
+  /* Résultats : score de santé avant → après, mesures chiffrées, effet de chaque action. */
+  function showResults(v) {
+    hideTyping();
+    var card = el('div', 'results');
+    card.appendChild(el('strong', 'r-title', "Résultats de l'intervention"));
+    card.appendChild(el('p', 'r-head', v.headline));
+    if (v.score) {
+      var sc = el('div', 'r-score');
+      sc.appendChild(el('span', 'r-lab', "Santé de l'ordinateur"));
+      var nums = el('span', 'r-nums');
+      nums.appendChild(el('b', 'r-from', String(v.score.before)));
+      nums.appendChild(el('i', 'r-arrow', '→'));
+      nums.appendChild(el('b', v.score.after > v.score.before ? 'r-to up' : 'r-to', String(v.score.after)));
+      nums.appendChild(el('small', '', '/100'));
+      sc.appendChild(nums);
+      card.appendChild(sc);
+    }
+    if (v.rows.length) {
+      var ul = el('ul', 'r-rows');
+      v.rows.forEach(function (r) {
+        var li = el('li', r.trend);
+        li.appendChild(el('span', 'r-name', r.label));
+        var val = el('span', 'r-val', r.before + ' → ' + r.after);
+        if (r.trend !== 'same') val.appendChild(el('span', 'r-chg', r.change));
+        li.appendChild(val);
+        ul.appendChild(li);
+      });
+      card.appendChild(ul);
+    }
+    var acts = v.actions.filter(function (a) { return a.effect || a.result !== 'done'; });
+    if (acts.length) {
+      var al = el('ul', 'r-acts');
+      acts.forEach(function (a) {
+        var li = el('li', a.result);
+        li.appendChild(el('b', '', a.title));
+        if (a.effect) li.appendChild(document.createTextNode(' : ' + a.effect));
+        al.appendChild(li);
+      });
+      card.appendChild(al);
+    }
+    log.appendChild(card);
+    scrollDown();
+  }
   function bubble(cls, text, who) {
     var welcome = document.getElementById('welcome'); if (welcome) welcome.remove();
     hideTyping();
@@ -1064,6 +1139,7 @@ form button.act { flex:0 0 auto; min-width:170px; }
     else if (ev.type === 'choose') { hideTyping(); current = ev.id; showChoose(ev); }
     else if (ev.type === 'step') setStep(ev.n);
     else if (ev.type === 'tasks') setTasks(ev);
+    else if (ev.type === 'results') showResults(ev.view);
     else if (ev.type === 'resolved') { if (current === ev.id) { clearControls(); current = null; showTyping(); } }
     else if (ev.type === 'ended') { chatEnded = true; hideTyping(); bubble('note', ev.text); clearControls(); setStep(4); es.close(); }
     syncBusy();

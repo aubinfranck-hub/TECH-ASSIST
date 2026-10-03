@@ -1,5 +1,5 @@
 import type { Action, Diagnosis, Skill } from '../types.js';
-import { asArray, extractJson, formatBytes, guarded, nonNegative, readScript, safeLabel, tracked } from './common.js';
+import { asArray, extractJson, formatBytes, guarded, nonNegative, readScript, runScript, safeLabel, tracked } from './common.js';
 
 /**
  * Lenteur : mémoire, processeur, durée depuis le dernier redémarrage, processus gourmands.
@@ -12,7 +12,12 @@ export interface PerformanceFacts {
   cpuPercent: number | null;
   uptimeDays: number;
   top: { name: string; ramBytes: number }[];
+  /** Mode d'alimentation actif (identifiant Windows) : en « Économie d'énergie », Windows bride le processeur. */
+  powerScheme?: string | null;
 }
+
+const POWER_SAVER = 'a1841308-3541-4fab-bc81-f71556f20b4a';
+const POWER_BALANCED = '381b4222-f694-41f0-9685-ff5bb260df2e';
 
 /** Lecture seule : mémoire, charge processeur, durée de fonctionnement, 5 processus les plus gourmands en mémoire. */
 export const COLLECT_SCRIPT = guarded(String.raw`
@@ -21,7 +26,8 @@ $os = Get-CimInstance -ClassName Win32_OperatingSystem
 $cpu = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
 $up = (Get-Date) - $os.LastBootUpTime
 $top = @(Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 | ForEach-Object { [pscustomobject]@{ name = [string]$_.ProcessName; ramBytes = [double]$_.WorkingSet64 } })
-[pscustomobject]@{ totalRamBytes = [double]$os.TotalVisibleMemorySize * 1024; freeRamBytes = [double]$os.FreePhysicalMemory * 1024; cpuPercent = $cpu; uptimeDays = [double]$up.TotalDays; top = $top } | ConvertTo-Json -Depth 3 -Compress
+$scheme = [regex]::Match((powercfg /getactivescheme | Out-String), '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}').Value
+[pscustomobject]@{ totalRamBytes = [double]$os.TotalVisibleMemorySize * 1024; freeRamBytes = [double]$os.FreePhysicalMemory * 1024; cpuPercent = $cpu; uptimeDays = [double]$up.TotalDays; top = $top; powerScheme = $scheme } | ConvertTo-Json -Depth 3 -Compress
 `);
 
 export function parsePerformanceFacts(stdout: string): PerformanceFacts {
@@ -32,6 +38,7 @@ export function parsePerformanceFacts(stdout: string): PerformanceFacts {
     cpuPercent: nonNegative(raw.cpuPercent),
     uptimeDays: nonNegative(raw.uptimeDays) ?? 0,
     top: asArray<Record<string, unknown>>(raw.top).map((t) => ({ name: safeLabel(t.name, 40), ramBytes: nonNegative(t.ramBytes) ?? 0 })).filter((t) => t.name),
+    powerScheme: typeof raw.powerScheme === 'string' && /^[0-9a-f-]{36}$/i.test(raw.powerScheme) ? raw.powerScheme.toLowerCase() : null,
   };
 }
 
@@ -44,6 +51,20 @@ const restartRecommended = (days: number): Action => ({
   verified: true,
   needsReboot: true,
   run: async () => ({ ok: true, message: 'Redémarrage recommandé' }),
+});
+
+/** Remet le mode « Équilibré » : le mode « Économie d'énergie » bride le processeur et ralentit tout. Réversible dans Paramètres > Alimentation. */
+const balancedPower = (): Action => ({
+  id: 'set_balanced_power',
+  title: "Passer l'ordinateur en mode d'alimentation « Équilibré »",
+  explanation:
+    "L'ordinateur est réglé en « Économie d'énergie » : Windows bride volontairement le processeur, ce qui ralentit tout. Je le passe en mode « Équilibré » (le réglage normal de Windows : rapide quand il le faut, économe sinon). Sur batterie, l'autonomie sera un peu plus courte. Vous pouvez revenir en arrière dans Paramètres > Système > Alimentation.",
+  requiresAdmin: false,
+  verified: true,
+  run: async (runner) => {
+    const res = await runScript(runner, guarded(`powercfg /setactive ${POWER_BALANCED}\nif ($LASTEXITCODE -ne 0) { throw "Windows a refusé de changer le mode d'alimentation." }\nWrite-Output 'OK'`));
+    return res.ok ? { ok: true, message: 'Mode Équilibré activé', effect: "Mode d'alimentation : Équilibré (au lieu d'Économie d'énergie)" } : res;
+  },
 });
 
 export function diagnosePerformance(facts: PerformanceFacts, tried: ReadonlySet<string> = new Set()): Diagnosis {
@@ -72,6 +93,11 @@ export function diagnosePerformance(facts: PerformanceFacts, tried: ReadonlySet<
     problems.push('long_uptime');
     sentences.push(`L'ordinateur n'a pas redémarré depuis ${Math.round(facts.uptimeDays)} jours.`);
   }
+  if (facts.powerScheme === POWER_SAVER) {
+    problems.push('power_saver');
+    sentences.push("Le mode d'alimentation est « Économie d'énergie » : Windows bride le processeur.");
+    if (!tried.has('set_balanced_power')) actions.push(balancedPower());
+  }
   if ((longUptime || (ramHigh && facts.uptimeDays >= 3)) && !tried.has('restart_recommended')) actions.push(restartRecommended(facts.uptimeDays));
 
   return {
@@ -82,6 +108,7 @@ export function diagnosePerformance(facts: PerformanceFacts, tried: ReadonlySet<
     // Sans action possible, le constat reste un conseil (🟡) : on ne laisse pas la boucle chercher une correction qui n'existe pas.
     healthy: actions.length === 0,
     needsHuman: false,
+    metrics: { ramUsedPercent: Math.round(used * 100), ...(facts.cpuPercent !== null ? { cpuPercent: facts.cpuPercent } : {}) },
   };
 }
 

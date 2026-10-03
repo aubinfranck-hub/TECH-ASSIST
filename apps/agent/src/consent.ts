@@ -47,5 +47,6 @@ export function withStandingConsent(ui: ConversationUi): ConversationUi {
   if (ui.takeAttachment) wrapped.takeAttachment = () => ui.takeAttachment!();
   if (ui.progress) wrapped.progress = (step) => ui.progress!(step);
   if (ui.tasks) wrapped.tasks = ui.tasks;
+  if (ui.results) wrapped.results = (view) => ui.results!(view);
   return wrapped;
 }
