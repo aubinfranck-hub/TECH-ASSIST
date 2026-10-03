@@ -6,7 +6,8 @@ import { validateBody } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 import { alertInBackground } from '../notify/technicianAlerts.js';
 import { logAudit, type Db } from '../utils/audit.js';
-import { humanIncludedFor, upgradeOffer } from '../utils/offers.js';
+import { freeLaunch, humanIncludedFor, upgradeOffer } from '../utils/offers.js';
+import { HUMAN_MIN_MINUTES, expireOverdueSessions } from '../utils/sessionClock.js';
 import { progressView, STALE_PROGRESS_SECONDS } from '../utils/taskProgress.js';
 import { creditEarningSafely } from '../partners/earnings.js';
 import { closeViewerOrderIfUnpaid, settleViewerSession } from '../partners/viewer.js';
@@ -21,7 +22,7 @@ export type SessionMode = 'ia' | 'humain';
 
 export type CreateSessionResult =
   | { ok: true; session: { id: string; session_code: string; status: string; code_expires_at: Date; duration_minutes: number; mode: SessionMode; human_included: boolean } }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; code?: 'human_not_included' | 'ai_unavailable' };
 
 /**
  * RS-03 : code de session à usage unique, généré côté serveur, expire en 10 min
@@ -55,6 +56,18 @@ export async function createSessionForOrder(
     return { ok: false, status: 400, error: 'Cette formule ne donne pas droit à une session assistée' };
   }
 
+  // Offre « IA seule » : jamais de technicien sans complément payé. Si l'assistance devait être servie par un humain
+  // (technicien demandé, ou agent IA désactivé), elle est refusée ici et la commande payée reste utilisable.
+  const humanIncluded = humanIncludedFor(order.metadata);
+  if (mode === 'humain' && !humanIncluded) {
+    return requestedMode === 'humain'
+      ? { ok: false, status: 402, code: 'human_not_included', error: "Votre offre « Assistance IA » ne comprend pas de technicien. Passez à « IA + technicien » pour qu'il prenne le relais." }
+      : { ok: false, status: 503, code: 'ai_unavailable', error: "L'agent IA n'est pas disponible pour le moment. Votre forfait n'est pas consommé : réessayez dans un instant." };
+  }
+  // Le temps du forfait court dès le début d'une assistance IA ; pour un technicien, dès sa prise en charge.
+  // Pendant le lancement gratuit, aucune limite de durée n'est appliquée.
+  const clockNow = mode === 'ia' && !freeLaunch();
+
   let code = generateSessionCode();
   // Garantit l'unicité même en cas de collision improbable.
   for (let attempts = 0; attempts < 5; attempts++) {
@@ -64,10 +77,11 @@ export async function createSessionForOrder(
   }
 
   const { rows } = await db.query(
-    `INSERT INTO sessions (order_id, session_code, platform, code_expires_at, duration_minutes, mode, requested_mode, human_included)
-     VALUES ($1, $2, $3, now() + interval '${SESSION_CODE_TTL_MINUTES} minutes', $4, $5, $6, $7)
+    `INSERT INTO sessions (order_id, session_code, platform, code_expires_at, duration_minutes, mode, requested_mode, human_included, started_at, ends_at)
+     VALUES ($1, $2, $3, now() + interval '${SESSION_CODE_TTL_MINUTES} minutes', $4, $5, $6, $7,
+             CASE WHEN $8::boolean THEN now() END, CASE WHEN $8::boolean THEN now() + make_interval(mins => $4::int) END)
      RETURNING id, session_code, status, code_expires_at, duration_minutes, mode, human_included`,
-    [orderId, code, platform, order.duration_minutes, mode, requestedMode, humanIncludedFor(order.metadata)],
+    [orderId, code, platform, order.duration_minutes, mode, requestedMode, humanIncluded, clockNow],
   );
   const session = rows[0];
 
@@ -98,6 +112,7 @@ sessionsRouter.post(
 );
 
 sessionsRouter.get('/sessions/:code', async (req, res) => {
+  await expireOverdueSessions(pool);
   const { rows } = await pool.query(
     `SELECT id, session_code, status, code_expires_at, duration_minutes,
             started_at, ends_at, consent_screen_at, consent_control_at, technician_id,
@@ -213,7 +228,7 @@ sessionsRouter.get('/technician/queue', requireAuth('technician', 'admin'), asyn
      LEFT JOIN company_help_requests chr ON chr.session_id = s.id
      LEFT JOIN companies c ON c.id = chr.company_id
      WHERE s.status IN ('created', 'waiting_technician') AND s.technician_id IS NULL
-       AND s.mode = 'humain'
+       AND s.mode = 'humain' AND s.human_included = TRUE
      ORDER BY (chr.priority = 'urgent') DESC, s.created_at ASC`,
   );
   res.json({ queue: rows });
@@ -221,6 +236,7 @@ sessionsRouter.get('/technician/queue', requireAuth('technician', 'admin'), asyn
 
 /** Sessions actives assignées au technicien connecté (console, après prise en charge). */
 sessionsRouter.get('/technician/my-sessions', requireAuth('technician', 'admin'), async (req, res) => {
+  await expireOverdueSessions(pool);
   const { rows } = await pool.query(
     `SELECT s.id, s.session_code, s.platform, s.status, s.ends_at,
             s.consent_screen_at, s.consent_control_at,
@@ -245,11 +261,14 @@ sessionsRouter.get('/technician/my-sessions', requireAuth('technician', 'admin')
 sessionsRouter.patch('/technician/sessions/:id/claim', requireAuth('technician', 'admin'), async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE sessions
-     SET technician_id = $2, status = 'active', started_at = now(),
-         ends_at = now() + (duration_minutes || ' minutes')::interval
-     WHERE id = $1 AND technician_id IS NULL
+     SET technician_id = $2, status = 'active', started_at = COALESCE(started_at, now()),
+         -- Une seule horloge par assistance : déjà lancée par l'agent IA, elle n'est pas remise à zéro ;
+         -- le technicien garde au moins HUMAN_MIN_MINUTES pour intervenir.
+         ends_at = GREATEST(COALESCE(ends_at, now() + make_interval(mins => duration_minutes)), now() + make_interval(mins => $3::int))
+     WHERE id = $1 AND technician_id IS NULL AND human_included = TRUE AND kind = 'assistance'
+       AND status IN ('created', 'waiting_technician')
      RETURNING id, status, started_at, ends_at`,
-    [req.params.id, req.auth!.sub],
+    [req.params.id, req.auth!.sub, HUMAN_MIN_MINUTES],
   );
   if (rows.length === 0) {
     return res.status(409).json({ error: 'Session déjà prise en charge' });

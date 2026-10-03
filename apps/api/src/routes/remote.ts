@@ -5,6 +5,7 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { logAudit } from '../utils/audit.js';
+import { expireOverdueSessions } from '../utils/sessionClock.js';
 import { decryptSecret, encryptSecret } from '../utils/crypto.js';
 
 export const remoteRouter = Router();
@@ -100,6 +101,7 @@ remoteRouter.post('/sessions/:id/pair', validateBody(pairSchema), async (req, re
 });
 
 remoteRouter.get('/technician/sessions/:id/remote-credentials', requireAuth('technician', 'admin'), async (req, res) => {
+  await expireOverdueSessions(pool);
   const { rows } = await pool.query(
     'SELECT id, status, technician_id, consent_control_at, remote_peer_id, remote_password_encrypted FROM sessions WHERE id = $1',
     [req.params.id],

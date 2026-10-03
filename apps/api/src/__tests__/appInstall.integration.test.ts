@@ -187,6 +187,7 @@ describe('Application : inscription par email, assistance offerte en base, abonn
     });
 
     it('l\'offre à 500 FCFA (IA seule) : portée complète, sans technicien', async () => {
+      process.env.AI_AGENT_ENABLED = 'true';
       const r = await register();
       const tech = await technicianToken();
       const order = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'diagnostic_express' });
@@ -197,6 +198,7 @@ describe('Application : inscription par email, assistance offerte en base, abonn
       expect(started.status).toBe(201);
       expect(started.body.scope).toBe('full');
       expect(started.body.humanIncluded).toBe(false);
+      expect(started.body.session.mode).toBe('ia');
     });
 
     it('refuse les formules gratuites, abonnement et PME, et la commande d\'un autre appareil', async () => {

@@ -208,3 +208,14 @@ Ce qui manque (ordre proposé) :
 5. Tableau de bord du partenaire (PC, sessions, facturation) et commission éventuelle de Tech Assist.
 
 Prérequis : test réel du paiement Jèko, déploiement RustDesk, validation juridique des CGU partenaire.
+
+## D17 — Droits par offre appliqués côté serveur (FAIT)
+
+Constat : les droits des offres (D14) n'étaient que des textes ; rien n'empêchait un forfait « IA seule » d'atteindre la file des techniciens, ni une session de durer au-delà de la durée achetée.
+
+Décision :
+- **500 FCFA (IA seule)** : `sessions.human_included = false` ; refus `402 human_not_included` (avec l'offre de complément à 1 500 FCFA) si le client demande un technicien ; la session n'entre jamais dans la file et ne peut pas être prise en charge (claim refusé). Si l'agent IA est désactivé, `503 ai_unavailable` : la commande n'est pas consommée.
+- **2 000 FCFA (IA + technicien) et entreprises** : visibles dans la file ; à la prise en charge l'horloge démarre avec un minimum de 10 minutes (`HUMAN_MIN_MINUTES`).
+- **Une seule horloge** (`started_at`/`ends_at`) ; fin automatique (`stopped_by = 'timeout'`, mot de passe distant effacé, gain technicien crédité) par balayage toutes les minutes et à chaque lecture/événement de session.
+- **`FREE_LAUNCH=true`** : technicien disponible pour tous, aucune limite de durée, aucun balayage.
+- Reste à faire : versement automatique Mobile Money des gains des techniciens (D16) via les transferts Jèko — documentation à lire avant toute implémentation ; aujourd'hui les paiements restent manuels (`technician_payouts`).

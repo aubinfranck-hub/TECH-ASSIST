@@ -9,6 +9,7 @@ import { alertInBackground } from '../notify/technicianAlerts.js';
 import { logAudit, type Db } from '../utils/audit.js';
 import { isDisposableEmail, normalizeEmail } from '../utils/email.js';
 import { freeLaunch, upgradeOffer } from '../utils/offers.js';
+import { expireOverdueSessions } from '../utils/sessionClock.js';
 import { consumeEmailCode, emailField, emailVerificationEnabled } from './emailVerification.js';
 import {
   AssistantUnavailableError,
@@ -532,7 +533,11 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
     const created = await createSessionForOrder(order.id, install.platform, mode, client);
     if (!created.ok) {
       await client.query('ROLLBACK');
-      return res.status(created.status).json({ error: created.error });
+      return res.status(created.status).json({
+        error: created.error,
+        ...(created.code ? { code: created.code } : {}),
+        ...(created.code === 'human_not_included' ? { upgrade: await upgradeOffer() } : {}),
+      });
     }
     session = created.session;
     await client.query('COMMIT');
@@ -637,6 +642,7 @@ const eventSchema = z.object({
  * peuvent relire exactement ce que l'agent a fait sur la machine.
  */
 appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateBody(eventSchema), async (req, res) => {
+  await expireOverdueSessions(pool);
   const install = req.appInstall!;
   const body = req.body as z.infer<typeof eventSchema>;
   if (!UUID.test(req.params.id!)) return res.status(404).json({ error: 'Session introuvable' });
