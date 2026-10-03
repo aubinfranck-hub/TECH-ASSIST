@@ -322,7 +322,7 @@ appRouter.post('/app/orders', limiter, requireAppInstall, validateBody(orderSche
     [planId],
   );
   const plan = planResult.rows[0];
-  if (!plan || plan.metadata?.subscription || plan.metadata?.coveredBySubscription || plan.metadata?.freePerPhone) {
+  if (!plan || plan.metadata?.subscription || plan.metadata?.coveredBySubscription || plan.metadata?.freePerPhone || plan.metadata?.viewerSession) {
     return res.status(404).json({ error: 'Forfait inconnu' });
   }
   // Une seule commande en attente à la fois : évite l'empilement de demandes de paiement.

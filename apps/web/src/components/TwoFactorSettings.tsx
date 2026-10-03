@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, ApiError } from '../lib/api.js';
 
-export function TwoFactorSettings() {
+export function TwoFactorSettings({ onEnabled }: { onEnabled?: () => void } = {}) {
   const [step, setStep] = useState<'idle' | 'setup' | 'done'>('idle');
   const [secret, setSecret] = useState('');
   const [otpauthUri, setOtpauthUri] = useState('');
@@ -31,6 +31,7 @@ export function TwoFactorSettings() {
     try {
       await api.post('/api/auth/technician/2fa/enable', { code });
       setStep('done');
+      onEnabled?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Code incorrect.');
     } finally {

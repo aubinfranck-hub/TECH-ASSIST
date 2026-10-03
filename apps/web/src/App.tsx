@@ -6,6 +6,7 @@ import { CompanyPage } from './pages/CompanyPage.js';
 import { DiagnosticPage } from './pages/DiagnosticPage.js';
 import { HomePage } from './pages/HomePage.js';
 import { LegalPage } from './pages/LegalPage.js';
+import { PartnerPage } from './pages/PartnerPage.js';
 import { PaymentReturnPage } from './pages/PaymentReturnPage.js';
 import { PhonePage } from './pages/PhonePage.js';
 import { OrderPage } from './pages/OrderPage.js';
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/telephone" element={<PhonePage />} />
         <Route path="/session" element={<SessionPage />} />
         <Route path="/technicien" element={<TechnicianPage />} />
+        <Route path="/partenaire" element={<PartnerPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/entreprise" element={<CompanyPage />} />
         <Route path="/cgu" element={<LegalPage doc="cgu" />} />

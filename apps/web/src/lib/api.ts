@@ -109,3 +109,35 @@ export interface RemoteConfig {
   relayServer: string;
   key: string;
 }
+
+export type ViewerState = 'waiting_client' | 'ready' | 'free' | 'payment_required' | 'paid' | 'ended';
+
+export interface ViewerSession {
+  id: string;
+  code: string | null;
+  label: string | null;
+  state: ViewerState;
+  freeLeft: number | null;
+  cutIn: number | null;
+  amountFcfa: number;
+  paid: boolean;
+  createdAt: string;
+  clientPaired: boolean;
+  clientConsented: boolean;
+}
+
+export interface PartnerOffer {
+  freeSeconds: number;
+  graceSeconds: number;
+  priceFcfa: number | null;
+  methods: string[];
+}
+
+export type EarningStatus = 'pending' | 'approved' | 'paid' | 'cancelled';
+
+export interface TechnicianEarnings {
+  balance: { pending: number; approved: number; paid: number };
+  payout: { phone: string | null; operator: string | null };
+  earnings: { id: string; label: string; amountFcfa: number; status: EarningStatus; createdAt: string; approvedAt: string | null; code: string }[];
+  payouts: { id: string; amountFcfa: number; reference: string; paidAt: string }[];
+}

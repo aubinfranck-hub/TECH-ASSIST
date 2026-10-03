@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ActiveSessionCard, type MySession } from '../components/ActiveSessionCard.js';
 import { TechnicianAlerts } from '../components/TechnicianAlerts.js';
+import { TechnicianEarningsCard } from '../components/TechnicianEarnings.js';
 import { TechnicianLoginForm } from '../components/TechnicianLoginForm.js';
 import { TechnicianRequest } from '../components/TechnicianRequest.js';
 import { TwoFactorSettings } from '../components/TwoFactorSettings.js';
@@ -211,6 +212,11 @@ export function TechnicianPage() {
           </ul>
         </section>
       )}
+
+      <section aria-label="Mes gains">
+        <h2 className="mb-3 font-semibold">Mes gains</h2>
+        <TechnicianEarningsCard />
+      </section>
 
       <section aria-label="Sécurité du compte">
         <h2 className="mb-3 font-semibold">Sécurité du compte</h2>

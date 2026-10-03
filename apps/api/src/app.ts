@@ -19,6 +19,8 @@ import { ordersRouter } from './routes/orders.js';
 import { paymentsRouter } from './routes/payments.js';
 import { pricingRouter } from './routes/pricing.js';
 import { remoteRouter } from './routes/remote.js';
+import { partnerRouter } from './routes/partner.js';
+import { adminPartnersRouter } from './routes/adminPartners.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { technicianAuthRouter } from './routes/technicianAuth.js';
 import { technicianConsoleRouter } from './routes/technicianConsole.js';
@@ -87,6 +89,7 @@ export function createApp() {
   app.use('/api', paymentsRouter);
   app.use('/api', appRouter);
   app.use('/api', knowledgeRouter);
+  app.use('/api', partnerRouter);
   app.use('/api', diagnosticsRouter);
   app.use('/api', humanRelayRouter);
   app.use('/api', sessionsRouter);
@@ -96,6 +99,7 @@ export function createApp() {
   app.use('/api/auth', companyAuthRouter);
   app.use('/api', leadsRouter);
   app.use('/api/admin/knowledge', knowledgeAdminRouter);
+  app.use('/api/admin', adminPartnersRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/company', companyRouter);
 

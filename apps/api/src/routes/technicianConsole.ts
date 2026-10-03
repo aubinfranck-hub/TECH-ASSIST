@@ -4,6 +4,7 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { pushPublicKey, sendPush } from '../notify/push.js';
+import { balanceFor, creditEarningSafely } from '../partners/earnings.js';
 import { logAudit } from '../utils/audit.js';
 import { progressView } from '../utils/taskProgress.js';
 
@@ -262,5 +263,48 @@ technicianConsoleRouter.post('/technician/sessions/:id/finish', async (req, res)
     "Le technicien a terminé l'assistance. Merci de votre confiance !",
   ]);
   await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, sessionId: d.id, action: 'session.stopped', details: { stoppedBy: 'technician' } });
+  // L'assistance terminée avec un technicien lui crédite son gain (à valider par l'administrateur).
+  await creditEarningSafely(pool, d.id);
   res.json({ finished: true });
+});
+
+// --- Gains : ce que le technicien a gagné, ce qui est validé, ce qui lui a été versé ---
+
+const KIND_LABELS: Record<string, string> = {
+  ia_technicien: 'Assistance IA + technicien',
+  complement: 'Technicien ajouté à une assistance IA',
+  entreprise: "Assistance d'une entreprise",
+};
+
+technicianConsoleRouter.get('/technician/earnings', async (req, res) => {
+  const me = (await pool.query('SELECT payout_phone, payout_operator FROM technicians WHERE id = $1', [req.auth!.sub])).rows[0];
+  const [balance, lines, payouts] = await Promise.all([
+    balanceFor(pool, req.auth!.sub),
+    pool.query(
+      `SELECT e.id, e.kind, e.amount_fcfa, e.status, e.created_at, e.approved_at, s.session_code
+       FROM technician_earnings e JOIN sessions s ON s.id = e.session_id
+       WHERE e.technician_id = $1 AND e.status <> 'cancelled' ORDER BY e.created_at DESC LIMIT 50`,
+      [req.auth!.sub],
+    ),
+    pool.query(`SELECT id, amount_fcfa, reference, paid_at FROM technician_payouts WHERE technician_id = $1 ORDER BY paid_at DESC LIMIT 20`, [req.auth!.sub]),
+  ]);
+  res.json({
+    balance,
+    payout: { phone: me?.payout_phone ?? null, operator: me?.payout_operator ?? null },
+    earnings: lines.rows.map((r) => ({ id: r.id, label: KIND_LABELS[r.kind] ?? r.kind, amountFcfa: r.amount_fcfa, status: r.status, createdAt: r.created_at, approvedAt: r.approved_at, code: String(r.session_code).slice(-4) })),
+    payouts: payouts.rows.map((r) => ({ id: r.id, amountFcfa: r.amount_fcfa, reference: r.reference, paidAt: r.paid_at })),
+  });
+});
+
+const payoutProfileSchema = z.object({
+  phone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide'),
+  operator: z.enum(['wave', 'orange', 'mtn', 'moov', 'djamo']),
+});
+
+/** Numéro Mobile Money sur lequel l'équipe verse les gains. */
+technicianConsoleRouter.put('/technician/payout-profile', validateBody(payoutProfileSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof payoutProfileSchema>;
+  await pool.query('UPDATE technicians SET payout_phone = $2, payout_operator = $3 WHERE id = $1', [req.auth!.sub, body.phone, body.operator]);
+  await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, action: 'technician.payout_profile_updated', details: { operator: body.operator } });
+  res.json({ payout: { phone: body.phone, operator: body.operator } });
 });

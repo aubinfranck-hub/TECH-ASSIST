@@ -149,16 +149,23 @@ technicianAuthRouter.post('/technician/login', authLimiter, validateBody(loginSc
   const { username, password } = req.body as z.infer<typeof loginSchema>;
 
   const { rows } = await pool.query(
-    `SELECT id, username, password_hash, role, is_active, totp_enabled FROM technicians WHERE username = $1`,
+    `SELECT id, username, password_hash, role, is_active, approval_status, totp_enabled FROM technicians WHERE username = $1`,
     [username],
   );
   const technician = rows[0];
-  if (!technician || !technician.is_active) {
+  if (!technician) {
     return res.status(401).json({ error: 'Identifiants incorrects' });
   }
 
   const valid = await bcrypt.compare(password, technician.password_hash);
   if (!valid) {
+    return res.status(401).json({ error: 'Identifiants incorrects' });
+  }
+  if (!technician.is_active) {
+    // Le mot de passe est bon : on peut dire à un partenaire où en est sa demande (jamais avant, pour ne rien révéler).
+    if (technician.role === 'partner' && technician.approval_status === 'pending') {
+      return res.status(403).json({ code: 'pending_approval', error: "Votre demande est en cours de validation. Vous pourrez vous connecter dès qu'elle sera acceptée." });
+    }
     return res.status(401).json({ error: 'Identifiants incorrects' });
   }
 
@@ -205,7 +212,7 @@ technicianAuthRouter.post('/technician/login/totp', authLimiter, validateBody(to
 });
 
 /** RS-08 : démarrage de l'activation — génère un secret en attente de confirmation. */
-technicianAuthRouter.post('/technician/2fa/setup', requireAuth('technician', 'admin'), async (req, res) => {
+technicianAuthRouter.post('/technician/2fa/setup', requireAuth('technician', 'admin', 'partner'), async (req, res) => {
   const secret = generateTotpSecret();
   await pool.query('UPDATE technicians SET totp_pending_secret = $2 WHERE id = $1', [req.auth!.sub, secret]);
   res.json({ secret, otpauthUri: buildOtpauthUri(secret, req.auth!.username) });
@@ -217,7 +224,7 @@ const totpCodeSchema = z.object({ code: z.string().length(6) });
 technicianAuthRouter.post(
   '/technician/2fa/enable',
   authLimiter,
-  requireAuth('technician', 'admin'),
+  requireAuth('technician', 'admin', 'partner'),
   validateBody(totpCodeSchema),
   async (req, res) => {
     const { rows } = await pool.query('SELECT totp_pending_secret FROM technicians WHERE id = $1', [req.auth!.sub]);
@@ -242,7 +249,7 @@ technicianAuthRouter.post(
 technicianAuthRouter.post(
   '/technician/2fa/disable',
   authLimiter,
-  requireAuth('technician', 'admin'),
+  requireAuth('technician', 'admin', 'partner'),
   validateBody(totpCodeSchema),
   async (req, res) => {
     const { rows } = await pool.query('SELECT totp_secret, totp_enabled FROM technicians WHERE id = $1', [

@@ -44,7 +44,7 @@ ordersRouter.post('/', createOrderLimiter, validateBody(createOrderSchema), asyn
   // L'offre gratuite, l'abonnement et la couverture abonné ont leurs propres
   // routes (/api/assistance, /api/subscriptions) qui vérifient les droits :
   // les commander ici permettrait de contourner ces vérifications.
-  if (plan.metadata?.subscription || plan.metadata?.freePerPhone || plan.metadata?.coveredBySubscription || plan.metadata?.upgradeHuman) {
+  if (plan.metadata?.subscription || plan.metadata?.freePerPhone || plan.metadata?.coveredBySubscription || plan.metadata?.upgradeHuman || plan.metadata?.viewerSession) {
     return res.status(400).json({ error: 'Cette formule se commande depuis la page Assistance.' });
   }
 
@@ -73,6 +73,8 @@ ordersRouter.get('/pending-payment', requireAuth('technician', 'admin'), async (
             p.name AS plan_name
      FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
      WHERE o.status = 'pending_payment'
+       -- Les sessions des partenaires se règlent par Jèko ou par un administrateur, jamais par la file du personnel.
+       AND COALESCE((p.metadata->>'viewerSession')::boolean, FALSE) = FALSE
      ORDER BY o.created_at ASC LIMIT 100`,
   );
   res.json({ orders: rows });
@@ -99,6 +101,11 @@ ordersRouter.post(
   '/:id/confirm-payment',
   requireAuth('technician', 'admin'),
   async (req, res) => {
+    // Session d'un partenaire : seul un administrateur peut confirmer à la main (un technicien ne confirme pas ses propres gains).
+    if (req.auth!.role !== 'admin') {
+      const plan = await pool.query(`SELECT p.metadata FROM orders o JOIN pricing_plans p ON p.id = o.plan_id WHERE o.id = $1`, [req.params.id]);
+      if (plan.rows[0]?.metadata?.viewerSession) return res.status(403).json({ error: 'Cette commande est confirmée par un administrateur.' });
+    }
     const result = await markOrderPaid(req.params.id, { technicianId: req.auth!.sub });
     if (!result.ok) return res.status(409).json({ error: 'Commande déjà traitée ou introuvable' });
     res.json({ order: result.order, subscription: result.subscription });

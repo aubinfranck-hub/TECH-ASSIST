@@ -16,7 +16,7 @@ export async function applyMigrations() {
 
 export async function truncateAll() {
   await pool.query(`
-    TRUNCATE TABLE learned_procedure_runs, learned_procedures, knowledge_gaps, learning_calls, audit_logs, diagnostics, sessions, subscriptions, email_verifications, orders, app_installs, technician_applications,
+    TRUNCATE TABLE technician_earnings, technician_payouts, learned_procedure_runs, learned_procedures, knowledge_gaps, learning_calls, audit_logs, diagnostics, sessions, subscriptions, email_verifications, orders, app_installs, technician_applications,
       pme_requests, visit_requests, technicians,
       company_help_requests, company_diagnostic_requests, company_devices, company_consents, company_users, companies
       RESTART IDENTITY CASCADE;
@@ -24,6 +24,8 @@ export async function truncateAll() {
   // pricing_plans n'est pas tronquée (référencée par les tests) — mais les
   // lignes PME/visites peuvent avoir été modifiées par un test admin ; on les
   // remet à leur valeur de référence pour ne pas polluer les tests suivants.
+  // La grille de rémunération est modifiable en admin : on la remet à ses montants de départ.
+  await pool.query(`UPDATE technician_pay_rates SET amount_fcfa = 1000`);
   await pool.query(`
     UPDATE pricing_plans SET active = TRUE
     WHERE id IN ('pme_essentiel', 'pme_pro', 'pme_entreprise', 'diagnostic_express', 'assistance_rapide',

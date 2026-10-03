@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 export interface AuthPayload {
   kind: 'technician';
   sub: string; // technician id
-  role: 'technician' | 'admin';
+  role: 'technician' | 'admin' | 'partner';
   username: string;
 }
 

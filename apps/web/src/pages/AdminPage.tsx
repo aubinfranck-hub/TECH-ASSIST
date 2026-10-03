@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AdminPartnersPanel } from '../components/AdminPartnersPanel.js';
 import { CreateCompanyForm } from '../components/CreateCompanyForm.js';
 import { TechnicianLoginForm } from '../components/TechnicianLoginForm.js';
 import { api, ApiError, type PricingPlan } from '../lib/api.js';
@@ -166,6 +167,8 @@ export function AdminPage() {
         </ul>
         <CreateCompanyForm pmePlans={plans.filter((p) => p.segment === 'pme')} onCreated={refresh} />
       </section>
+
+      <AdminPartnersPanel />
 
       <section>
         <h2 className="font-semibold mb-3">Journal d'audit (RS-06)</h2>

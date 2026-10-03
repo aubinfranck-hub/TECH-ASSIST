@@ -8,6 +8,8 @@ import { alertInBackground } from '../notify/technicianAlerts.js';
 import { logAudit, type Db } from '../utils/audit.js';
 import { humanIncludedFor, upgradeOffer } from '../utils/offers.js';
 import { progressView, STALE_PROGRESS_SECONDS } from '../utils/taskProgress.js';
+import { creditEarningSafely } from '../partners/earnings.js';
+import { closeViewerOrderIfUnpaid, settleViewerSession } from '../partners/viewer.js';
 
 export const sessionsRouter = Router();
 
@@ -99,12 +101,18 @@ sessionsRouter.get('/sessions/:code', async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, session_code, status, code_expires_at, duration_minutes,
             started_at, ends_at, consent_screen_at, consent_control_at, technician_id,
-            remote_peer_id, remote_paired_at, mode, requested_mode
+            remote_peer_id, remote_paired_at, mode, requested_mode, kind
      FROM sessions WHERE session_code = $1`,
     [req.params.code],
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Session introuvable' });
-  res.json({ session: rows[0] });
+  const { kind, ...session } = rows[0];
+  // Session d'un partenaire : la fenêtre du client qui interroge la session fait aussi respecter la coupure des impayés.
+  if (kind === 'viewer') {
+    const settled = await settleViewerSession(pool, session.id);
+    if (settled) session.status = settled.status;
+  }
+  res.json({ session });
 });
 
 /**
@@ -183,6 +191,9 @@ sessionsRouter.post('/sessions/:id/stop', validateBody(stopSchema), async (req, 
     action: 'session.stopped',
     details: { stoppedBy: req.body.stoppedBy },
   });
+  // Session partenaire arrêtée sans paiement : rien n'est dû. Assistance avec technicien : son gain est crédité.
+  await closeViewerOrderIfUnpaid(pool, req.params.id!);
+  await creditEarningSafely(pool, req.params.id!);
 
   res.json({ session: rows[0] });
 });
