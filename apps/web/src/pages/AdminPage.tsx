@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AdminLearningPanel } from '../components/AdminLearningPanel.js';
 import { AdminPartnersPanel } from '../components/AdminPartnersPanel.js';
 import { CreateCompanyForm } from '../components/CreateCompanyForm.js';
 import { TechnicianLoginForm } from '../components/TechnicianLoginForm.js';
@@ -169,6 +170,8 @@ export function AdminPage() {
       </section>
 
       <AdminPartnersPanel />
+
+      <AdminLearningPanel />
 
       <section>
         <h2 className="font-semibold mb-3">Journal d'audit (RS-06)</h2>
