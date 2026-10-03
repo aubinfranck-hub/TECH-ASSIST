@@ -118,7 +118,7 @@ async function main() {
       // Demande de diagnostic de l'entreprise (lecture seule, avec l'accord de l'utilisateur).
       await answerCompanyRequest({ ui: chat, api, runner, reporter, machine }, token).catch(() => undefined);
     }
-    const started = login ? await startCovered(deps, login) : null;
+    const started = login ? await startCovered({ ...deps, openUrl: (u) => { if (!flag('no-browser')) openBrowser(u); } }, login) : null;
     conversationScope = started?.scope;
     if (started) {
       const base = apiBase ?? DEFAULT_API_BASE;

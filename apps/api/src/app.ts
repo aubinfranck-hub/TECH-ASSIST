@@ -14,6 +14,7 @@ import { emailVerificationRouter } from './routes/emailVerification.js';
 import { healthRouter } from './routes/health.js';
 import { leadsRouter } from './routes/leads.js';
 import { ordersRouter } from './routes/orders.js';
+import { paymentsRouter } from './routes/payments.js';
 import { pricingRouter } from './routes/pricing.js';
 import { remoteRouter } from './routes/remote.js';
 import { sessionsRouter } from './routes/sessions.js';
@@ -42,7 +43,8 @@ export function createApp() {
   );
   // Seule la route de chat accepte une capture d'écran jointe (réduite par l'agent, 800 000 caractères au plus en base64).
   app.use('/api/app/sessions/:id/chat', express.json({ limit: '1mb' }));
-  app.use(express.json({ limit: '200kb' }));
+  // Corps brut conservé : la signature du prestataire de paiement se vérifie sur les octets exacts reçus.
+  app.use(express.json({ limit: '200kb', verify: (req, _res, buf) => { (req as unknown as { rawBody?: Buffer }).rawBody = buf; } }));
 
   // RS-11 : plafond général par IP, tous endpoints confondus. Les endpoints
   // sensibles ont en plus leur propre limiteur, posé localement dans leur
@@ -79,6 +81,7 @@ export function createApp() {
   app.use('/api/pricing', pricingRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api', emailVerificationRouter);
+  app.use('/api', paymentsRouter);
   app.use('/api', appRouter);
   app.use('/api', diagnosticsRouter);
   app.use('/api', sessionsRouter);

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { logAudit } from '../utils/audit.js';
 import { validateBody } from '../middleware/validate.js';
+import { markOrderPaid } from '../payments/markPaid.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const ordersRouter = Router();
@@ -98,61 +99,8 @@ ordersRouter.post(
   '/:id/confirm-payment',
   requireAuth('technician', 'admin'),
   async (req, res) => {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const { rows } = await client.query(
-        `UPDATE orders SET status = 'paid', paid_at = now(), paid_by_technician_id = $2
-         WHERE id = $1 AND status = 'pending_payment'
-         RETURNING id, status, paid_at`,
-        [req.params.id, req.auth!.sub],
-      );
-      if (rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Commande déjà traitée ou introuvable' });
-      }
-
-      // Abonnement mensuel : l'activation suit la confirmation du paiement. Un
-      // renouvellement avant l'échéance prolonge la période en cours au lieu de la raccourcir.
-      const subscription = await client.query(
-        `WITH base AS (
-           SELECT s.id,
-                  GREATEST(now(), COALESCE((SELECT max(x.ends_at) FROM subscriptions x
-                                            WHERE x.client_email = s.client_email AND x.status = 'active'), now())) AS start_at,
-                  COALESCE((p.metadata->>'periodDays')::int, 30) AS days
-           FROM subscriptions s JOIN pricing_plans p ON p.id = s.plan_id
-           WHERE s.order_id = $1 AND s.status = 'pending_payment'
-         )
-         UPDATE subscriptions s
-         SET status = 'active', starts_at = b.start_at, ends_at = b.start_at + make_interval(days => b.days)
-         FROM base b WHERE s.id = b.id
-         RETURNING s.id, s.starts_at, s.ends_at`,
-        [req.params.id],
-      );
-      await client.query('COMMIT');
-
-      await logAudit(pool, {
-        actorType: 'technician',
-        actorId: req.auth!.sub,
-        orderId: req.params.id,
-        action: 'order.payment_confirmed',
-      });
-      if (subscription.rows[0]) {
-        await logAudit(pool, {
-          actorType: 'technician',
-          actorId: req.auth!.sub,
-          orderId: req.params.id,
-          action: 'subscription.activated',
-          details: { endsAt: subscription.rows[0].ends_at },
-        });
-      }
-
-      res.json({ order: rows[0], subscription: subscription.rows[0] ?? null });
-    } catch (err) {
-      await client.query('ROLLBACK').catch(() => undefined);
-      throw err;
-    } finally {
-      client.release();
-    }
+    const result = await markOrderPaid(req.params.id, { technicianId: req.auth!.sub });
+    if (!result.ok) return res.status(409).json({ error: 'Commande déjà traitée ou introuvable' });
+    res.json({ order: result.order, subscription: result.subscription });
   },
 );

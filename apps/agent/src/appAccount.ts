@@ -145,7 +145,7 @@ export class AppApi {
     return this.call<{
       order: { id: string; amount_fcfa: number };
       plan: { name: string; scope: Scope };
-      payment: { amountFcfa: number; reference: string; instructions: string };
+      payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean };
     }>('/app/orders', { planId }, token);
   }
   orderStatus(token: string, id: string) {
@@ -264,6 +264,8 @@ export interface StartDeps extends AccountDeps {
   pollMs?: number;
   /** Durée maximale d'attente du paiement avant de rendre la main. */
   maxWaitMs?: number;
+  /** Ouvre le lien de paiement dans le navigateur (absent : le lien est seulement affiché). */
+  openUrl?: (url: string) => void;
 }
 
 /**
@@ -313,8 +315,14 @@ export async function startCovered(deps: StartDeps, login: { token: string; enti
     return null;
   }
   ui.info(`Forfait « ${ordered.plan.name} » : ${fcfa(ordered.payment.amountFcfa)}. Référence de paiement : ${ordered.payment.reference}.`);
-  ui.info(ordered.payment.instructions);
-  ui.info("J'attends la confirmation de votre paiement par un technicien. Vous pouvez laisser cette fenêtre ouverte.");
+  if (ordered.payment.automatic && ordered.payment.url) {
+    ui.info(`Payez en toute sécurité ici : ${ordered.payment.url}`);
+    ui.info("Dès que votre paiement est reçu, votre assistance démarre toute seule, sans rien d'autre à faire. Laissez cette fenêtre ouverte.");
+    deps.openUrl?.(ordered.payment.url);
+  } else {
+    ui.info(ordered.payment.instructions);
+    ui.info("J'attends la confirmation de votre paiement par un technicien. Vous pouvez laisser cette fenêtre ouverte.");
+  }
 
   const wait = deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const pollMs = deps.pollMs ?? 10_000;

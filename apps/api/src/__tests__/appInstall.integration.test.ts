@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { pool } from '../db/pool.js';
+import { createHmac } from 'node:crypto';
 import { testOutbox } from '../utils/mailer.js';
 import { applyMigrations, truncateAll } from './testDb.js';
 
@@ -213,6 +214,59 @@ describe('Application : inscription par email, assistance offerte en base, abonn
       const b = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'session_maintenance' });
       expect(b.body.order.id).toBe(a.body.order.id);
       expect(b.body.order.amount_fcfa).toBe(5000);
+    });
+  });
+
+  describe('paiement automatique (webhook du prestataire)', () => {
+    const SECRET = 'whsec_test';
+    const sign = (body: string) => createHmac('sha256', SECRET).update(body).digest('hex');
+    const hook = (payload: object, signature?: string) => {
+      const body = JSON.stringify(payload);
+      return request(app).post('/api/payments/webhook').set('Content-Type', 'application/json').set('X-Signature', signature ?? sign(body)).send(body);
+    };
+    afterEach(() => {
+      delete process.env.PAYMENT_WEBHOOK_SECRET;
+      delete process.env.PAYMENT_LINK_TEMPLATE;
+    });
+
+    async function pendingOrder() {
+      const r = await register();
+      await request(app).post('/api/app/assistance').set(auth(r)).send({});
+      const order = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'assistance_rapide' });
+      return { r, order };
+    }
+
+    it('fermé tant qu\'aucun secret n\'est configuré', async () => {
+      const { order } = await pendingOrder();
+      expect((await hook({ orderId: order.body.order.id, status: 'success', amount: 2000 })).status).toBe(503);
+    });
+
+    it('signature valide + bon montant : la commande est payée, l\'assistance démarre sans technicien', async () => {
+      process.env.PAYMENT_WEBHOOK_SECRET = SECRET;
+      process.env.PAYMENT_LINK_TEMPLATE = 'https://pay.example/checkout?ref={orderId}&amount={amount}';
+      const { r, order } = await pendingOrder();
+      expect(order.body.payment.url).toBe(`https://pay.example/checkout?ref=${order.body.order.id}&amount=2000`);
+      expect(order.body.payment.automatic).toBe(true);
+
+      const ok = await hook({ orderId: order.body.order.id, status: 'success', amount: 2000, transactionId: 'T1' });
+      expect(ok.status).toBe(200);
+      expect((await request(app).get(`/api/app/orders/${order.body.order.id}`).set(auth(r))).body.order.status).toBe('paid');
+      expect((await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id })).status).toBe(201);
+
+      // Notification rejouée : sans effet.
+      const replay = await hook({ orderId: order.body.order.id, status: 'success', amount: 2000, transactionId: 'T1' });
+      expect(replay.status).toBe(200);
+      expect(replay.body.alreadyPaid).toBe(true);
+    });
+
+    it('mauvaise signature, mauvais montant, paiement échoué : jamais payée', async () => {
+      process.env.PAYMENT_WEBHOOK_SECRET = SECRET;
+      const { r, order } = await pendingOrder();
+      const id = order.body.order.id;
+      expect((await hook({ orderId: id, status: 'success', amount: 2000 }, 'deadbeef')).status).toBe(401);
+      expect((await hook({ orderId: id, status: 'success', amount: 500 })).status).toBe(409);
+      expect((await hook({ orderId: id, status: 'failed', amount: 2000 })).status).toBe(200);
+      expect((await request(app).get(`/api/app/orders/${id}`).set(auth(r))).body.order.status).toBe('pending_payment');
     });
   });
 

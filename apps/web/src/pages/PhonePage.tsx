@@ -26,6 +26,8 @@ interface Payment {
   reference: string;
   amount: number;
   instructions: string;
+  url?: string | null;
+  automatic?: boolean;
 }
 interface Turn {
   role: 'user' | 'assistant';
@@ -217,8 +219,8 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
     setBusy(true);
     setError(null);
     try {
-      const r = await call<{ order: { id: string }; payment: { amountFcfa: number; reference: string; instructions: string } }>('/app/orders', { planId }, token);
-      setPayment({ orderId: r.order.id, reference: r.payment.reference, amount: r.payment.amountFcfa, instructions: r.payment.instructions });
+      const r = await call<{ order: { id: string }; payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean } }>('/app/orders', { planId }, token);
+      setPayment({ orderId: r.order.id, reference: r.payment.reference, amount: r.payment.amountFcfa, instructions: r.payment.instructions, url: r.payment.url, automatic: r.payment.automatic });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Impossible de créer la commande.');
     } finally {
@@ -317,8 +319,17 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <p className="font-extrabold">{payment.amount.toLocaleString('fr-FR')} FCFA à payer</p>
             <p className="mt-2 text-sm text-slate-700">Référence : <strong>{payment.reference}</strong></p>
-            <p className="mt-2 text-sm text-slate-600">{payment.instructions}</p>
-            <p className="mt-3 text-sm text-slate-600">Gardez cette page ouverte : l’assistance démarre dès que le paiement est confirmé par un technicien.</p>
+            {payment.automatic && payment.url ? (
+              <>
+                <a href={payment.url} target="_blank" rel="noreferrer" className="ta-button-primary mt-4 inline-flex">Payer maintenant</a>
+                <p className="mt-3 text-sm text-slate-600">Après le paiement, revenez sur cette page : l’assistance démarre toute seule.</p>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-sm text-slate-600">{payment.instructions}</p>
+                <p className="mt-3 text-sm text-slate-600">Gardez cette page ouverte : l’assistance démarre dès que le paiement est confirmé par un technicien.</p>
+              </>
+            )}
           </div>
         )}
         {info && <p className="mt-4 text-sm text-slate-700">{info}</p>}

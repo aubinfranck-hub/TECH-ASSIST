@@ -18,6 +18,7 @@ import {
   imageMatchesMime,
 } from '../assistant/officeAssistant.js';
 import { TRAINING_STEPS, TRAINING_TRACK_IDS, findTrack } from '../assistant/trainingCatalog.js';
+import { paymentLink } from './payments.js';
 import { createSessionForOrder } from './sessions.js';
 
 /**
@@ -331,6 +332,9 @@ appRouter.post('/app/orders', limiter, requireAppInstall, validateBody(orderSche
     payment: {
       amountFcfa: plan.price_fcfa,
       reference: String(order.id).slice(0, 8).toUpperCase(),
+      // Paiement automatique : le client paie sur le lien, le prestataire confirme, l'assistance démarre seule.
+      url: paymentLink(order, install.email),
+      automatic: Boolean(process.env.PAYMENT_WEBHOOK_SECRET && process.env.PAYMENT_LINK_TEMPLATE),
       instructions:
         process.env.PAYMENT_INSTRUCTIONS ??
         'Envoyez le montant par Mobile Money au numéro indiqué par notre équipe en précisant la référence. Un technicien confirme la réception, puis votre assistance démarre.',
