@@ -140,6 +140,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     if (text === null || (!first && GOODBYE.test(text))) break;
     const message = text.trim();
     if (!message) continue;
+    if (first) ui.progress?.(3);
     first = false;
     turns += 1;
     await log({ type: 'user_request', message });
@@ -213,6 +214,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   }
 
   if (ui.wasHandedOff?.()) handedOver = true;
+  ui.progress?.(4);
   if (!handedOver) ui.info('Merci. N\'hésitez pas à me redemander de l\'aide à tout moment.');
   return { turns, handedOver, outcomes };
 

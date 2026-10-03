@@ -179,3 +179,12 @@ Si l'agent n'est pas administrateur après la demande de Windows (compte « stan
 ## Droits temporaires, rien de permanent
 
 Les droits administrateur ne servent que le temps de l'intervention : l'agent se ferme à la fin, ne crée ni compte, ni service, ni tâche planifiée, et le dit au client (texte d'accord et message de fin). Un compte administrateur (cas d'un PC personnel) valide d'un « Oui » ; un compte standard se voit proposer « Continuer sans » ou la saisie du mot de passe administrateur s'il l'a (`requestAdmin`) — jamais imposé au novice.
+
+## Fenêtre de l'assistant et lancement sans console
+
+- **Fenêtre** : au double-clic, l'assistant s'ouvre en « fenêtre d'application » (Edge, sinon Chrome : sans barre d'adresse ni onglets, profil dédié temporaire sans extension, supprimé à la fermeture). Sans l'un des deux, navigateur par défaut. Seule l'adresse locale de l'agent peut être ouverte (`browser.ts`).
+- **Présentation** (`chatServer.ts`) : deux parties, photo de l'équipe (relayée depuis le site) et trois engagements à gauche ; à droite trois étapes (1 coordonnées, 2 demande, 3 intervention, puis tout est validé), la conversation et la zone de réponse. Le code reçu par email s'affiche en six cases. Les engagements affichés sont ceux que l'agent tient réellement (fichiers privés, diagnostic, équipe d'Abidjan) : pas de promesse de chiffrement de bout en bout ni de délai garanti.
+- **Étapes** : `ConversationUi.progress(1|2|3|4)` ; l'agent passe à 2 après l'inscription, à 3 à la première demande, à 4 à la fin.
+- **Version client sans fenêtre noire** : le workflow met le sous-système de l'exécutable à GUI (`apps/agent/scripts/pe-subsystem.mjs`, 2 octets de l'en-tête, sans outil Visual Studio) puis vérifie que le programme démarre encore (code de sortie 2 sur une compétence inconnue). Une copie `tech-assist-agent-console.exe`, avec fenêtre de terminal, est publiée pour les techniciens (`--skill`, `--console`, messages visibles).
+- **Rien ne reste caché** : sans console, la fermeture de la fenêtre arrête l'agent. Si la page ne se reconnecte pas pendant 60 s, ou ne s'ouvre jamais pendant 2 min, les questions en attente sont closes et la conversation se termine d'elle-même après l'action en cours.
+- **Erreur au démarrage** : sans console, une petite boîte de message Windows affiche l'erreur en français (`fatal.ts`).

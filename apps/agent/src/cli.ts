@@ -6,7 +6,9 @@ import { AppApi, DEFAULT_API_BASE, FileAccountStore, answerCompanyRequest, joinC
 import { collectFleetHealth } from './skills/fleetStatus.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
 import { ChatUi } from './chatServer.js';
+import { appWindowPlan, cleanupProfile } from './browser.js';
 import { converse } from './conversation.js';
+import { notifyFatal } from './fatal.js';
 import { isAdmin, launchElevated, relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
@@ -43,9 +45,17 @@ function consoleUi(rl: ReturnType<typeof createInterface>): ConversationUi {
   };
 }
 
+let windowPlan: ReturnType<typeof appWindowPlan> = null;
+
 function openBrowser(url: string) {
-  // Navigateur par défaut de Windows ; l'adresse ne contient aucun caractère spécial du shell.
-  spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  // Fenêtre d'application (Edge ou Chrome) quand c'est possible, sinon navigateur par défaut de Windows.
+  // L'adresse ne contient aucun caractère spécial du shell.
+  const fallback = () => spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  windowPlan = appWindowPlan(url);
+  if (!windowPlan) return fallback();
+  const child = spawn(windowPlan.command, windowPlan.args, { detached: true, stdio: 'ignore' });
+  child.on('error', fallback);
+  child.unref();
 }
 
 async function main() {
@@ -146,6 +156,7 @@ async function main() {
     }
   }
 
+  chat.progress(2);
   chat.onHandoff = () => {
     conversationReporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
   };
@@ -153,11 +164,13 @@ async function main() {
   if (!result.relaunched) chat.info("C'est terminé. Tech Assist se ferme : aucun accès n'est conservé sur votre ordinateur, aucun compte n'a été créé.");
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();
+  cleanupProfile(windowPlan);
   console.log(`Conversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);
   process.exit(0);
 }
 
 main().catch((err) => {
   console.error(err);
+  notifyFatal(err);
   process.exit(1);
 });

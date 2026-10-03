@@ -31,18 +31,34 @@ jobs:
           npm install --no-save --prefix "$RUNNER_TEMP/rc" rcedit@4.0.1
           node -e "require(process.env.RUNNER_TEMP + '/rc/node_modules/rcedit')('tech-assist-agent.exe', {icon: 'apps/agent/assets/icon.ico', 'version-string': {ProductName: 'Tech Assist', FileDescription: 'Tech Assist - votre technicien informatique IA', CompanyName: 'NTIC Strategy', LegalCopyright: 'NTIC Strategy', OriginalFilename: 'tech-assist-agent.exe', InternalName: 'tech-assist'}, 'file-version': '0.1.0.0', 'product-version': '0.1.0.0'}).catch(e => { console.error(e); process.exit(1); })"
           npx --yes postject@1.0.0-alpha.6 tech-assist-agent.exe NODE_SEA_BLOB sea.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
-      - name: Masquer la console Windows
-        shell: powershell
-        run: |
-          & "C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\Tools\MSVC\**\bin\Hostx64\x64\editbin.exe" | Select-Object -First 1 | ForEach-Object { & $_ /SUBSYSTEM:WINDOWS tech-assist-agent.exe }
-      - name: Test de démarrage
+      # Version pour les techniciens : garde la fenêtre de terminal (affiche les messages quand on la lance avec --skill, --console…).
+      - name: Copie avec fenêtre de terminal (technicien)
         shell: bash
-        run: ./tech-assist-agent.exe --skill inconnu || true
+        run: cp tech-assist-agent.exe tech-assist-agent-console.exe
+      # Version client : plus de fenêtre noire. On change seulement le « sous-système » de l'exécutable (2 octets), sans outil externe.
+      - name: Masquer la fenêtre noire (version client)
+        shell: bash
+        run: node apps/agent/scripts/pe-subsystem.mjs tech-assist-agent.exe gui
+      # Le programme doit toujours démarrer : une compétence inconnue doit se terminer avec le code 2 (sans console, on teste le code, pas l'affichage).
+      - name: Test de démarrage (version client)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\tech-assist-agent.exe -ArgumentList '--skill','inconnu','--no-elevate' -Wait -PassThru -RedirectStandardOutput out.txt -RedirectStandardError err.txt
+          Get-Content out.txt, err.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 2) { throw "Demarrage anormal : code $($p.ExitCode) (2 attendu)" }
+      - name: Test de démarrage (version technicien)
+        shell: bash
+        run: |
+          code=0
+          ./tech-assist-agent-console.exe --skill inconnu --no-elevate || code=$?
+          test "$code" -eq 2
       - name: Publier
         uses: softprops/action-gh-release@v2
         with:
           tag_name: agent-latest
           target_commitish: ${{ github.sha }}
           name: Agent Windows (dernière version)
-          files: tech-assist-agent.exe
+          files: |
+            tech-assist-agent.exe
+            tech-assist-agent-console.exe
           make_latest: true

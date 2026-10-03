@@ -108,6 +108,8 @@ export interface ConversationUi extends Ui {
   choose(question: string, options: string[]): Promise<number | null>;
   /** Le client a demandé un technicien depuis l'interface (bouton dédié). */
   wasHandedOff?(): boolean;
+  /** Étape de la fenêtre du client (1 coordonnées, 2 demande, 3 intervention, 4 terminé) ; ignorée par les autres interfaces. */
+  progress?(step: 1 | 2 | 3 | 4): void;
   /** Capture d'écran jointe par le client depuis la page de conversation ; rendue une seule fois, puis oubliée. */
   takeAttachment?(): { mime: 'image/png' | 'image/jpeg'; data: string } | null;
 }

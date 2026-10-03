@@ -44,5 +44,6 @@ export function withStandingConsent(ui: ConversationUi): ConversationUi {
   };
   if (ui.wasHandedOff) wrapped.wasHandedOff = () => ui.wasHandedOff!();
   if (ui.takeAttachment) wrapped.takeAttachment = () => ui.takeAttachment!();
+  if (ui.progress) wrapped.progress = (step) => ui.progress!(step);
   return wrapped;
 }
