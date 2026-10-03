@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
@@ -169,7 +170,7 @@ adminRouter.post('/companies', validateBody(createCompanySchema), async (req, re
     return res.status(404).json({ error: 'Formule PME inconnue ou inactive' });
   }
 
-  const password = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  const password = randomBytes(12).toString('base64url');
   const passwordHash = await bcrypt.hash(password, 12);
 
   // Transaction : l'entreprise et son premier compte admin sont créés

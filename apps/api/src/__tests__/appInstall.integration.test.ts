@@ -213,6 +213,7 @@ describe('Application : inscription par email, assistance offerte en base, abonn
     });
 
     it('une nouvelle commande en attente remplace la précédente au lieu de s\'empiler', async () => {
+      process.env.AI_AGENT_ENABLED = 'true';
       const r = await register();
       const a = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'assistance_rapide' });
       const b = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'diagnostic_express' });

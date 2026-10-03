@@ -93,7 +93,9 @@ describe('Offres : droits selon ce qui est payé (IA seule, IA + technicien), mi
 
   it('500 FCFA : si l\'agent IA est indisponible, personne ne bascule en douce sur un technicien', async () => {
     const r = await register();
+    process.env.AI_AGENT_ENABLED = 'true';
     const orderId = await paidOrder(r, 'diagnostic_express');
+    delete process.env.AI_AGENT_ENABLED; // l'agent tombe après le paiement
     const unavailable = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId, mode: 'ia' });
     expect(unavailable.status).toBe(503);
     expect(unavailable.body.code).toBe('ai_unavailable');

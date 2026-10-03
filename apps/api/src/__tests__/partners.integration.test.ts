@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createApp } from '../app.js';
 import { pool } from '../db/pool.js';
 import { generateTotpCode } from '../utils/totp.js';
-import { applyMigrations, truncateAll } from './testDb.js';
+import { applyMigrations, truncateAll, codeOf } from './testDb.js';
 
 const app = createApp();
 const PASSWORD = 'motdepasse-solide-1';
@@ -71,7 +71,7 @@ async function clientJoins(code: string, sessionId: string, peerId = '123456789'
   expect(boot.status).toBe(200);
   const pair = await request(app).post(`/api/sessions/${sessionId}/pair`).send({ remotePeerId: peerId, remotePassword: 'mdp-distant-xyz', bootstrapToken: boot.body.bootstrapToken });
   expect(pair.status).toBe(201);
-  const consent = await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
+  const consent = await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control', sessionCode: await codeOf(sessionId) });
   expect(consent.status).toBe(200);
 }
 
@@ -287,7 +287,7 @@ describe('Partenaires (viewer) : 3 minutes gratuites puis 500 FCFA la session', 
       // Arrêt par le client (bouton d'arrêt immédiat) : même résultat.
       const s2 = await openSession(p);
       const order2 = (await pool.query('SELECT order_id FROM sessions WHERE id = $1', [s2.id])).rows[0].order_id as string;
-      await request(app).post(`/api/sessions/${s2.id}/stop`).send({ stoppedBy: 'client' });
+      await request(app).post(`/api/sessions/${s2.id}/stop`).send({ stoppedBy: 'client', sessionCode: await codeOf(s2.id) });
       expect((await pool.query('SELECT status FROM orders WHERE id = $1', [order2])).rows[0].status).toBe('cancelled');
     });
 
@@ -431,7 +431,7 @@ describe('Partenaires (viewer) : 3 minutes gratuites puis 500 FCFA la session', 
       expect(earnings.earnings).toHaveLength(1);
       expect(earnings.earnings[0]).toMatchObject({ label: 'Assistance IA + technicien', amountFcfa: 1000, status: 'pending' });
       // L'arrêt de la session (bouton du client) après la fin ne crédite pas une seconde fois.
-      await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client' });
+      await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client', sessionCode: await codeOf(sessionId) });
       expect((await pool.query('SELECT count(*)::int AS n FROM technician_earnings')).rows[0].n).toBe(1);
       expect((await request(app).post(`/api/technician/sessions/${sessionId}/finish`).set(bearer(staff.token))).status).toBe(409);
       expect((await pool.query('SELECT count(*)::int AS n FROM technician_earnings')).rows[0].n).toBe(1);
@@ -483,11 +483,12 @@ describe('Partenaires (viewer) : 3 minutes gratuites puis 500 FCFA la session', 
       expect(list[0].evidence).toMatchObject({ technicianMessages: 1, selfConfirmedPayment: false, clientPaidFcfa: 2000 });
       expect(list[0]).toMatchObject({ technician_name: 'Tech staff', label: 'Assistance IA + technicien' });
 
-      // Le technicien qui confirme lui-même la commande qu'il traite est signalé.
+      // Le technicien qui confirme lui-même la commande qu'il traite.
       const self = await account('technician', 'self');
       await finishedAssistance(self, { confirmedBy: self.token });
+      // Et il n'est pas crédité du tout : un technicien ne se rémunère pas sur sa propre confirmation.
       const flagged = (await request(app).get('/api/admin/earnings?status=pending').set(bearer(adminToken))).body.earnings.filter((e: { technician_id: string }) => e.technician_id === self.id);
-      expect(flagged[0].evidence.selfConfirmedPayment).toBe(true);
+      expect(flagged).toHaveLength(0);
     });
 
     it('validation, correction, rejet puis versement : le solde suit chaque étape', async () => {

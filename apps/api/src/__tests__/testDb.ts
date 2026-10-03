@@ -32,3 +32,9 @@ export async function truncateAll() {
       'assistance_offerte', 'abonnement_mensuel', 'assistance_abonne');
   `);
 }
+
+/** Code secret d'une session (celui que seul le client connaît), pour les tests. */
+export async function codeOf(sessionId: string): Promise<string> {
+  const { rows } = await pool.query('SELECT session_code FROM sessions WHERE id = $1', [sessionId]);
+  return rows[0].session_code as string;
+}

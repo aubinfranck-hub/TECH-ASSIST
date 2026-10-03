@@ -130,11 +130,22 @@ sessionsRouter.get('/sessions/:code', async (req, res) => {
   res.json({ session });
 });
 
+const SESSION_CODE = z.string().regex(/^\d{9}$/);
+const consentSchema = z.object({ stage: z.enum(['screen', 'control']), sessionCode: SESSION_CODE });
+const escalateSchema = z.object({ sessionCode: SESSION_CODE });
+
+/** Le code de session est le secret du client : seul lui le connaît (il est masqué dans les écrans technicien). */
+async function clientOwnsSession(id: string | undefined, code: string): Promise<boolean> {
+  const { rows } = await pool.query('SELECT 1 FROM sessions WHERE id = $1 AND session_code = $2', [id, code]);
+  return rows.length > 0;
+}
+
 /**
  * « Passer à un technicien » : le client peut quitter l'agent IA à tout moment ;
  * la session rejoint alors la file d'attente des techniciens.
  */
-sessionsRouter.post('/sessions/:id/escalate', async (req, res) => {
+sessionsRouter.post('/sessions/:id/escalate', validateBody(escalateSchema), async (req, res) => {
+  if (!(await clientOwnsSession(req.params.id, req.body.sessionCode))) return res.status(403).json({ error: 'Code de session invalide' });
   // Offre « IA seule » : le technicien n'en fait pas partie (le complément se paie depuis l'application).
   const current = await pool.query(`SELECT human_included FROM sessions WHERE id = $1 AND status IN ('created', 'waiting_technician', 'active')`, [req.params.id]);
   if (current.rows[0] && current.rows[0].human_included === false) {
@@ -164,10 +175,10 @@ sessionsRouter.post('/sessions/:id/escalate', async (req, res) => {
   res.json({ session: rows[0] });
 });
 
-const consentSchema = z.object({ stage: z.enum(['screen', 'control']) });
 
 /** RS-01 : consentement explicite en deux étapes distinctes (partage, puis contrôle). */
 sessionsRouter.post('/sessions/:id/consent', validateBody(consentSchema), async (req, res) => {
+  if (!(await clientOwnsSession(req.params.id, req.body.sessionCode))) return res.status(403).json({ error: 'Code de session invalide' });
   const column = req.body.stage === 'screen' ? 'consent_screen_at' : 'consent_control_at';
   const { rows } = await pool.query(
     `UPDATE sessions SET ${column} = now() WHERE id = $1 RETURNING id, ${column}`,
@@ -184,10 +195,11 @@ sessionsRouter.post('/sessions/:id/consent', validateBody(consentSchema), async 
   res.json({ session: rows[0] });
 });
 
-const stopSchema = z.object({ stoppedBy: z.enum(['client', 'technician', 'system', 'timeout']) });
+const stopSchema = z.object({ stoppedBy: z.literal('client'), sessionCode: SESSION_CODE });
 
 /** RS-02 : bouton d'arrêt immédiat, effectif quel que soit qui l'actionne. */
 sessionsRouter.post('/sessions/:id/stop', validateBody(stopSchema), async (req, res) => {
+  if (!(await clientOwnsSession(req.params.id, req.body.sessionCode))) return res.status(403).json({ error: 'Code de session invalide' });
   // RS-10 : le mot de passe de connexion à distance ne survit pas à la session.
   const { rows } = await pool.query(
     `UPDATE sessions
@@ -220,7 +232,7 @@ sessionsRouter.post('/sessions/:id/stop', validateBody(stopSchema), async (req, 
  */
 sessionsRouter.get('/technician/queue', requireAuth('technician', 'admin'), async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT s.id, s.session_code, s.platform, s.created_at, s.duration_minutes, s.human_requested_at,
+    `SELECT s.id, right(s.session_code, 4) AS session_code, s.platform, s.created_at, s.duration_minutes, s.human_requested_at,
             s.requested_mode, o.client_phone, o.client_name,
             c.name AS company_name, chr.priority AS company_priority
      FROM sessions s
@@ -238,7 +250,7 @@ sessionsRouter.get('/technician/queue', requireAuth('technician', 'admin'), asyn
 sessionsRouter.get('/technician/my-sessions', requireAuth('technician', 'admin'), async (req, res) => {
   await expireOverdueSessions(pool);
   const { rows } = await pool.query(
-    `SELECT s.id, s.session_code, s.platform, s.status, s.ends_at,
+    `SELECT s.id, right(s.session_code, 4) AS session_code, s.platform, s.status, s.ends_at,
             s.consent_screen_at, s.consent_control_at,
             o.client_phone, o.client_name,
             s.task_progress, EXTRACT(EPOCH FROM (now() - s.task_progress_at)) AS progress_age

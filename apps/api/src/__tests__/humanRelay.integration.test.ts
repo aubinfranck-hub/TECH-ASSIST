@@ -17,7 +17,7 @@ import { createApp } from '../app.js';
 import { pool } from '../db/pool.js';
 import { flushAlerts } from '../notify/technicianAlerts.js';
 import { testOutbox } from '../utils/mailer.js';
-import { applyMigrations, truncateAll } from './testDb.js';
+import { applyMigrations, truncateAll, codeOf } from './testDb.js';
 
 const app = createApp();
 
@@ -130,7 +130,7 @@ describe('Passage de main : alerte des techniciens, console, discussion avec le 
       await subscribe(t, 'https://push.example/awa');
       const c = await registerClient();
       const sessionId = await startSession(c);
-      const res = await request(app).post(`/api/sessions/${sessionId}/escalate`);
+      const res = await request(app).post(`/api/sessions/${sessionId}/escalate`).send({ sessionCode: await codeOf(sessionId) });
       expect(res.status).toBe(200);
       await flushAlerts();
       expect(pushSent).toHaveLength(1);

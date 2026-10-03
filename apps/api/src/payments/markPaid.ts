@@ -16,9 +16,11 @@ export async function markOrderPaid(orderId: string, by: { technicianId: string 
     await client.query('BEGIN');
     const { rows } = await client.query(
       `UPDATE orders SET status = 'paid', paid_at = now(), paid_by_technician_id = $2
-       WHERE id = $1 AND status = 'pending_payment'
+       WHERE id = $1 AND (status = 'pending_payment'
+         -- Paiement reçu après l'annulation d'une session partenaire : l'argent est bien encaissé, on le constate.
+         OR (status = 'cancelled' AND $3::boolean AND plan_id IN (SELECT id FROM pricing_plans WHERE (metadata->>'viewerSession')::boolean = TRUE)))
        RETURNING id, status, paid_at`,
-      [orderId, by.technicianId],
+      [orderId, by.technicianId, by.technicianId === null],
     );
     if (rows.length === 0) {
       await client.query('ROLLBACK');

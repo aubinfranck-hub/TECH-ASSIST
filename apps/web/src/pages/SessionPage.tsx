@@ -44,19 +44,19 @@ export function SessionPage() {
 
   async function giveConsent(stage: 'screen' | 'control') {
     if (!session) return;
-    await api.post(`/api/sessions/${session.id}/consent`, { stage });
+    await api.post(`/api/sessions/${session.id}/consent`, { stage, sessionCode: session.session_code });
     refresh(code);
   }
 
   async function escalateToHuman() {
     if (!session) return;
-    await api.post(`/api/sessions/${session.id}/escalate`);
+    await api.post(`/api/sessions/${session.id}/escalate`, { sessionCode: session.session_code });
     refresh(code);
   }
 
   async function stopSession() {
     if (!session) return;
-    await api.post(`/api/sessions/${session.id}/stop`, { stoppedBy: 'client' });
+    await api.post(`/api/sessions/${session.id}/stop`, { stoppedBy: 'client', sessionCode: session.session_code });
     refresh(code);
   }
 

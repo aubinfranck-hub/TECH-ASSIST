@@ -3,7 +3,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { pool } from '../db/pool.js';
-import { applyMigrations, truncateAll } from './testDb.js';
+import { applyMigrations, truncateAll, codeOf } from './testDb.js';
 
 const app = createApp();
 
@@ -128,11 +128,11 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
     const sessionRes = await request(app).post(`/api/orders/${orderId}/session`).send({ platform: 'web' });
     const sessionId = sessionRes.body.session.id;
 
-    const stop = await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client' });
+    const stop = await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client', sessionCode: await codeOf(sessionId) });
     expect(stop.status).toBe(200);
     expect(stop.body.session.status).toBe('completed');
 
-    const stopAgain = await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client' });
+    const stopAgain = await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client', sessionCode: await codeOf(sessionId) });
     expect(stopAgain.status).toBe(409);
   });
 
@@ -230,8 +230,8 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
         .set('Authorization', `Bearer ${techToken}`);
       expect(blocked.status).toBe(403);
 
-      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen' });
-      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen', sessionCode: await codeOf(sessionId) });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control', sessionCode: await codeOf(sessionId) });
 
       const allowed = await request(app)
         .get(`/api/technician/sessions/${sessionId}/remote-credentials`)
@@ -252,8 +252,8 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
         remotePassword: 'secret',
         bootstrapToken,
       });
-      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen' });
-      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen', sessionCode: await codeOf(sessionId) });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control', sessionCode: await codeOf(sessionId) });
 
       const res = await request(app)
         .get(`/api/technician/sessions/${sessionId}/remote-credentials`)
@@ -270,10 +270,10 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
         remotePassword: 'secret',
         bootstrapToken,
       });
-      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen' });
-      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control' });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen', sessionCode: await codeOf(sessionId) });
+      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control', sessionCode: await codeOf(sessionId) });
 
-      await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client' });
+      await request(app).post(`/api/sessions/${sessionId}/stop`).send({ stoppedBy: 'client', sessionCode: await codeOf(sessionId) });
 
       const res = await request(app)
         .get(`/api/technician/sessions/${sessionId}/remote-credentials`)

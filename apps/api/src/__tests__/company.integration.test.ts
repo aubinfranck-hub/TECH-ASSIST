@@ -162,10 +162,11 @@ describe('Espace PME (RP-01 à RP-09)', () => {
       .send({ description: 'Imprimante réseau injoignable', priority: 'urgent' });
     expect(help.status).toBe(201);
     expect(help.body.session.session_code).toMatch(/^[0-9]{9}$/);
+    // Le code complet reste le secret du client : la file technicien n'en montre que les 4 derniers chiffres.
 
     // La session doit apparaître dans la file d'attente technicien avec le contexte PME.
     const queue = await request(app).get('/api/technician/queue').set('Authorization', `Bearer ${adminToken}`);
-    const entry = queue.body.queue.find((q: { session_code: string }) => q.session_code === help.body.session.session_code);
+    const entry = queue.body.queue.find((q: { session_code: string }) => q.session_code === help.body.session.session_code.slice(-4));
     expect(entry).toBeDefined();
     expect(entry.company_name).toBe('Kassy SARL');
     expect(entry.company_priority).toBe('urgent');

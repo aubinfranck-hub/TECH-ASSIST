@@ -38,6 +38,8 @@ export async function creditEarningForSession(db: Db, sessionId: string): Promis
   // Les partenaires paient leurs propres sessions ; les administrateurs ne se rémunèrent pas eux-mêmes.
   if (s.technician_role !== 'technician') return { credited: false, reason: 'not_staff' };
   if (!s.human_included) return { credited: false, reason: 'no_human' };
+  // Un technicien ne se rémunère pas sur une commande qu'il a confirmée lui-même à la main.
+  if (s.paid_by_technician_id && s.paid_by_technician_id === s.technician_id) return { credited: false, reason: 'self_confirmed' };
 
   const kind: EarningKind = s.is_company ? 'entreprise' : s.is_upgrade ? 'complement' : 'ia_technicien';
   const rate = await db.query('SELECT amount_fcfa FROM technician_pay_rates WHERE kind = $1', [kind]);

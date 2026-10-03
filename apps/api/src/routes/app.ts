@@ -326,6 +326,10 @@ appRouter.post('/app/orders', limiter, requireAppInstall, validateBody(orderSche
   if (!plan || plan.metadata?.subscription || plan.metadata?.coveredBySubscription || plan.metadata?.freePerPhone || plan.metadata?.viewerSession) {
     return res.status(404).json({ error: 'Forfait inconnu' });
   }
+  // Offre « IA seule » : on ne la vend pas tant que l'agent IA est indisponible (le client paierait sans pouvoir l'utiliser).
+  if (plan.metadata?.humanIncluded === false && !freeLaunch() && !aiAgentAvailable()) {
+    return res.status(503).json({ code: 'ai_unavailable', error: "L'assistance IA n'est pas disponible pour le moment. Réessayez plus tard ou choisissez l'offre avec technicien." });
+  }
   // Une seule commande en attente à la fois : évite l'empilement de demandes de paiement.
   const pending = await pool.query(
     `SELECT id FROM orders WHERE app_install_id = $1 AND status = 'pending_payment' AND upgrade_session_id IS NULL AND created_at > now() - interval '2 hours'`,

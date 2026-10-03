@@ -194,7 +194,7 @@ technicianConsoleRouter.get('/technician/sessions/:id', async (req, res) => {
   res.json({
     session: {
       id: d.id,
-      code: d.session_code,
+      code: String(d.session_code).slice(-4),
       status: d.status,
       platform: d.platform,
       mode: d.mode,
@@ -251,7 +251,8 @@ technicianConsoleRouter.post('/technician/sessions/:id/messages', validateBody(m
 technicianConsoleRouter.post('/technician/sessions/:id/finish', async (req, res) => {
   const d = await loadDetail(req.params.id!);
   if (!d) return res.status(404).json({ error: 'Demande introuvable' });
-  if (!canSee(d, req)) return res.status(403).json({ error: 'Cette demande est suivie par un autre technicien.' });
+  // Seul le technicien qui a pris la demande (ou un administrateur) peut la terminer : une demande libre se prend d'abord en charge.
+  if (req.auth!.role !== 'admin' && d.technician_id !== req.auth!.sub) return res.status(403).json({ error: 'Cette demande est suivie par un autre technicien ou n’est pas encore prise en charge.' });
   const { rows } = await pool.query(
     `UPDATE sessions SET status = 'completed', stopped_at = now(), stopped_by = 'technician', remote_password_encrypted = NULL
      WHERE id = $1 AND status IN ('created','waiting_technician','active') RETURNING id`,
