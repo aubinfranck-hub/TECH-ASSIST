@@ -14,6 +14,7 @@ import { relayWithTechnician } from './humanRelay.js';
 import { isAdmin, launchElevated, relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
+import { checkForUpdate, cleanupOldVersion } from './selfUpdate.js';
 import { ProgressSync } from './progressSync.js';
 import { CompositeReporter, ConsoleReporter, HttpReporter } from './reporters.js';
 import { resolveSkill, SKILL_MENU } from './skills/index.js';
@@ -66,6 +67,11 @@ async function main() {
     console.error("Cet agent fonctionne uniquement sous Windows pour l'instant.");
     process.exit(2);
   }
+
+  // Mise à jour automatique : avant tout le reste, jamais bloquante (sans Internet ou sans droits, on continue avec cette version).
+  await cleanupOldVersion();
+  const update = await checkForUpdate().catch(() => ({ status: 'skipped' as const, reason: 'erreur' }));
+  if (update.status === 'restarting') process.exit(0);
 
   // Les réparations exigent les droits administrateur : on les demande une fois (fenêtre de Windows).
   if (await relaunchAsAdminIfNeeded(process.argv)) process.exit(0);
