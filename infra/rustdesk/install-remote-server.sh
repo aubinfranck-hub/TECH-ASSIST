@@ -19,7 +19,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 systemctl enable --now docker
 
-PUBLIC_IP=$(curl -fsS https://ifconfig.me)
+PUBLIC_IP=$(curl -4 -fsS https://ifconfig.me)
 mkdir -p /opt/rustdesk
 cd /opt/rustdesk
 
