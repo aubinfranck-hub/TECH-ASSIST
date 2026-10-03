@@ -44,7 +44,7 @@ ordersRouter.post('/', createOrderLimiter, validateBody(createOrderSchema), asyn
   // L'offre gratuite, l'abonnement et la couverture abonné ont leurs propres
   // routes (/api/assistance, /api/subscriptions) qui vérifient les droits :
   // les commander ici permettrait de contourner ces vérifications.
-  if (plan.metadata?.subscription || plan.metadata?.freePerPhone || plan.metadata?.coveredBySubscription) {
+  if (plan.metadata?.subscription || plan.metadata?.freePerPhone || plan.metadata?.coveredBySubscription || plan.metadata?.upgradeHuman) {
     return res.status(400).json({ error: 'Cette formule se commande depuis la page Assistance.' });
   }
 

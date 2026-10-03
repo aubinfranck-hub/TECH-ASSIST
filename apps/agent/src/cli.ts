@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { hostname } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { runSkill } from './agent.js';
-import { AppApi, DEFAULT_API_BASE, FileAccountStore, answerCompanyRequest, joinCompany, readHardwareHash, signIn, startCovered } from './appAccount.js';
+import { AppApi, DEFAULT_API_BASE, FileAccountStore, answerCompanyRequest, humanAccessFor, joinCompany, readHardwareHash, signIn, startCovered } from './appAccount.js';
 import { collectFleetHealth } from './skills/fleetStatus.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
 import { ChatUi, DEFAULT_SITE } from './chatServer.js';
@@ -135,12 +135,16 @@ async function main() {
       // Demande de diagnostic de l'entreprise (lecture seule, avec l'accord de l'utilisateur).
       await answerCompanyRequest({ ui: chat, api, runner, reporter, machine }, token).catch(() => undefined);
     }
-    const started = login ? await startCovered({ ...deps, openUrl: (u) => { if (!flag('no-browser')) openBrowser(u); } }, login) : null;
+    const startDeps = { ...deps, openUrl: (u: string) => { if (!flag('no-browser')) openBrowser(u); } };
+    const started = login ? await startCovered(startDeps, login) : null;
     conversationScope = started?.scope;
     if (started) {
       startedSession = { token: started.token, sessionId: started.sessionId };
       const base = apiBase ?? DEFAULT_API_BASE;
-      conversationReporter = new CompositeReporter([new ConsoleReporter(), new HttpReporter(base, started.token, started.sessionId)]);
+      // Offre « Assistance IA » (500 FCFA) : pas de technicien, sauf complément. Le bouton de la fenêtre et l'agent suivent la même règle.
+      const human = humanAccessFor(startDeps, started);
+      chat.technicianIncluded = () => human.included;
+      conversationReporter = new CompositeReporter([new ConsoleReporter(), new HttpReporter(base, started.token, started.sessionId, fetch, human)]);
       conversationAssistant = new HttpAssistant(base, started.token, started.sessionId);
       // L'agent installé sur le PC fait lui-même le travail : « agent IA indisponible » ne concerne que l'assistant en ligne (questions).
       chat.info(
@@ -150,8 +154,10 @@ async function main() {
             ? "L'abonnement de votre entreprise couvre ce poste."
             : started.coverage === 'paid_forfait'
               ? started.scope === 'diagnostic'
-                ? 'Votre forfait Diagnostic est actif : j\'analyse et j\'explique, sans rien modifier.'
-                : 'Votre forfait est actif.'
+                ? "Votre assistance est en lecture seule : j'analyse et j'explique, sans rien modifier."
+                : started.humanIncluded
+                  ? 'Votre forfait est actif : je commence, et un technicien prend le relais si le problème le demande.'
+                  : 'Votre forfait « Assistance IA » est actif : je répare avec vous, étape par étape.'
               : 'Votre abonnement est actif.',
       );
     } else {

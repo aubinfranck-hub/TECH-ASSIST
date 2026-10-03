@@ -8,6 +8,7 @@ import { validateBody } from '../middleware/validate.js';
 import { alertInBackground } from '../notify/technicianAlerts.js';
 import { logAudit, type Db } from '../utils/audit.js';
 import { isDisposableEmail, normalizeEmail } from '../utils/email.js';
+import { freeLaunch, upgradeOffer } from '../utils/offers.js';
 import { consumeEmailCode, emailField, emailVerificationEnabled } from './emailVerification.js';
 import {
   AssistantUnavailableError,
@@ -59,7 +60,7 @@ interface Entitlements {
   /** Poste rattaché à une société dont l'abonnement est actif. */
   companyCovered: boolean;
   /** Forfait payé, pas encore démarré. */
-  paidForfait: { orderId: string; name: string; scope: string } | null;
+  paidForfait: { orderId: string; name: string; scope: string; humanIncluded: boolean } | null;
   aiAgentAvailable: boolean;
 }
 
@@ -72,11 +73,6 @@ async function companyCovers(db: Db, installId: string): Promise<boolean> {
     [installId],
   );
   return (r.rowCount ?? 0) > 0;
-}
-
-/** Lancement gratuit : tant que FREE_LAUNCH=true, toute assistance est offerte et rien n'est facturé. */
-function freeLaunch(): boolean {
-  return process.env.FREE_LAUNCH === 'true';
 }
 
 async function freeOfferUsed(db: Db, email: string, hardwareHash: string | null): Promise<boolean> {
@@ -110,7 +106,7 @@ async function entitlementsFor(install: { id?: string; email: string; hardwareHa
   // Forfait payé et pas encore utilisé : le client peut démarrer son assistance (ex. après avoir fermé le programme).
   const paid = install.id
     ? await pool.query(
-        `SELECT o.id, p.name, p.metadata->>'scope' AS scope
+        `SELECT o.id, p.name, p.metadata->>'scope' AS scope, COALESCE((p.metadata->>'humanIncluded')::boolean, TRUE) AS human_included
          FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
          WHERE o.app_install_id = $1 AND o.status = 'paid' AND o.amount_fcfa > 0
            AND p.metadata ? 'scope' AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.order_id = o.id)
@@ -118,7 +114,7 @@ async function entitlementsFor(install: { id?: string; email: string; hardwareHa
         [install.id],
       )
     : { rows: [] };
-  const paidForfait = paid.rows[0] ? { orderId: paid.rows[0].id as string, name: paid.rows[0].name as string, scope: paid.rows[0].scope as string } : null;
+  const paidForfait = paid.rows[0] ? { orderId: paid.rows[0].id as string, name: paid.rows[0].name as string, scope: paid.rows[0].scope as string, humanIncluded: freeLaunch() || paid.rows[0].human_included === true } : null;
   return { freeOfferAvailable: !used, subscription, companyCovered, paidForfait, aiAgentAvailable: aiAgentAvailable() };
 }
 
@@ -219,6 +215,21 @@ appRouter.post('/app/company/join', limiter, requireAppInstall, validateBody(joi
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Code invalide, expiré ou déjà utilisé. Demandez un nouveau code à votre administrateur.' });
     }
+    // Forfait entreprise : le nombre de postes est celui du forfait choisi.
+    const limit = await client.query(
+      `SELECT (p.metadata->>'maxDevices')::int AS max_devices,
+              (SELECT count(*)::int FROM company_devices d WHERE d.company_id = c.id) AS devices
+       FROM companies c LEFT JOIN pricing_plans p ON p.id = c.subscription_plan_id WHERE c.id = $1`,
+      [joined.companyId],
+    );
+    const { max_devices: maxDevices, devices } = limit.rows[0] ?? {};
+    if (maxDevices !== null && maxDevices !== undefined && devices >= maxDevices) {
+      await client.query('ROLLBACK'); // le code n'est pas consommé : l'annulation le restitue
+      return res.status(409).json({
+        error: `Le forfait de votre entreprise couvre ${maxDevices} poste${maxDevices > 1 ? 's' : ''} et ${maxDevices > 1 ? 'ils sont tous rattachés' : 'il est déjà rattaché'}. Demandez à votre administrateur de passer à un forfait plus grand.`,
+        code: 'device_limit',
+      });
+    }
     const inserted = await client.query(
       `INSERT INTO company_devices (company_id, device_name, platform, app_install_id, last_seen_at)
        VALUES ($1, $2, $3, $4, now())
@@ -316,7 +327,7 @@ appRouter.post('/app/orders', limiter, requireAppInstall, validateBody(orderSche
   }
   // Une seule commande en attente à la fois : évite l'empilement de demandes de paiement.
   const pending = await pool.query(
-    `SELECT id FROM orders WHERE app_install_id = $1 AND status = 'pending_payment' AND created_at > now() - interval '2 hours'`,
+    `SELECT id FROM orders WHERE app_install_id = $1 AND status = 'pending_payment' AND upgrade_session_id IS NULL AND created_at > now() - interval '2 hours'`,
     [install.id],
   );
   const reuse = pending.rows[0];
@@ -340,18 +351,65 @@ appRouter.post('/app/orders', limiter, requireAppInstall, validateBody(orderSche
   res.status(201).json({
     order,
     plan: { id: plan.id, name: plan.name, scope: plan.metadata?.scope ?? 'fix' },
-    payment: {
-      amountFcfa: plan.price_fcfa,
-      reference: String(order.id).slice(0, 8).toUpperCase(),
-      // Paiement automatique : le client paie sur le lien, le prestataire confirme, l'assistance démarre seule.
-      url: paymentLink(order, install.email),
-      // Jèko : le client choisit sa méthode, puis POST /app/orders/:id/pay donne le lien de paiement.
-      automatic: jekoConfigured() || Boolean(process.env.PAYMENT_WEBHOOK_SECRET && process.env.PAYMENT_LINK_TEMPLATE),
-      methods: jekoConfigured() ? JEKO_METHODS : [],
-      instructions:
-        process.env.PAYMENT_INSTRUCTIONS ??
-        'Envoyez le montant par Mobile Money au numéro indiqué par notre équipe en précisant la référence. Un technicien confirme la réception, puis votre assistance démarre.',
-    },
+    payment: paymentBlock(order, Number(plan.price_fcfa), install.email, 'Un technicien confirme la réception, puis votre assistance démarre.'),
+  });
+});
+
+/** Informations de paiement d'une commande (lien, méthodes Jèko, consignes manuelles) : même format pour un forfait et pour un complément. */
+function paymentBlock(order: { id: string; amount_fcfa: number }, amountFcfa: number, email: string, afterPayment: string) {
+  return {
+    amountFcfa,
+    reference: String(order.id).slice(0, 8).toUpperCase(),
+    // Paiement automatique : le client paie sur le lien, le prestataire confirme, l'assistance démarre seule.
+    url: paymentLink(order, email),
+    // Jèko : le client choisit sa méthode, puis POST /app/orders/:id/pay donne le lien de paiement.
+    automatic: jekoConfigured() || Boolean(process.env.PAYMENT_WEBHOOK_SECRET && process.env.PAYMENT_LINK_TEMPLATE),
+    methods: jekoConfigured() ? JEKO_METHODS : [],
+    instructions:
+      process.env.PAYMENT_INSTRUCTIONS ?? `Envoyez le montant par Mobile Money au numéro indiqué par notre équipe en précisant la référence. ${afterPayment}`,
+  };
+}
+
+const UPGRADE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Offre « IA seule » : l'agent a besoin d'un technicien. Le client peut payer le complément (une fois, pour CETTE assistance) ;
+ * dès le paiement confirmé, la session comprend un technicien. Même paiement que les forfaits (Jèko ou confirmation manuelle).
+ */
+appRouter.post('/app/sessions/:id/upgrade', limiter, requireAppInstall, async (req, res) => {
+  const install = req.appInstall!;
+  if (!UPGRADE_UUID.test(req.params.id!)) return res.status(404).json({ error: 'Session introuvable' });
+  const owned = await pool.query(
+    `SELECT s.id, s.status, s.human_included FROM sessions s JOIN orders o ON o.id = s.order_id
+     WHERE s.id = $1 AND o.app_install_id = $2`,
+    [req.params.id, install.id],
+  );
+  const session = owned.rows[0];
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (!['created', 'waiting_technician', 'active'].includes(session.status)) return res.status(409).json({ error: 'Cette assistance est terminée.' });
+  if (session.human_included) return res.status(409).json({ error: 'Un technicien fait déjà partie de votre assistance.', code: 'already_included' });
+  const offer = await upgradeOffer();
+  if (!offer) return res.status(404).json({ error: 'Ce complément est indisponible pour le moment.' });
+
+  // Une seule demande de complément en attente par assistance : on la retrouve au lieu d'en empiler.
+  const pending = await pool.query(
+    `SELECT id, status, amount_fcfa, created_at FROM orders WHERE upgrade_session_id = $1 AND status = 'pending_payment' ORDER BY created_at DESC LIMIT 1`,
+    [session.id],
+  );
+  let order = pending.rows[0];
+  if (!order) {
+    const ins = await pool.query(
+      `INSERT INTO orders (client_phone, client_name, client_email, app_install_id, plan_id, amount_fcfa, platform, mode, upgrade_session_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'ia', $8) RETURNING id, status, amount_fcfa, created_at`,
+      [install.phone, install.name, install.email, install.id, offer.planId, offer.priceFcfa, install.platform, session.id],
+    );
+    order = ins.rows[0];
+    await logAudit(pool, { actorType: 'client', actorId: install.email, orderId: order.id, sessionId: session.id, action: 'order.upgrade_requested', details: { planId: offer.planId } });
+  }
+  res.status(201).json({
+    order,
+    plan: { id: offer.planId, name: 'Ajouter un technicien à mon assistance' },
+    payment: paymentBlock(order, offer.priceFcfa, install.email, 'Un technicien confirme la réception, puis il pourra prendre le relais.'),
   });
 });
 
@@ -453,7 +511,7 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
         error: 'Votre assistance offerte a déjà été utilisée. Choisissez un forfait pour continuer.',
         code: 'subscription_required',
         subscriptionPlanId: SUBSCRIPTION_PLAN_ID,
-        forfaitPlanIds: ['diagnostic_express', 'assistance_rapide', 'session_maintenance'],
+        forfaitPlanIds: ['diagnostic_express', 'assistance_rapide'],
       });
     }
 
@@ -502,6 +560,9 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
     scope: scope ?? 'full',
     // true : l'agent IA a été demandé mais n'est pas activé, un technicien prend le relais.
     fallbackToHuman: mode === 'ia' && session.mode === 'humain',
+    // Un technicien fait-il partie de cette assistance ? (offre « IA seule » : non, sauf complément payé)
+    humanIncluded: session.human_included,
+    ...(session.human_included ? {} : { upgrade: await upgradeOffer() }),
   });
 });
 
@@ -582,7 +643,7 @@ appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateB
 
   // La session doit appartenir à CETTE installation, via sa commande.
   const owned = await pool.query(
-    `SELECT s.id, s.order_id FROM sessions s JOIN orders o ON o.id = s.order_id
+    `SELECT s.id, s.order_id, s.human_included FROM sessions s JOIN orders o ON o.id = s.order_id
      WHERE s.id = $1 AND o.app_install_id = $2`,
     [req.params.id, install.id],
   );
@@ -600,6 +661,10 @@ appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateB
     details: { ...(body.details ?? {}), skill: body.skill, action: body.action, message: body.message },
   });
 
+  // Offre « IA seule » : pas de technicien. Le serveur ne prévient personne et le dit ; l'agent propose le complément au client.
+  if (body.type === 'escalated' && owned.rows[0].human_included === false) {
+    return res.status(201).json({ recorded: true, humanIncluded: false, upgrade: await upgradeOffer() });
+  }
   // Quand l'agent passe la main, la session rejoint la file des techniciens.
   if (body.type === 'escalated') {
     await pool.query(`UPDATE sessions SET mode = 'humain' WHERE id = $1 AND status IN ('created','waiting_technician','active')`, [

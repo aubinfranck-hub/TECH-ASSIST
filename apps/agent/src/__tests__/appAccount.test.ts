@@ -131,7 +131,7 @@ describe('démarrage de l\'assistance', () => {
   const USED = { ...ENT, freeOfferAvailable: false };
   const noWait = { wait: async () => undefined, pollMs: 1, maxWaitMs: 3 };
 
-  it('offerte utilisée : propose les 3 forfaits, attend la confirmation du paiement puis démarre avec la bonne portée', async () => {
+  it('offerte utilisée : propose les 2 forfaits, attend la confirmation du paiement puis démarre avec la bonne portée', async () => {
     let polls = 0;
     const calls: { path: string; body: Record<string, unknown> }[] = [];
     const api = new AppApi('https://x.test', fakeFetch({
@@ -142,9 +142,12 @@ describe('démarrage de l\'assistance', () => {
     const ui = new ScriptedConversation({ picks: [1] });
     const started = await startCovered({ ui, api, store: memoryStore(), ...noWait }, { token: 'T', entitlements: USED });
     expect(started).toMatchObject({ sessionId: 'S9', coverage: 'paid_forfait', scope: 'fix' });
-    expect(ui.choices[0]!.options).toHaveLength(4);
+    expect(ui.choices[0]!.options).toHaveLength(3);
     expect(ui.choices[0]!.options[0]).toContain('500 FCFA');
-    expect(ui.choices[0]!.options[2]).toContain('5 000 FCFA');
+    expect(ui.choices[0]!.options[0]).toContain('sans technicien');
+    expect(ui.choices[0]!.options[1]).toContain('2 000 FCFA');
+    expect(ui.choices[0]!.options[2]).toBe('Plus tard');
+    expect(started?.humanIncluded).toBe(true);
     expect(ui.said).toContain('ABCDEF12');
     expect(calls.find((c) => c.path === '/app/orders')!.body.planId).toBe('assistance_rapide');
     expect(calls.find((c) => c.path === '/app/assistance')!.body.orderId).toBe('ord-1');
@@ -183,7 +186,7 @@ describe('démarrage de l\'assistance', () => {
   it('« Plus tard » : aucune commande créée', async () => {
     const calls: { path: string; body: Record<string, unknown> }[] = [];
     const api = new AppApi('https://x.test', fakeFetch({}, calls));
-    const ui = new ScriptedConversation({ picks: [3] });
+    const ui = new ScriptedConversation({ picks: [2] });
     expect(await startCovered({ ui, api, store: memoryStore(), ...noWait }, { token: 'T', entitlements: USED })).toBeNull();
     expect(calls).toEqual([]);
   });

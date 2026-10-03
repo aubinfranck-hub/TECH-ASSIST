@@ -1,3 +1,4 @@
+import type { HumanAccess } from './humanAccess.js';
 import type { ResultsView } from './results.js';
 import type { TaskTracker } from './tasks.js';
 
@@ -101,6 +102,8 @@ export interface AgentEvent {
 /** Compte rendu de chaque étape (journal côté serveur, console locale). */
 export interface Reporter {
   event(event: AgentEvent): Promise<void>;
+  /** Offre sans technicien (« Assistance IA ») : renseigné par la session ; absent = un technicien est inclus. */
+  readonly human?: HumanAccess;
 }
 
 /** Dialogue avec le client : l'agent ne fait rien de modifiant sans son « oui ». */

@@ -41,8 +41,16 @@ export async function markOrderPaid(orderId: string, by: { technicianId: string 
        RETURNING s.id, s.starts_at, s.ends_at`,
       [orderId],
     );
+    // Complément « technicien » : dès le paiement confirmé, l'assistance concernée comprend un technicien.
+    const upgraded = await client.query(
+      `UPDATE sessions SET human_included = TRUE
+       WHERE id = (SELECT upgrade_session_id FROM orders WHERE id = $1) AND human_included = FALSE
+       RETURNING id`,
+      [orderId],
+    );
     await client.query('COMMIT');
 
+    if (upgraded.rows[0]) await logAudit(pool, { actorType: 'system', orderId, sessionId: upgraded.rows[0].id, action: 'session.human_added' });
     await logAudit(pool, {
       actorType: by.technicianId ? 'technician' : 'system',
       actorId: by.technicianId ?? by.provider ?? 'payment-provider',

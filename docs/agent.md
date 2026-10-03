@@ -150,7 +150,11 @@ Page installable (« ajouter à l'écran d'accueil ») qui offre aux téléphone
 
 ## Forfaits et portée
 
-Après l'assistance offerte, l'agent propose les forfaits Diagnostic (500), Dépannage (2 000) et Intervention complète (5 000 FCFA), attend la confirmation du paiement (sondage toutes les 10 s, 15 min), puis démarre l'assistance avec la portée du forfait : `diagnostic` = lecture seule (ce qui serait fait est expliqué, rien n'est modifié ; installation, désinstallation et lecteurs réseau refusés), `fix` = un problème précis (la réparation complète du PC est réservée à `full`), `full` = tout. Un forfait payé mais pas encore utilisé est retrouvé au prochain lancement.
+Après l'assistance offerte, l'agent propose deux offres (D14) : **Assistance IA** (500 FCFA, sans technicien humain) et **Assistance IA + technicien** (2 000 FCFA). Il attend la confirmation du paiement (sondage toutes les 10 s, 15 min), puis démarre l'assistance (portée `full`). Un forfait payé mais pas encore utilisé est retrouvé au prochain lancement. Les anciennes portées restent comprises pour les commandes déjà payées : `diagnostic` = lecture seule (ce qui serait fait est expliqué, rien n'est modifié ; installation, désinstallation et lecteurs réseau refusés), `fix` = un problème précis (la réparation complète du PC est réservée à `full`).
+
+### Technicien inclus ou non
+
+Le serveur dit à l'agent si un technicien fait partie de l'assistance (`humanIncluded`, et `upgrade` = prix du complément). Dans l'offre à 500 FCFA, l'agent ne prévient personne : avant tout passage de main (`ensureHuman`, dans `runSkill`, `converse` et pour le bouton « Parler à un technicien »), il l'explique au client et propose le **complément** (1 500 FCFA, payé dans la conversation comme un forfait, `POST /app/sessions/:id/upgrade`). Si le client paie, un technicien est alerté comme d'habitude ; sinon l'agent continue seul et le dit. Le serveur applique la même règle (aucune alerte pour une session « IA seule »), donc un agent modifié ne peut pas la contourner.
 
 ## Microsoft 365 (Teams, OneDrive, licence Office)
 

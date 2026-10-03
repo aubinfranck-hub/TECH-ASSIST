@@ -1,3 +1,4 @@
+import { ensureHuman } from './humanAccess.js';
 import { formatReport, type InterventionReport, type ReportAction, type ReportStatus } from './report.js';
 import { buildSkillResults, formatResultsText, summarizeResults, type ResultsView } from './results.js';
 import { cleanErrorMessage } from './skills/common.js';
@@ -10,7 +11,7 @@ export type Outcome =
   | { status: 'declined'; actionsDone: string[] }
   /** Les corrections ne prennent effet qu'après redémarrage : rien n'a pu être vérifié. `rebooting` : le client a accepté. */
   | { status: 'reboot_needed'; actionsDone: string[]; rebooting: boolean }
-  /** `recorded` : false si le serveur n'a pas pu enregistrer le passage de main (le client en est prévenu). */
+  /** `recorded` : false si personne n'a été prévenu : serveur injoignable (le client en est prévenu) ou offre sans technicien. */
   | { status: 'escalated'; reason: string; actionsDone: string[]; recorded: boolean };
 
 /** Nombre maximal de tours « corriger puis relire » : un nouveau problème peut apparaître une fois un autre réglé. */
@@ -132,13 +133,13 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
   }
 
   if (ctx.readOnly) {
-    // Forfait Diagnostic : ce qu'on ferait est expliqué, mais rien n'est modifié.
+    // Lecture seule (portée « diagnostic ») : ce qu'on ferait est expliqué, mais rien n'est modifié.
     if (diagnosis.actions.length > 0) {
       ctx.ui.info('Voici ce que je ferais pour corriger cela :');
       for (const a of diagnosis.actions) ctx.ui.info(`• ${a.title}`);
     }
-    ctx.ui.info("Votre forfait Diagnostic n'inclut pas la réparation : rien n'a été modifié. Avec un forfait Dépannage, je l'applique avec vous.");
-    trace.test = 'Diagnostic seul : aucune modification (forfait Diagnostic).';
+    ctx.ui.info("Cette assistance n'inclut pas la réparation : rien n'a été modifié. Pour que je l'applique avec vous, choisissez l'offre « Assistance IA ».");
+    trace.test = 'Lecture seule : aucune modification.';
     return { status: 'declined', actionsDone: done };
   }
 
@@ -306,14 +307,17 @@ export async function offerReboot(ctx: { runner: CommandRunner; ui: Ui }, report
 }
 
 export async function escalate(
-  ctx: { ui: Ui },
+  ctx: { ui: Ui; reporter?: Reporter },
   report: Report,
   done: string[],
   reason: string,
   lead?: string,
 ): Promise<Outcome> {
   if (lead) ctx.ui.info(lead);
+  // Offre « IA seule » : pas de technicien, sauf complément payé. La demande est tout de même notée (le serveur n'alerte personne).
+  const allowed = ctx.reporter ? await ensureHuman(ctx.reporter, ctx.ui) : true;
   const recorded = await report({ type: 'escalated', message: reason });
+  if (!allowed) return { status: 'escalated', reason, actionsDone: done, recorded: false };
   if (recorded) {
     ctx.ui.info("Je passe la main à un technicien, qui verra tout ce que j'ai constaté et fait.");
   } else {

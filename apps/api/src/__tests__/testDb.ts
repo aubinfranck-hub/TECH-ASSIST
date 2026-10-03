@@ -26,7 +26,7 @@ export async function truncateAll() {
   // remet à leur valeur de référence pour ne pas polluer les tests suivants.
   await pool.query(`
     UPDATE pricing_plans SET active = TRUE
-    WHERE id IN ('pme_essentiel', 'pme_pro', 'pme_entreprise', 'diagnostic_express', 'assistance_rapide', 'session_maintenance',
+    WHERE id IN ('pme_essentiel', 'pme_pro', 'pme_entreprise', 'diagnostic_express', 'assistance_rapide',
       'assistance_offerte', 'abonnement_mensuel', 'assistance_abonne');
   `);
 }

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { HumanAccess } from './humanAccess.js';
 import { guarded, readScript } from './skills/common.js';
 import type { CommandRunner, ConversationUi } from './types.js';
 
@@ -67,17 +68,19 @@ export interface Entitlements {
   /** Poste couvert par l'abonnement de la société. */
   companyCovered?: boolean;
   /** Forfait payé, pas encore démarré. */
-  paidForfait?: { orderId: string; name: string; scope: Scope } | null;
+  paidForfait?: { orderId: string; name: string; scope: Scope; humanIncluded?: boolean } | null;
   aiAgentAvailable: boolean;
 }
 
 export type Scope = 'diagnostic' | 'fix' | 'full';
 
-/** Les forfaits à l'usage des particuliers (prix lus du serveur à l'affichage ; ceux-ci sont l'ordre et les libellés). */
-export const FORFAITS: { planId: string; label: string; price: number; scope: Scope; text: string }[] = [
-  { planId: 'diagnostic_express', label: 'Diagnostic', price: 500, scope: 'diagnostic', text: "j'analyse votre PC et je vous explique, sans rien modifier" },
-  { planId: 'assistance_rapide', label: 'Dépannage', price: 2000, scope: 'fix', text: 'un problème précis réglé avec vous (Windows, Office, Outlook, imprimante, Wi-Fi…)' },
-  { planId: 'session_maintenance', label: 'Intervention complète', price: 5000, scope: 'full', text: "analyse et réparation complètes, jusqu'à résolution, avec un technicien si besoin" },
+/**
+ * Les offres à l'usage des particuliers (D14) : 500 FCFA = l'agent IA seul ; 2 000 FCFA = l'agent IA + un technicien si besoin.
+ * Le serveur fait foi (prix, présence d'un technicien) ; ceux-ci sont l'ordre et les libellés.
+ */
+export const FORFAITS: { planId: string; label: string; price: number; scope: Scope; humanIncluded: boolean; text: string }[] = [
+  { planId: 'diagnostic_express', label: 'Assistance IA', price: 500, scope: 'full', humanIncluded: false, text: "l'agent IA analyse et répare votre PC avec vous, sans technicien humain" },
+  { planId: 'assistance_rapide', label: 'Assistance IA + technicien', price: 2000, scope: 'full', humanIncluded: true, text: "l'agent IA d'abord ; un technicien prend le relais si le problème le demande" },
 ];
 
 export interface StartedSession {
@@ -86,6 +89,10 @@ export interface StartedSession {
   scope: Scope;
   coverage: 'subscription' | 'company' | 'free_offer' | 'paid_forfait';
   fallbackToHuman: boolean;
+  /** Un technicien fait-il partie de cette assistance ? Non pour l'offre « Assistance IA » (500 FCFA), sauf complément payé. */
+  humanIncluded: boolean;
+  /** Complément à payer pour ajouter un technicien (FCFA), annoncé par le serveur. */
+  upgradeFcfa?: number;
 }
 
 class ApiError extends Error {
@@ -107,6 +114,13 @@ export interface RelayMessage {
 export interface RelayPoll {
   state: { status: string; requested: boolean; claimed: boolean; technician: string | null };
   messages: RelayMessage[];
+}
+
+/** Réponse du serveur à une commande (forfait ou complément) : ce qu'il faut payer et comment. */
+export interface OrderedPayment {
+  order: { id: string; amount_fcfa: number };
+  plan: { name: string; scope?: Scope };
+  payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean; methods?: string[] };
 }
 
 export class AppApi {
@@ -150,14 +164,16 @@ export class AppApi {
       coverage: 'subscription' | 'company' | 'free_offer' | 'paid_forfait';
       scope?: Scope;
       fallbackToHuman: boolean;
+      humanIncluded?: boolean;
+      upgrade?: { planId: string; priceFcfa: number } | null;
     }>('/app/assistance', { mode: 'ia', ...(orderId ? { orderId } : {}) }, token);
   }
   orderForfait(token: string, planId: string) {
-    return this.call<{
-      order: { id: string; amount_fcfa: number };
-      plan: { name: string; scope: Scope };
-      payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean; methods?: string[] };
-    }>('/app/orders', { planId }, token);
+    return this.call<OrderedPayment>('/app/orders', { planId }, token);
+  }
+  /** Complément « ajouter un technicien » à une assistance IA seule : même paiement qu'un forfait. */
+  upgradeSession(token: string, sessionId: string) {
+    return this.call<OrderedPayment>(`/app/sessions/${encodeURIComponent(sessionId)}/upgrade`, {}, token);
   }
   payOrder(token: string, id: string, method: string) {
     return this.call<{ url: string }>(`/app/orders/${encodeURIComponent(id)}/pay`, { method }, token);
@@ -305,7 +321,7 @@ export interface StartDeps extends AccountDeps {
 
 /**
  * Démarre l'assistance : abonnement ou entreprise, forfait déjà payé, assistance offerte — sinon le client choisit
- * un forfait (500 / 2 000 / 5 000 FCFA), paie par Mobile Money, et l'assistance démarre dès la confirmation.
+ * un forfait (500 FCFA : IA seule ; 2 000 FCFA : IA + technicien), paie par Mobile Money, et l'assistance démarre dès la confirmation.
  */
 export async function startCovered(deps: StartDeps, login: { token: string; entitlements: Entitlements }): Promise<StartedSession | null> {
   const { ui, api } = deps;
@@ -314,7 +330,15 @@ export async function startCovered(deps: StartDeps, login: { token: string; enti
   const begin = async (orderId?: string, fallbackScope: Scope = 'full'): Promise<StartedSession | null> => {
     try {
       const started = await api.startAssistance(token, orderId);
-      return { token, sessionId: started.session.id, scope: started.scope ?? fallbackScope, coverage: started.coverage, fallbackToHuman: started.fallbackToHuman };
+      return {
+        token,
+        sessionId: started.session.id,
+        scope: started.scope ?? fallbackScope,
+        coverage: started.coverage,
+        fallbackToHuman: started.fallbackToHuman,
+        humanIncluded: started.humanIncluded !== false,
+        ...(started.upgrade ? { upgradeFcfa: started.upgrade.priceFcfa } : {}),
+      };
     } catch (err) {
       ui.info(err instanceof Error ? err.message : "Impossible de démarrer l'assistance.");
       return null;
@@ -333,7 +357,7 @@ export async function startCovered(deps: StartDeps, login: { token: string; enti
   if (entitlements.freeOfferAvailable) {
     const go = await ui.choose('Vous avez une assistance offerte. La démarrer maintenant ?', ['Oui, la démarrer', 'Non, plus tard']);
     if (go !== 0) return null;
-    return begin(undefined, 'fix');
+    return begin(undefined, 'full');
   }
 
   ui.info('Votre assistance offerte a déjà été utilisée. Choisissez le forfait qui correspond à votre besoin, vous ne payez que ce que vous utilisez :');
@@ -350,26 +374,46 @@ export async function startCovered(deps: StartDeps, login: { token: string; enti
     return null;
   }
   ui.info(`Forfait « ${ordered.plan.name} » : ${fcfa(ordered.payment.amountFcfa)}. Référence de paiement : ${ordered.payment.reference}.`);
+  const paid = await collectPayment(deps, token, ordered, {
+    automatic: "Dès que votre paiement est reçu, votre assistance démarre toute seule, sans rien d'autre à faire. Laissez cette fenêtre ouverte.",
+    manual: "J'attends la confirmation de votre paiement par un technicien. Vous pouvez laisser cette fenêtre ouverte.",
+    confirmed: 'Paiement confirmé, merci. Je démarre votre assistance.',
+    late: "Je n'ai pas encore reçu la confirmation de votre paiement. Relancez le programme une fois payé : votre forfait sera retrouvé automatiquement.",
+  });
+  return paid ? begin(ordered.order.id, ordered.plan.scope) : null;
+}
+
+/**
+ * Paiement d'une commande (forfait ou complément) : choix de la méthode, lien de paiement, attente de la confirmation.
+ * Vrai si le paiement est confirmé ; faux si le client renonce, si la préparation échoue ou si la confirmation n'arrive pas à temps.
+ */
+async function collectPayment(
+  deps: StartDeps,
+  token: string,
+  ordered: OrderedPayment,
+  say: { automatic: string; manual: string; confirmed: string; late: string },
+): Promise<boolean> {
+  const { ui, api } = deps;
   let payUrl = ordered.payment.url ?? null;
   if (ordered.payment.automatic && !payUrl && ordered.payment.methods?.length) {
     const labels = ordered.payment.methods.map((m) => METHOD_LABELS[m] ?? m);
     const choice = await ui.choose('Comment voulez-vous payer ?', [...labels, 'Plus tard']);
-    if (choice === null || choice >= labels.length) return null;
+    if (choice === null || choice >= labels.length) return false;
     try {
       payUrl = (await api.payOrder(token, ordered.order.id, ordered.payment.methods[choice]!)).url;
     } catch (err) {
       ui.info(err instanceof Error ? err.message : 'Impossible de préparer le paiement.');
-      return null;
+      return false;
     }
   }
   if (ordered.payment.automatic && payUrl) {
     ordered.payment.url = payUrl;
     ui.info(`Payez en toute sécurité ici : ${ordered.payment.url}`);
-    ui.info("Dès que votre paiement est reçu, votre assistance démarre toute seule, sans rien d'autre à faire. Laissez cette fenêtre ouverte.");
+    ui.info(say.automatic);
     deps.openUrl?.(ordered.payment.url);
   } else {
     ui.info(ordered.payment.instructions);
-    ui.info("J'attends la confirmation de votre paiement par un technicien. Vous pouvez laisser cette fenêtre ouverte.");
+    ui.info(say.manual);
   }
 
   const wait = deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
@@ -379,16 +423,48 @@ export async function startCovered(deps: StartDeps, login: { token: string; enti
     try {
       const status = await api.orderStatus(token, ordered.order.id);
       if (status.order.status === 'paid') {
-        ui.info('Paiement confirmé, merci. Je démarre votre assistance.');
-        return begin(ordered.order.id, ordered.plan.scope);
+        ui.info(say.confirmed);
+        return true;
       }
     } catch {
       // réseau instable : on réessaie au prochain tour
     }
     await wait(pollMs);
   }
-  ui.info('Je n\'ai pas encore reçu la confirmation de votre paiement. Relancez le programme une fois payé : votre forfait sera retrouvé automatiquement.');
-  return null;
+  ui.info(say.late);
+  return false;
+}
+
+/**
+ * Offre « Assistance IA » (500 FCFA) : l'agent a besoin d'un technicien. Propose le complément, l'encaisse (même paiement qu'un forfait)
+ * et rend vrai quand le serveur a confirmé : l'assistance comprend alors un technicien.
+ */
+async function offerHumanUpgrade(deps: StartDeps, token: string, sessionId: string, priceFcfa?: number): Promise<boolean> {
+  const { ui, api } = deps;
+  const price = priceFcfa ? ` pour ${fcfa(priceFcfa)}` : '';
+  const pick = await ui.choose(`Voulez-vous ajouter un technicien à cette assistance${price} ? Il prend le relais de l'agent IA et voit tout ce qui a été fait.`, ['Oui, ajouter un technicien', 'Non merci']);
+  if (pick !== 0) return false;
+  let ordered: OrderedPayment;
+  try {
+    ordered = await api.upgradeSession(token, sessionId);
+  } catch (err) {
+    ui.info(err instanceof Error ? err.message : "Impossible de préparer le complément pour le moment.");
+    return false;
+  }
+  ui.info(`Technicien en plus : ${fcfa(ordered.payment.amountFcfa)}. Référence de paiement : ${ordered.payment.reference}.`);
+  return collectPayment(deps, token, ordered, {
+    automatic: "Dès que votre paiement est reçu, un technicien peut prendre le relais, sans rien d'autre à faire. Laissez cette fenêtre ouverte.",
+    manual: "J'attends la confirmation de votre paiement par un technicien. Vous pouvez laisser cette fenêtre ouverte.",
+    confirmed: 'Paiement confirmé, merci. Un technicien peut maintenant prendre le relais.',
+    late: "Je n'ai pas encore reçu la confirmation de votre paiement. Quand ce sera fait, redemandez un technicien : je le préviendrai.",
+  });
+}
+
+/** Ce que l'agent sait de la présence d'un technicien dans l'assistance démarrée (voir `ensureHuman`). */
+export function humanAccessFor(deps: StartDeps, started: StartedSession): HumanAccess {
+  const access: HumanAccess = { included: started.humanIncluded, ...(started.upgradeFcfa ? { upgradeFcfa: started.upgradeFcfa } : {}) };
+  if (!started.humanIncluded) access.offerUpgrade = () => offerHumanUpgrade(deps, started.token, started.sessionId, access.upgradeFcfa);
+  return access;
 }
 
 

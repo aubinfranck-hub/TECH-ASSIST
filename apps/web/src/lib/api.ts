@@ -60,7 +60,20 @@ export interface PricingPlan {
   price_fcfa: number;
   duration_minutes: number | null;
   description: string;
-  metadata?: { subscription?: boolean; periodDays?: number; scope?: 'diagnostic' | 'fix' | 'full' };
+  metadata?: {
+    subscription?: boolean;
+    periodDays?: number;
+    scope?: 'diagnostic' | 'fix' | 'full';
+    /** Un technicien humain fait-il partie de l'offre ? (particuliers : faux pour « Assistance IA ») */
+    humanIncluded?: boolean;
+    aiIncluded?: boolean;
+    /** Forfaits entreprise : nombre de postes couverts, quotas et engagements. */
+    maxDevices?: number;
+    includedAssistances?: number | null;
+    responseTimeHours?: number;
+    dedicatedTechnician?: boolean;
+    monthlyReport?: boolean;
+  };
 }
 
 export interface Order {

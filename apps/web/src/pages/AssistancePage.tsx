@@ -54,8 +54,8 @@ export function AssistancePage() {
       <p className="ta-eyebrow mb-2">Assistance</p>
       <h1 className="mb-3 text-2xl font-bold sm:text-3xl">L'assistance se fait dans l'application</h1>
       <p className="mb-8 text-slate-600">
-        Votre première assistance est offerte. Ensuite, vous choisissez un forfait selon votre besoin : 500 FCFA (diagnostic),
-        2 000 FCFA (dépannage) ou 5 000 FCFA (intervention complète). Les entreprises ont un contrat de 10 000 FCFA par mois.
+        Votre première assistance est offerte. Ensuite, vous choisissez : 500 FCFA pour l’agent IA seul, ou 2 000 FCFA avec un
+        technicien qui prend le relais si besoin. Les entreprises choisissent un forfait mensuel selon leur nombre de postes.
       </p>
 
       <section className="ta-card mb-8 p-6 sm:p-8">

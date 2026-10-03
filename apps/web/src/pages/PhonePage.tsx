@@ -17,9 +17,8 @@ interface Entitlements {
 }
 
 const FORFAITS = [
-  { planId: 'diagnostic_express', label: 'Diagnostic', price: '500', text: 'Nous cherchons la cause et vous expliquons quoi faire.' },
-  { planId: 'assistance_rapide', label: 'Dépannage', price: '2 000', text: 'Un problème précis réglé avec vous, pas à pas.' },
-  { planId: 'session_maintenance', label: 'Intervention complète', price: '5 000', text: 'Accompagnement complet jusqu’à résolution.' },
+  { planId: 'diagnostic_express', label: 'Assistance IA', price: '500', text: 'L’agent IA analyse et répare votre téléphone avec vous, sans technicien humain.' },
+  { planId: 'assistance_rapide', label: 'Assistance IA + technicien', price: '2 000', text: 'L’agent IA d’abord ; un technicien prend le relais si le problème le demande.' },
 ];
 interface Payment {
   orderId: string;
@@ -318,7 +317,7 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
         )}
         {ent && !covered && !payment && (
           <>
-            <p className="text-slate-600">Votre assistance offerte a été utilisée. Choisissez un forfait, vous ne payez que ce que vous utilisez.</p>
+            <p className="text-slate-600">Votre assistance offerte a été utilisée. Choisissez une offre, vous ne payez que ce que vous utilisez.</p>
             <ul className="mt-4 space-y-3">
               {FORFAITS.map((f) => (
                 <li key={f.planId}>

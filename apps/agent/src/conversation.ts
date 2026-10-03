@@ -1,6 +1,7 @@
 import { runSkill, type Outcome } from './agent.js';
 import type { Assistant, ChatTurn } from './assistant.js';
 import { CONSENT_NO, CONSENT_TEXT, CONSENT_YES, withStandingConsent } from './consent.js';
+import { ensureHuman, HUMAN_REQUEST_TEXT } from './humanAccess.js';
 import { repairMyPc } from './repairPc.js';
 import { routeIntent, type HumanOnlyTopic, type Intent } from './router.js';
 import { SKILL_MENU, resolveSkill } from './skills/index.js';
@@ -106,6 +107,12 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   };
 
   const handOver = async (reason: string) => {
+    // Offre « IA seule » : sans complément payé, personne n'est prévenu ; la demande reste notée et la conversation continue.
+    const allowed = await ensureHuman(reporter, ui);
+    if (!allowed) {
+      await log({ type: 'escalated', message: reason });
+      return;
+    }
     handedOver = true;
     if (!(await log({ type: 'escalated', message: reason }))) escalationFailed = true;
     ui.info(escalationFailed ? "Je n'ai pas pu transmettre votre demande à un technicien." : "Je passe la main à un technicien, qui verra notre conversation et tout ce que j'ai constaté.");
@@ -145,6 +152,11 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     if (text === null || (!first && GOODBYE.test(text))) break;
     const message = text.trim();
     if (!message) continue;
+    // Bouton « Parler à un technicien » sans technicien dans l'offre : la fenêtre l'écrit à la place du client.
+    if (message === HUMAN_REQUEST_TEXT) {
+      await handOver('Le client demande un technicien');
+      continue;
+    }
     if (first) ui.progress?.(3);
     first = false;
     turns += 1;
@@ -283,7 +295,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   /** Ce que le forfait n'inclut pas : dit clairement, sans rien lancer. */
   function outOfScope(what: string): boolean {
     if (deps.scope === 'diagnostic' && what !== 'repair') {
-      ui.info("Cette action modifie votre ordinateur : elle n'est pas comprise dans le forfait Diagnostic (500 FCFA). Prenez un forfait Dépannage pour que je la fasse avec vous.");
+      ui.info("Cette action modifie votre ordinateur : elle n'est pas comprise dans cette assistance en lecture seule. Choisissez l'offre « Assistance IA » pour que je la fasse avec vous.");
       return true;
     }
     return false;
@@ -296,11 +308,11 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
       ui.info('Je lis l\'état de votre ordinateur (rien n\'est modifié)…');
       const findings = await scanPc(runner);
       ui.info(formatFindings(findings));
-      ui.info("Votre forfait Diagnostic s'arrête là. Pour corriger ces points avec moi : forfait Dépannage ou Intervention complète.");
+      ui.info("Cette assistance en lecture seule s'arrête là. Pour corriger ces points avec moi, choisissez l'offre « Assistance IA ».");
       return;
     }
     if (deps.scope === 'fix') {
-      ui.info("L'analyse et la réparation complète du PC font partie du forfait Intervention complète (5 000 FCFA). Avec votre forfait Dépannage, décrivez un problème précis (Internet, imprimante, Outlook, lenteur…).");
+      ui.info("L'analyse et la réparation complète du PC ne sont pas comprises dans cette assistance. Décrivez un problème précis (Internet, imprimante, Outlook, lenteur…).");
       return;
     }
     const out = await repairMyPc({ runner, ui, reporter, machine: deps.machine, friendly: deps.autonomous, isAdmin: deps.isAdmin });

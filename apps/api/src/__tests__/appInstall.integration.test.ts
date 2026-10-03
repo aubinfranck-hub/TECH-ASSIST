@@ -156,7 +156,7 @@ describe('Application : inscription par email, assistance offerte en base, abonn
       const order = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'assistance_rapide' });
       expect(order.status).toBe(201);
       expect(order.body.order.amount_fcfa).toBe(2000);
-      expect(order.body.plan.scope).toBe('fix');
+      expect(order.body.plan.scope).toBe('full');
       expect(order.body.payment.reference).toHaveLength(8);
 
       // Avant paiement : pas d'assistance.
@@ -171,30 +171,32 @@ describe('Application : inscription par email, assistance offerte en base, abonn
       expect((await request(app).get(`/api/app/orders/${order.body.order.id}`).set(auth(r))).body.order.status).toBe('paid');
 
       const me = await request(app).get('/api/app/me').set(auth(r));
-      expect(me.body.entitlements.paidForfait).toMatchObject({ orderId: order.body.order.id, scope: 'fix' });
+      expect(me.body.entitlements.paidForfait).toMatchObject({ orderId: order.body.order.id, scope: 'full', humanIncluded: true });
 
       const started = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id });
       expect(started.status).toBe(201);
       expect(started.body.coverage).toBe('paid_forfait');
       expect((await request(app).get('/api/app/me').set(auth(r))).body.entitlements.paidForfait).toBeNull();
-      expect(started.body.scope).toBe('fix');
-      expect(started.body.session.duration_minutes).toBe(20);
+      expect(started.body.scope).toBe('full');
+      expect(started.body.humanIncluded).toBe(true);
+      expect(started.body.session.duration_minutes).toBe(60);
 
       // Le forfait est consommé : impossible de le réutiliser.
       const again = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id });
       expect(again.status).toBe(402);
     });
 
-    it('le diagnostic à 500 FCFA donne la portée « diagnostic »', async () => {
+    it('l\'offre à 500 FCFA (IA seule) : portée complète, sans technicien', async () => {
       const r = await register();
       const tech = await technicianToken();
       const order = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'diagnostic_express' });
       expect(order.status).toBe(201);
-      expect(order.body.plan.scope).toBe('diagnostic');
+      expect(order.body.plan.scope).toBe('full');
       await request(app).post(`/api/orders/${order.body.order.id}/confirm-payment`).set('Authorization', `Bearer ${tech}`).expect(200);
       const started = await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id });
       expect(started.status).toBe(201);
-      expect(started.body.scope).toBe('diagnostic');
+      expect(started.body.scope).toBe('full');
+      expect(started.body.humanIncluded).toBe(false);
     });
 
     it('refuse les formules gratuites, abonnement et PME, et la commande d\'un autre appareil', async () => {
@@ -211,9 +213,9 @@ describe('Application : inscription par email, assistance offerte en base, abonn
     it('une nouvelle commande en attente remplace la précédente au lieu de s\'empiler', async () => {
       const r = await register();
       const a = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'assistance_rapide' });
-      const b = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'session_maintenance' });
+      const b = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'diagnostic_express' });
       expect(b.body.order.id).toBe(a.body.order.id);
-      expect(b.body.order.amount_fcfa).toBe(5000);
+      expect(b.body.order.amount_fcfa).toBe(500);
     });
   });
 

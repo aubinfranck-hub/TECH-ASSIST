@@ -1,3 +1,4 @@
+import type { HumanAccess } from './humanAccess.js';
 import type { AgentEvent, Reporter } from './types.js';
 
 /** Journal côté serveur : chaque étape de l'agent est enregistrée dans l'audit de la session. */
@@ -7,6 +8,8 @@ export class HttpReporter implements Reporter {
     private readonly token: string,
     private readonly sessionId: string,
     private readonly fetchImpl: typeof fetch = fetch,
+    /** Un technicien fait-il partie de cette assistance ? Absent = oui. Le serveur a le dernier mot (il l'indique dans sa réponse). */
+    readonly human?: HumanAccess,
   ) {}
 
   async event(event: AgentEvent): Promise<void> {
@@ -16,6 +19,10 @@ export class HttpReporter implements Reporter {
       body: JSON.stringify(event),
     });
     if (!res.ok) throw new Error(`le serveur a répondu ${res.status}`);
+    if (event.type === 'escalated' && this.human) {
+      const answer = (await res.json().catch(() => null)) as { humanIncluded?: unknown } | null;
+      if (answer?.humanIncluded === false) this.human.included = false;
+    }
   }
 }
 
@@ -29,6 +36,10 @@ export class ConsoleReporter implements Reporter {
 
 export class CompositeReporter implements Reporter {
   constructor(private readonly reporters: Reporter[]) {}
+
+  get human(): HumanAccess | undefined {
+    return this.reporters.find((r) => r.human)?.human;
+  }
 
   async event(event: AgentEvent): Promise<void> {
     const results = await Promise.allSettled(this.reporters.map((r) => r.event(event)));

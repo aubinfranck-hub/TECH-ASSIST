@@ -6,6 +6,7 @@ import { validateBody } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 import { alertInBackground } from '../notify/technicianAlerts.js';
 import { logAudit, type Db } from '../utils/audit.js';
+import { humanIncludedFor, upgradeOffer } from '../utils/offers.js';
 import { progressView, STALE_PROGRESS_SECONDS } from '../utils/taskProgress.js';
 
 export const sessionsRouter = Router();
@@ -17,7 +18,7 @@ const createSessionSchema = z.object({
 export type SessionMode = 'ia' | 'humain';
 
 export type CreateSessionResult =
-  | { ok: true; session: { id: string; session_code: string; status: string; code_expires_at: Date; duration_minutes: number; mode: SessionMode } }
+  | { ok: true; session: { id: string; session_code: string; status: string; code_expires_at: Date; duration_minutes: number; mode: SessionMode; human_included: boolean } }
   | { ok: false; status: number; error: string };
 
 /**
@@ -38,7 +39,7 @@ export async function createSessionForOrder(
   // sinon la demande est servie par un technicien (file d'attente classique).
   const mode: SessionMode = requestedMode === 'ia' && process.env.AI_AGENT_ENABLED === 'true' ? 'ia' : 'humain';
   const orderResult = await db.query(
-    `SELECT o.id, o.status, p.duration_minutes
+    `SELECT o.id, o.status, p.duration_minutes, p.metadata
      FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
      WHERE o.id = $1`,
     [orderId],
@@ -61,10 +62,10 @@ export async function createSessionForOrder(
   }
 
   const { rows } = await db.query(
-    `INSERT INTO sessions (order_id, session_code, platform, code_expires_at, duration_minutes, mode, requested_mode)
-     VALUES ($1, $2, $3, now() + interval '${SESSION_CODE_TTL_MINUTES} minutes', $4, $5, $6)
-     RETURNING id, session_code, status, code_expires_at, duration_minutes, mode`,
-    [orderId, code, platform, order.duration_minutes, mode, requestedMode],
+    `INSERT INTO sessions (order_id, session_code, platform, code_expires_at, duration_minutes, mode, requested_mode, human_included)
+     VALUES ($1, $2, $3, now() + interval '${SESSION_CODE_TTL_MINUTES} minutes', $4, $5, $6, $7)
+     RETURNING id, session_code, status, code_expires_at, duration_minutes, mode, human_included`,
+    [orderId, code, platform, order.duration_minutes, mode, requestedMode, humanIncludedFor(order.metadata)],
   );
   const session = rows[0];
 
@@ -111,6 +112,15 @@ sessionsRouter.get('/sessions/:code', async (req, res) => {
  * la session rejoint alors la file d'attente des techniciens.
  */
 sessionsRouter.post('/sessions/:id/escalate', async (req, res) => {
+  // Offre « IA seule » : le technicien n'en fait pas partie (le complément se paie depuis l'application).
+  const current = await pool.query(`SELECT human_included FROM sessions WHERE id = $1 AND status IN ('created', 'waiting_technician', 'active')`, [req.params.id]);
+  if (current.rows[0] && current.rows[0].human_included === false) {
+    return res.status(402).json({
+      code: 'human_not_included',
+      error: "Votre offre « Assistance IA » ne comprend pas de technicien. Passez à « IA + technicien » depuis l'application pour qu'il prenne le relais.",
+      upgrade: await upgradeOffer(),
+    });
+  }
   const { rows } = await pool.query(
     `UPDATE sessions SET mode = 'humain'
      WHERE id = $1 AND status IN ('created', 'waiting_technician', 'active')

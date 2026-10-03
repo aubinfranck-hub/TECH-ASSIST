@@ -12,6 +12,7 @@ pricingRouter.get('/', async (_req, res) => {
        -- Formules internes (couvertes par l'abonnement ou l'offre) : non commandables en direct.
        AND COALESCE((metadata->>'coveredBySubscription')::boolean, FALSE) = FALSE
        AND COALESCE((metadata->>'freePerPhone')::int, 0) = 0
+       AND COALESCE((metadata->>'upgradeHuman')::boolean, FALSE) = FALSE
      ORDER BY sort_order ASC`,
   );
   res.json({ plans: rows });

@@ -1,4 +1,4 @@
-# Décisions (D1 à D8)
+# Décisions (D1 à D14)
 
 Suivi des arbitrages listés dans le cahier des charges. Toutes les valeurs
 chiffrées sont en base (`pricing_plans`, RF-41) et modifiables sans
@@ -16,6 +16,7 @@ redéploiement depuis l'administration.
 | D8 | Visites sur place : forfaits ou devis | **Tranché (par défaut)** | Forfaits fixes par type d'intervention (voir tableau) |
 | D9 | Modes d'assistance et abonnement particulier | **Tranché** (demande du porteur) | Agent IA par défaut + technicien humain ; 1re assistance offerte (e-mail vérifié + appareil) ; abonnement 10 000 FCFA/mois ; tout dans l'application, le site est le miroir |
 | D10 | Infrastructure et parc d'entreprise (« administrateur IT IA ») | **Proposé — non commencé** | Connecteurs par constructeur, passerelle sur site, espace société, validation humaine : voir D10 plus bas |
+| D14 | Offres : IA seule / IA + technicien, entreprises par postes | **Tranché** (demande du porteur) | 500 FCFA = agent IA seul ; 2 000 FCFA = agent IA + technicien ; entreprise = forfait selon le nombre de postes, IA et technicien toujours inclus : voir D14 plus bas |
 
 Les décisions marquées « par défaut » sont des choix raisonnables pour
 avancer, pas des arbitrages métier définitifs — à valider ou ajuster
@@ -119,7 +120,7 @@ Couverture société (FAIT) : un PC rattaché à une entreprise dont l’abonnem
 
 Ordre proposé : (1) espace société + rattachement des PC + vue de parc en lecture seule (FAIT : codes de rattachement, santé du poste, synthèse ; voir `docs/agent.md`) ; (2) passerelle + découverte réseau en lecture seule (cartographie ; première tranche faite : compétence `lan-map`, vue depuis un seul PC, passive) ; (3) un premier connecteur en lecture seule (Windows Server via WinRM, ou MikroTik) ; (4) actions à validation humaine. En attendant, l'agent le dit franchement au client et propose un technicien (`router.ts`, intention `human_only`).
 
-## D10 — Forfaits à l'usage (particuliers) et contrat mensuel (entreprises)
+## D10 — Forfaits à l'usage (particuliers) et contrat mensuel (entreprises) — remplacé par D14 pour les offres
 
 Remplace l'abonnement particulier à 10 000 FCFA/mois (qui reste techniquement présent mais n'est plus mis en avant).
 
@@ -127,6 +128,27 @@ Remplace l'abonnement particulier à 10 000 FCFA/mois (qui reste techniquement p
 - **Entreprise** : un contrat mensuel unique de 10 000 FCFA (couverture des postes rattachés). Les paliers PME historiques (9 900 / 24 900 / 49 900) restent dans la base en attendant l'arbitrage commercial.
 - Parcours : `POST /app/orders` → paiement → confirmation par un technicien (`confirm-payment`) → `GET /app/orders/:id` (attente) → `POST /app/assistance {orderId}` ; une commande ne démarre qu'une session (index unique), un forfait payé non utilisé est retrouvé via `entitlements.paidForfait`.
 - Transparence : l'agent est présenté pour ce qu'il est ; un technicien nommé supervise et le bouton « Parler à un humain » reste visible. Aucune formulation ne prétend qu'un humain écrit quand c'est l'IA.
+
+## D14 — Offres : IA seule, IA + technicien, entreprises par postes
+
+Demande du porteur : « 500 FCFA = l'IA seule ; 2 000 FCFA = l'IA et l'intervention d'un humain ; les entreprises paient selon le nombre de machines, IA et humain toujours inclus ».
+
+| Offre | Prix | Contenu |
+|---|---|---|
+| **Assistance IA** (`diagnostic_express`) | 500 FCFA | L'agent IA analyse et répare avec l'accord du client à chaque action. **Aucun technicien** : aucune alerte, aucun passage de main. |
+| **Assistance IA + technicien** (`assistance_rapide`) | 2 000 FCFA | L'agent d'abord ; un technicien prend le relais si le problème le demande. |
+| **Complément technicien** (`complement_technicien`, interne) | 1 500 FCFA (**hypothèse**, modifiable en admin) | Un client « IA seule » qui a besoin d'un humain paie la différence **une fois, pour cette assistance** ; même paiement qu'un forfait. |
+| **Entreprise** (`pme_essentiel` / `pme_pro` / `pme_entreprise`) | 9 900 / 24 900 / 49 900 FCFA par mois (**placeholders**, à arbitrer) | Forfait selon le nombre de postes (5 / 15 / 40) ; IA **et** technicien toujours inclus ; quotas et délais de réponse inchangés (D7). |
+
+Règles appliquées **côté serveur** (jamais seulement dans l'interface) :
+- `sessions.human_included` est copié du forfait à la création de la session (toujours vrai : assistance offerte, abonné, entreprise, ou `FREE_LAUNCH`) ;
+- une session « IA seule » : `/sessions/:id/escalate` répond 402 `human_not_included` ; l'événement `escalated` de l'agent est **journalisé mais n'alerte personne** et ne passe pas la session en mode humain (réponse `humanIncluded:false` + proposition de complément) ;
+- complément : `POST /app/sessions/:id/upgrade` crée une commande (`orders.upgrade_session_id`), payée par Jèko ou confirmation manuelle ; `markOrderPaid` bascule alors `human_included` ;
+- entreprise : `maxDevices` est **appliqué** au rattachement (`/app/company/join` refuse au-delà, code `device_limit`).
+
+Côté agent : `humanAccess.ts`. Avant tout passage de main (`runSkill`, `converse`, bouton « Parler à un technicien »), `ensureHuman` vérifie l'offre. Sans technicien : l'agent le dit honnêtement, propose le complément (paiement dans la conversation) et, si le client refuse, **continue seul** — il ne prétend jamais prévenir un technicien. Le bouton de la fenêtre ne ferme plus la conversation dans ce cas : la demande arrive à l'agent comme un message du client.
+
+L'ancien forfait à 5 000 FCFA (`session_maintenance`) est retiré de l'offre (inactif) ; les anciennes portées `diagnostic` / `fix` restent comprises par l'agent pour les commandes déjà payées. Tant que `FREE_LAUNCH` est vrai, aucun paiement n'est exigé et un technicien est toujours inclus.
 
 ## D11 — Paiement automatique (Jèko)
 

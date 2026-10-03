@@ -140,7 +140,7 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
     const token = await createAdmin();
     const orderRes = await request(app)
       .post('/api/orders')
-      .send({ clientPhone: '+2250700000006', planId: 'session_maintenance', platform: 'web' });
+      .send({ clientPhone: '+2250700000006', planId: 'assistance_rapide', platform: 'web' });
     const orderId = orderRes.body.order.id;
     await request(app).post(`/api/orders/${orderId}/confirm-payment`).set('Authorization', `Bearer ${token}`);
     await request(app).post(`/api/orders/${orderId}/session`).send({ platform: 'web' });

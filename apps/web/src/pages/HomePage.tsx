@@ -15,7 +15,7 @@ const FAQ = [
   ['Le technicien peut-il voir mes fichiers personnels ?', 'Non, sauf nécessité explicite liée au problème signalé et avec votre accord. Les actions sont journalisées.'],
   ['Comment puis-je arrêter une session ?', 'Un bouton « Arrêter » permet de couper immédiatement l’assistance pendant la session.'],
   ['Et si mon problème est matériel ?', 'Une panne matérielle peut nécessiter une intervention sur place. Vous pouvez demander un déplacement.'],
-  ['Comment se fait le paiement ?', 'Par Mobile Money. Vous choisissez un forfait (500, 2 000 ou 5 000 FCFA) selon votre besoin, vous payez, un technicien confirme la réception, et l’assistance démarre. Les entreprises ont un contrat de 10 000 FCFA par mois.'],
+  ['Comment se fait le paiement ?', 'Par Mobile Money. Vous choisissez une offre : 500 FCFA pour l’agent IA seul, ou 2 000 FCFA avec un technicien qui prend le relais si besoin. Les entreprises choisissent un forfait mensuel selon le nombre de postes, avec l’IA et les techniciens toujours inclus.'],
 ];
 
 export function HomePage() {

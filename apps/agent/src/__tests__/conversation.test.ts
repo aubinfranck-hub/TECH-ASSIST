@@ -353,14 +353,14 @@ describe('converse — portée du forfait', () => {
   it('Diagnostic : installer un logiciel est refusé avec explication', async () => {
     const ui = new ScriptedConversation({ asks: ['installe VLC'] });
     await converse({ runner: noRunner, ui, reporter: new Recorder(), scope: 'diagnostic' });
-    expect(ui.infos.join('\n')).toMatch(/forfait Diagnostic/);
+    expect(ui.infos.join('\n')).toMatch(/lecture seule/);
     expect(noRunner.calls).toHaveLength(0);
   });
 
-  it('Dépannage : la réparation complète du PC renvoie vers un problème précis ou l’intervention complète', async () => {
+  it('Portée « un problème précis » : la réparation complète du PC renvoie vers un problème précis', async () => {
     const ui = new ScriptedConversation({ asks: ['répare mon pc'] });
     await converse({ runner: noRunner, ui, reporter: new Recorder(), scope: 'fix' });
-    expect(ui.infos.join('\n')).toMatch(/Intervention complète/);
+    expect(ui.infos.join('\n')).toMatch(/problème précis/);
     expect(noRunner.calls).toHaveLength(0);
   });
 });

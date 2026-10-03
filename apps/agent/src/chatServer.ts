@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { MAX_ATTACHMENT_CHARS, type Attachment } from './assistant.js';
+import { HUMAN_REQUEST_TEXT } from './humanAccess.js';
 import type { ResultsView } from './results.js';
 import type { TaskInfo, TaskResult, TaskTracker } from './tasks.js';
 import type { Action, ConversationUi } from './types.js';
@@ -193,6 +194,12 @@ export class ChatUi implements ConversationUi {
   }
 
   ask(prompt: string): Promise<string | null> {
+    // Une demande de technicien faite pendant que l'agent travaillait est transmise dès la prochaine question.
+    if (this.technicianWanted && !this.closed && !this.handoff && !this.abandoned) {
+      this.technicianWanted = false;
+      this.push({ type: 'user', text: HUMAN_REQUEST_TEXT });
+      return Promise.resolve(HUMAN_REQUEST_TEXT);
+    }
     return this.prompt<string | null>({ type: 'ask', text: prompt }, { kind: 'ask' }, null);
   }
 
@@ -289,13 +296,37 @@ export class ChatUi implements ConversationUi {
     return a;
   }
 
+  /**
+   * Un technicien fait-il partie de l'offre du client ? Non (offre « Assistance IA ») : le bouton ne ferme pas la conversation ;
+   * la demande est transmise à l'agent comme si le client l'avait écrite, et c'est lui qui propose le complément.
+   */
+  technicianIncluded: () => boolean = () => true;
+
+  /** Le client a demandé un technicien pendant que l'agent travaillait (offre sans technicien) : à transmettre à la prochaine question. */
+  private technicianWanted = false;
+
   /** Le client demande un technicien : toutes les questions en attente sont closes, la conversation s'arrête. */
   requestHandoff(): void {
     if (this.handoff || this.closed) return;
+    if (!this.technicianIncluded()) {
+      this.requestTechnicianThroughAgent();
+      return;
+    }
     this.handoff = true;
     this.push({ type: 'say', text: 'Je préviens un technicien…' });
     this.settleAll();
     this.onHandoff?.();
+  }
+
+  private requestTechnicianThroughAgent(): void {
+    for (const [id, p] of this.pending) {
+      if (p.kind === 'ask') {
+        this.reply(id, HUMAN_REQUEST_TEXT);
+        return;
+      }
+    }
+    this.technicianWanted = true;
+    this.push({ type: 'say', text: "Je note votre demande de technicien : je m'en occupe dès que j'ai terminé ce point." });
   }
 
   async close(): Promise<void> {

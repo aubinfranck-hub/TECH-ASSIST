@@ -222,6 +222,8 @@ class Recording {
   ) {
     // Le suivi des tâches de la fenêtre reste branché pendant les corrections.
     if (inner.tasks) this.ui.tasks = inner.tasks;
+    // L'état « technicien inclus ou non » reste celui du vrai journal : un passage de main ne contourne pas l'offre du client.
+    Object.defineProperty(this.reporter, 'human', { get: () => outer.human, enumerable: true });
   }
 
   private note(key: string, title: string, result: ReportAction['result']) {

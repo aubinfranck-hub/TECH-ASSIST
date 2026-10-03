@@ -124,6 +124,38 @@ describe('rattachement d’un PC à une entreprise', () => {
     expect((await request(app).post('/api/app/company/join').set(other).send({ code: second, deviceName: 'PC-2' })).status).toBe(201);
   });
 
+  it('forfait entreprise par nombre de postes : au-delà de la limite, le rattachement est refusé (code restitué) ; un forfait plus grand le permet', async () => {
+    const c = await company('Kassy SARL', 'kassy_admin', '+2250700009999');
+    const token = `Bearer ${c.token}`;
+    // pme_essentiel : 5 postes
+    for (let i = 1; i <= 5; i++) {
+      const { code } = (await request(app).post('/api/company/join-codes').set('Authorization', token)).body;
+      expect((await request(app).post('/api/app/company/join').set(await registerApp()).send({ code, deviceName: `PC-${i}` })).status).toBe(201);
+    }
+    const { code } = (await request(app).post('/api/company/join-codes').set('Authorization', token)).body;
+    const sixth = await registerApp();
+    const refused = await request(app).post('/api/app/company/join').set(sixth).send({ code, deviceName: 'PC-6' });
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('device_limit');
+    expect(refused.body.error).toMatch(/couvre 5 postes/);
+    expect((await pool.query('SELECT count(*)::int AS n FROM company_devices')).rows[0].n).toBe(5);
+    expect((await pool.query('SELECT count(*)::int AS n FROM company_join_codes WHERE consumed_at IS NULL')).rows[0].n).toBe(1);
+
+    // l'entreprise passe au forfait supérieur (15 postes) : le même code fonctionne
+    await pool.query("UPDATE companies SET subscription_plan_id = 'pme_pro'");
+    expect((await request(app).post('/api/app/company/join').set(sixth).send({ code, deviceName: 'PC-6' })).status).toBe(201);
+  });
+
+  it('IA + technicien sont inclus dans tous les forfaits entreprise', async () => {
+    const { rows } = await pool.query("SELECT id, metadata, description FROM pricing_plans WHERE segment = 'pme' ORDER BY price_fcfa");
+    expect(rows.map((r) => r.id)).toEqual(['pme_essentiel', 'pme_pro', 'pme_entreprise']);
+    for (const r of rows) {
+      expect(r.metadata).toMatchObject({ aiIncluded: true, humanIncluded: true });
+      expect(r.description).toMatch(/IA \+ technicien inclus/);
+      expect(r.description.match(/IA \+ technicien inclus/g)).toHaveLength(1); // les migrations rejouées ne dupliquent rien
+    }
+  });
+
   it('la santé n’est acceptée que d’un PC rattaché ; valeurs invalides refusées', async () => {
     const auth = await registerApp();
     expect((await request(app).post('/api/app/company/heartbeat').set(auth).send({ diskFreePercent: 10 })).status).toBe(404);
