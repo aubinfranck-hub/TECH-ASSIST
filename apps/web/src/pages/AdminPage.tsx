@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AdminOverview } from '../components/AdminOverview.js';
 import { AdminLearningPanel } from '../components/AdminLearningPanel.js';
 import { AdminPartnersPanel } from '../components/AdminPartnersPanel.js';
 import { CreateCompanyForm } from '../components/CreateCompanyForm.js';
@@ -112,6 +113,8 @@ export function AdminPage() {
     <div className="mx-auto max-w-4xl px-4 py-14 space-y-12">
       <h1 className="text-2xl font-bold">Administration</h1>
       {error && <p className="text-red-600">{error}</p>}
+
+      <AdminOverview />
 
       <section>
         <h2 className="font-semibold mb-3">Tarifs (RF-41)</h2>

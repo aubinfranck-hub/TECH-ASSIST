@@ -145,6 +145,14 @@ export function TechnicianPage() {
         </button>
       </div>
 
+      <p className="rounded-2xl bg-slate-900 p-4 text-sm font-semibold text-white">
+        {queue.length > 0
+          ? `${queue.length} demande${queue.length > 1 ? 's' : ''} ${queue.length > 1 ? 'attendent' : 'attend'} un technicien`
+          : 'Aucune demande en attente'}
+        {mySessions.length > 0 && ` · ${mySessions.length} intervention${mySessions.length > 1 ? 's' : ''} en cours`}
+        {queue.some((q) => q.company_priority === 'urgent') && ' · 🔴 urgent'}
+      </p>
+
       <TechnicianAlerts />
 
       {error && <p className="text-red-600">{error}</p>}
@@ -156,7 +164,7 @@ export function TechnicianPage() {
         </h2>
         {queue.length === 0 && <p className="text-sm text-slate-500">Aucune demande en attente. Vous serez prévenu dès qu'un client en fera une.</p>}
         <ul className="space-y-2">
-          {queue.map((s) => (
+          {[...queue].sort((a, b) => Number(b.company_priority === 'urgent') - Number(a.company_priority === 'urgent')).map((s) => (
             <li key={s.id}>
               <Link
                 to={`/technicien?session=${s.id}`}

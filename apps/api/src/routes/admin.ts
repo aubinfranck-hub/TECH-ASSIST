@@ -265,3 +265,28 @@ adminRouter.get('/audit-logs', async (req, res) => {
   );
   res.json({ logs: rows });
 });
+
+/** Supervision : chiffres du jour, activité récente et alertes (demandes sans technicien, paiements en attente, sessions bloquées). */
+adminRouter.get('/overview', async (_req, res) => {
+  const one = async (sql: string) => Number((await pool.query(sql)).rows[0]?.n ?? 0);
+  const [onDuty, active, waiting, today, paidToday, pendingPayments, stuck] = await Promise.all([
+    one(`SELECT count(*) AS n FROM technicians WHERE on_duty = TRUE`),
+    one(`SELECT count(*) AS n FROM sessions WHERE kind = 'assistance' AND status = 'active'`),
+    one(`SELECT count(*) AS n FROM sessions WHERE kind = 'assistance' AND status IN ('created','waiting_technician') AND human_included = TRUE AND technician_id IS NULL AND human_requested_at IS NOT NULL`),
+    one(`SELECT count(*) AS n FROM sessions WHERE kind = 'assistance' AND created_at >= date_trunc('day', now())`),
+    one(`SELECT COALESCE(sum(amount_fcfa),0) AS n FROM orders WHERE status = 'paid' AND paid_at >= date_trunc('day', now())`),
+    one(`SELECT count(*) AS n FROM orders WHERE status = 'pending_payment' AND amount_fcfa > 0 AND created_at > now() - interval '1 day'`),
+    one(`SELECT count(*) AS n FROM sessions WHERE kind = 'assistance' AND status = 'active' AND ends_at IS NOT NULL AND ends_at < now() - interval '5 minutes'`),
+  ]);
+  const recent = await pool.query(
+    `SELECT s.session_code, s.status, s.mode, s.created_at, t.full_name AS technician
+     FROM sessions s LEFT JOIN technicians t ON t.id = s.technician_id
+     WHERE s.kind = 'assistance' ORDER BY s.created_at DESC LIMIT 10`,
+  );
+  const alerts: string[] = [];
+  if (waiting > 0 && onDuty === 0) alerts.push(`${waiting} demande(s) sans technicien de permanence`);
+  else if (waiting > 0) alerts.push(`${waiting} demande(s) en attente d'un technicien`);
+  if (pendingPayments > 0) alerts.push(`${pendingPayments} paiement(s) en attente`);
+  if (stuck > 0) alerts.push(`${stuck} session(s) bloquée(s) au-delà de leur durée`);
+  res.json({ onDuty, active, waiting, today, paidToday, pendingPayments, alerts, recent: recent.rows });
+});

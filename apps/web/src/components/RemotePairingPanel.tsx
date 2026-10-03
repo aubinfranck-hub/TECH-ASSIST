@@ -69,7 +69,7 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
       'Write-Host "Tech Assist - préparation de votre assistance..."',
       'Invoke-WebRequest -Uri $url -OutFile $exe',
       '$sha = (Get-FileHash -Algorithm SHA256 -Path $exe).Hash.ToLowerInvariant()',
-      'if ($sha -ne $expectedSha) { Remove-Item $exe -Force; throw "Empreinte RustDesk invalide." }',
+      'if ($sha -ne $expectedSha) { Remove-Item $exe -Force; throw "Vérification de l’outil échouée." }',
       '$cfgDir = Join-Path $env:APPDATA "RustDesk\\config"',
       'New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null',
       '$cfg = Join-Path $cfgDir "RustDesk2.toml"',
@@ -90,13 +90,13 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
       'Start-Process -FilePath $exe',
       'Start-Sleep -Seconds 8',
       '$id = (& $exe --get-id | Out-String).Trim()',
-      'if (-not $id) { throw "Impossible de récupérer l\'ID RustDesk." }',
+      'if (-not $id) { throw "Connexion sécurisée impossible." }',
       '$bytes = New-Object byte[] 9; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes); $password = ([Convert]::ToBase64String($bytes) -replace "[^A-Za-z0-9]", "").Substring(0,8)',
       '& $exe --password $password | Out-Null',
       '$payload = @{ remotePeerId = $id; remotePassword = $password; bootstrapToken = $token } | ConvertTo-Json -Compress',
       'Invoke-RestMethod -Uri "$apiBase/api/sessions/$sessionId/pair" -Method Post -ContentType "application/json" -Body $payload | Out-Null',
       'Write-Host ""',
-      'Write-Host "Tech Assist est prêt. ID RustDesk :" $id',
+      'Write-Host "Tech Assist est prêt. Connexion sécurisée établie."',
       'Write-Host "Le technicien pourra se connecter après votre consentement."',
       'Read-Host "Appuyez sur Entrée pour fermer"',
     ];
@@ -121,24 +121,30 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
         <p className="ta-eyebrow">Connexion sécurisée</p>
         <h2 className="mt-1 text-lg font-black text-slate-950">Préparer mon ordinateur</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          Plus besoin de saisir le serveur, la clé ou l'ID RustDesk. Tech Assist prépare automatiquement la connexion.
+          Tech Assist prépare automatiquement la connexion : vous n'avez rien à saisir ni à comprendre.
         </p>
+        <ul className="mt-3 space-y-1 text-sm text-slate-700">
+          <li>{bootstrap ? '✓' : '○'} Connexion sécurisée prête</li>
+          <li>○ Outil installé sur votre ordinateur</li>
+          <li>○ Technicien identifié</li>
+          <li>○ Votre autorisation avant toute intervention</li>
+        </ul>
       </div>
       <div className="space-y-4 p-5 sm:p-6">
         <button type="button" onClick={downloadAndRun} disabled={!bootstrap} className="ta-button-primary w-full disabled:cursor-not-allowed disabled:opacity-50">
-          {!bootstrap ? 'Préparation…' : 'Télécharger l’outil Tech Assist'}
+          {!bootstrap ? 'Préparation…' : 'Préparer mon ordinateur'}
         </button>
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-500">
           <p className="font-semibold text-slate-800">1 clic</p>
-          <p className="mt-1">L’outil configure automatiquement le serveur Tech Assist, démarre RustDesk et transmet l’ID et le mot de passe de session.</p>
+          <p className="mt-1">Tech Assist configure et sécurise la connexion pour vous. Le technicien ne peut agir qu'après votre autorisation, et vous pouvez l'arrêter à tout moment.</p>
         </div>
         <button type="button" onClick={() => setManual((v) => !v)} className="text-sm font-semibold text-slate-600 hover:text-brand-700">
-          {manual ? 'Masquer la configuration manuelle' : 'Je préfère configurer manuellement'}
+          {manual ? 'Masquer la configuration avancée' : 'Configuration avancée (technicien)'}
         </button>
         {manual && (
           <form onSubmit={submitManual} className="grid gap-3 sm:grid-cols-2">
-            <input required placeholder="ID RustDesk" value={peerId} onChange={(e) => setPeerId(e.target.value)} className="ta-input" />
-            <input required placeholder="Mot de passe temporaire" value={password} onChange={(e) => setPassword(e.target.value)} className="ta-input" />
+            <input required placeholder="Identifiant poste" value={peerId} onChange={(e) => setPeerId(e.target.value)} className="ta-input" />
+            <input required placeholder="Code temporaire" value={password} onChange={(e) => setPassword(e.target.value)} className="ta-input" />
             {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
             <button type="submit" disabled={submitting || !bootstrap} className="ta-button-primary sm:col-span-2 disabled:opacity-50">
               {submitting ? 'Appairage…' : "Confirmer l'appairage"}
