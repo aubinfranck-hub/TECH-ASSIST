@@ -20,6 +20,15 @@ export interface PowerFacts {
   passwordOnWake: boolean | null;
   /** Dernière source de réveil connue (clavier, souris, bouton…), vide si inconnue. */
   lastWake: string;
+  /** Démarrage rapide de Windows activé (cause fréquente de réveils ratés). */
+  fastStartup: boolean | null;
+  /** Veille moderne (S0) : réveils plus capricieux avec certains pilotes. */
+  modernStandby: boolean | null;
+  /** Nombre de fois où le pilote d'écran a planté (événement 4101) sur les 14 derniers jours. */
+  displayDriverResets: number | null;
+  /** Nom et ancienneté (en jours) du pilote de la carte graphique principale. */
+  gpuName: string;
+  gpuDriverAgeDays: number | null;
 }
 
 export const COLLECT_SCRIPT = guarded(String.raw`
@@ -28,13 +37,21 @@ $sys = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policie
 $cad = $sys.DisableCAD
 $cs = Get-CimInstance Win32_ComputerSystem
 function Get-AcTimeout([string]$sub, [string]$setting) {
-  $t = (powercfg /query SCHEME_CURRENT $sub $setting 2>$null | Select-String 'Current AC Power Setting Index|Index du param.tre de l.alimentation secteur actuel') | Select-Object -First 1
-  if ($t -match '0x([0-9a-fA-F]+)') { return [int]([Convert]::ToInt32($Matches[1], 16) / 60) }
+  # Indépendant de la langue de Windows : les deux dernières valeurs hexadécimales sont « secteur » puis « batterie ».
+  $hex = @(powercfg /query SCHEME_CURRENT $sub $setting 2>$null | Select-String '0x[0-9a-fA-F]+' | ForEach-Object { $_.Matches[0].Value })
+  if ($hex.Count -ge 2) { return [int]([Convert]::ToInt32($hex[$hex.Count - 2].Substring(2), 16) / 60) }
   return $null
 }
 $sleep = Get-AcTimeout 'SUB_SLEEP' 'STANDBYIDLE'
 $screen = Get-AcTimeout 'SUB_VIDEO' 'VIDEOIDLE'
 $wake = (powercfg /lastwake 2>$null | Out-String).Trim()
+$hib = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power').HiberbootEnabled
+$avail = (powercfg /a 2>$null | Out-String)
+$s0 = [bool]($avail -match 'S0')
+$resets = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Display'; Id = 4101; StartTime = (Get-Date).AddDays(-14) } -ErrorAction SilentlyContinue).Count
+$gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Basic|Remote|Virtual' } | Select-Object -First 1
+$gpuAge = $null
+if ($gpu -and $gpu.DriverDate) { $gpuAge = [int]((Get-Date) - $gpu.DriverDate).TotalDays }
 [pscustomobject]@{
   ctrlAltDelRequired = if ($null -eq $cad) { $null } else { [bool]($cad -eq 0) }
   domainJoined = [bool]$cs.PartOfDomain
@@ -42,6 +59,11 @@ $wake = (powercfg /lastwake 2>$null | Out-String).Trim()
   screenMinutesAc = $screen
   passwordOnWake = $null
   lastWake = $wake
+  fastStartup = if ($null -eq $hib) { $null } else { [bool]($hib -eq 1) }
+  modernStandby = $s0
+  displayDriverResets = $resets
+  gpuName = if ($gpu) { [string]$gpu.Name } else { '' }
+  gpuDriverAgeDays = $gpuAge
 } | ConvertTo-Json -Compress
 `);
 
@@ -55,6 +77,11 @@ export function parsePowerFacts(stdout: string): PowerFacts {
     screenMinutesAc: nonNegative(raw.screenMinutesAc),
     passwordOnWake: flag(raw.passwordOnWake),
     lastWake: typeof raw.lastWake === 'string' ? raw.lastWake.slice(0, 300) : '',
+    fastStartup: flag(raw.fastStartup),
+    modernStandby: flag(raw.modernStandby),
+    displayDriverResets: nonNegative(raw.displayDriverResets),
+    gpuName: typeof raw.gpuName === 'string' ? raw.gpuName.replace(/[^\p{L}\p{N} ._()\-/]/gu, '').slice(0, 80) : '',
+    gpuDriverAgeDays: nonNegative(raw.gpuDriverAgeDays),
   };
 }
 
@@ -82,10 +109,35 @@ export function diagnosePower(facts: PowerFacts): Diagnosis {
       advice.push('Pour que l\'ordinateur se mette moins vite en veille : Paramètres > Système > Alimentation > « Écran, veille et mise en veille prolongée », puis choisissez un délai plus long.');
     }
   }
-  if (facts.lastWake) advice.push(`Dernier réveil enregistré par Windows : ${facts.lastWake.replace(/\s+/g, ' ')}`);
 
-  const summary = parts.length ? `${parts.join(' ; ')}.` : "Réglages de veille lus ; rien d'anormal détecté.";
-  return { summary, problems, actions: [], advice, healthy: true, needsHuman: problems.includes('ctrl_alt_del_required') && facts.domainJoined !== true };
+  // Écran qui ne se réveille pas / Ctrl+Alt+Suppr nécessaire : causes les plus fréquentes, de la plus probable à la moins probable.
+  let wakeSuspect = false;
+  if (facts.displayDriverResets !== null && facts.displayDriverResets > 0) {
+    wakeSuspect = true;
+    problems.push('display_driver_resets');
+    parts.push(`le pilote de la carte graphique${facts.gpuName ? ` (${facts.gpuName})` : ''} a planté ${facts.displayDriverResets} fois ces 14 derniers jours`);
+    advice.push("C'est la cause la plus probable d'un écran qui ne se réveille pas : le pilote de la carte graphique doit être mis à jour (ou réinstallé) depuis le site du fabricant de l'ordinateur ou de la carte. Un technicien peut le faire avec vous.");
+  } else if (facts.gpuDriverAgeDays !== null && facts.gpuDriverAgeDays > 730) {
+    wakeSuspect = true;
+    problems.push('old_gpu_driver');
+    parts.push(`le pilote de la carte graphique${facts.gpuName ? ` (${facts.gpuName})` : ''} date de plus de ${Math.floor(facts.gpuDriverAgeDays / 365)} ans`);
+    advice.push('Un pilote graphique ancien provoque souvent des réveils ratés : une mise à jour est recommandée.');
+  }
+  if (facts.fastStartup) {
+    wakeSuspect = true;
+    problems.push('fast_startup');
+    parts.push('le démarrage rapide de Windows est activé');
+    advice.push('Le démarrage rapide peut empêcher un réveil propre : Panneau de configuration > Options d\'alimentation > « Choisir l\'action des boutons d\'alimentation » > décocher « Activer le démarrage rapide ».');
+  }
+  if (facts.modernStandby) {
+    parts.push('cet ordinateur utilise la « veille moderne »');
+    advice.push("Avec la veille moderne, un pilote (carte graphique, Wi-Fi) mal à jour suffit à bloquer le réveil : mettez d'abord à jour le pilote de la carte graphique et les mises à jour Windows.");
+  }
+
+  const summary = parts.length
+    ? `${parts.join(' ; ')}.`.replace(/^./, (c) => c.toUpperCase())
+    : "Réglages de veille lus ; rien d'anormal dans les réglages. Si l'écran ne se réveille pas, la cause est le plus souvent le pilote de la carte graphique : un technicien peut le vérifier avec vous.";
+  return { summary, problems, actions: [], advice, healthy: true, needsHuman: (problems.includes('ctrl_alt_del_required') && facts.domainJoined !== true) || wakeSuspect };
 }
 
 export function powerSkill(): Skill {
