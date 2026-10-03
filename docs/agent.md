@@ -210,3 +210,12 @@ Routes : agent `GET|POST /app/sessions/:id/messages`, `PUT /app/sessions/:id/pro
 Console mobile : `apps/web/src/pages/TechnicianPage.tsx` (permanence, notifications, file, interventions), `TechnicianRequest.tsx` (dossier), `public/sw.js` (service worker : affiche l'alerte, ouvre la bonne demande), `lib/push.ts`. Sur Android/ordinateur (Chrome) : activer les notifications depuis la console. **Sur iPhone** : les notifications n'existent que pour une page ajoutée à l'écran d'accueil (Safari > Partager > Sur l'écran d'accueil), puis activées depuis l'icône. La console a son propre manifeste (`technicien.webmanifest`) : l'icône ouvre directement la console.
 
 Non validé en conditions réelles : l'arrivée d'une vraie notification sur un téléphone (testée jusqu'à l'envoi ; le navigateur de test n'a pas accès au service de notification de Google). Le bouton « Envoyer un essai » de la console sert à le vérifier sur chaque appareil.
+
+## Apprentissage : cas inconnus (D15)
+
+Quand la demande du client ne correspond à aucune compétence connue, l'agent interroge la mémoire du serveur (`knowledge.ts`, `POST /app/sessions/:id/knowledge/solve`) :
+1. **Procédure déjà apprise** : renvoyée sans appel d'IA ; **sinon** une IA compose un plan, mémorisé par le serveur ; **sinon** (« hors catalogue ») le cas est noté comme manque et l'agent suit son cheminement habituel.
+2. L'agent **revalide** la procédure (`procedures/compile.ts`) contre le catalogue fermé (`procedures/manifest.ts`) et la transforme en compétence ordinaire (`learned:<id>`) : observation, propositions expliquées, accord du client, point de restauration pour les gestes sensibles, vérification. Une étape hors catalogue la fait refuser.
+3. Le résultat remonte (`/knowledge/:id/outcome` : réglé / non réglé / refusé / non vérifié / refusée par l'agent) et fait évoluer la confiance de la procédure.
+
+Sans réseau ni IA : aucun changement de comportement. Les clés d'IA n'existent que sur le serveur. Le catalogue est identique côté agent et côté API (le test `learning.test.ts` de l'API compare les deux fichiers : toute modification se fait dans les deux).

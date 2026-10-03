@@ -63,6 +63,13 @@ const ESTIMATES: Record<string, [number, number]> = {
   rescan_devices: [10, 60],
   restart_device: [5, 40],
   enable_device: [5, 40],
+  // Procédures apprises (procedures/manifest.ts)
+  service_start: [3, 30],
+  service_restart: [5, 45],
+  service_set_startup: [2, 15],
+  process_stop: [2, 20],
+  explorer_restart: [3, 20],
+  explorer_caches: [5, 40],
 };
 
 const DEFAULT_ESTIMATE: [number, number] = [5, MIN];

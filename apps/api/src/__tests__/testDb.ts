@@ -16,7 +16,7 @@ export async function applyMigrations() {
 
 export async function truncateAll() {
   await pool.query(`
-    TRUNCATE TABLE audit_logs, diagnostics, sessions, subscriptions, email_verifications, orders, app_installs, technician_applications,
+    TRUNCATE TABLE learned_procedure_runs, learned_procedures, knowledge_gaps, learning_calls, audit_logs, diagnostics, sessions, subscriptions, email_verifications, orders, app_installs, technician_applications,
       pme_requests, visit_requests, technicians,
       company_help_requests, company_diagnostic_requests, company_devices, company_consents, company_users, companies
       RESTART IDENTITY CASCADE;

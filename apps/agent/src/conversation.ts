@@ -2,6 +2,8 @@ import { runSkill, type Outcome } from './agent.js';
 import type { Assistant, ChatTurn } from './assistant.js';
 import { CONSENT_NO, CONSENT_TEXT, CONSENT_YES, withStandingConsent } from './consent.js';
 import { ensureHuman, HUMAN_REQUEST_TEXT } from './humanAccess.js';
+import type { Knowledge, LearnResult } from './knowledge.js';
+import { compileProcedure } from './procedures/compile.js';
 import { repairMyPc } from './repairPc.js';
 import { routeIntent, type HumanOnlyTopic, type Intent } from './router.js';
 import { SKILL_MENU, resolveSkill } from './skills/index.js';
@@ -38,6 +40,11 @@ export interface ConversationDeps {
   /** Relance l'agent avec la demande d'identifiants de Windows ; true = une nouvelle instance prend le relais (celle-ci doit s'arrêter). */
   requestAdmin?: () => Promise<boolean>;
   company?: { join(code: string, deviceName: string): Promise<{ ok: true; companyName: string } | { ok: false; error: string }> };
+  /**
+   * Mémoire de Tech Assist pour les cas que le routeur ne reconnaît pas : procédure déjà apprise, sinon plan composé par l'IA
+   * puis mémorisé. Absent (hors ligne, pas de session) : l'agent se comporte comme avant.
+   */
+  knowledge?: Knowledge;
 }
 
 export interface ConversationResult {
@@ -191,6 +198,8 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     const intent = intents[0];
 
     if (!intent) {
+      // Cas inconnu du routeur : la mémoire d'abord (aucun appel d'IA si le cas a déjà été résolu), puis l'IA qui compose un plan.
+      if (deps.knowledge && (await handleLearned(message))) continue;
       if (deps.autonomous) {
         ui.info("Je n'ai pas tout saisi, mais pas d'inquiétude : je regarde l'état complet de votre ordinateur pour trouver la cause.");
         await handleRepair();
@@ -257,6 +266,52 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     if (outcome.status === 'escalated' && outcome.recorded) handedOver = true;
     else if (outcome.status === 'fixed') ui.info('Parfait, c\'est réglé.');
     return outcome;
+  }
+
+  /** Résultat à retenir pour la mémoire : seule une correction confirmée par le client compte comme un succès. */
+  function learnResultOf(outcome: Outcome): LearnResult {
+    if (outcome.status === 'fixed') return outcome.actionsDone.length > 0 ? 'resolved' : 'unverified';
+    if (outcome.status === 'declined') return 'declined';
+    if (outcome.status === 'reboot_needed') return 'unverified';
+    return 'not_resolved';
+  }
+
+  /**
+   * Cas que l'agent ne connaît pas. Renvoie true si une procédure a été conduite (réussie ou non : l'agent a alors
+   * déjà soit réglé, soit passé la main), false si rien n'a pu être fait ici (pas de mémoire, IA indisponible, cas
+   * hors du catalogue) et que l'agent doit reprendre son cheminement habituel.
+   */
+  async function handleLearned(message: string): Promise<boolean> {
+    const knowledge = deps.knowledge!;
+    const reply = await knowledge.solve(message);
+    if (reply.status === 'unsupported') {
+      ui.info("Ce cas dépasse ce que je sais faire seul pour l'instant. Je le note : c'est ainsi que j'apprends de nouvelles choses.");
+      await log({ type: 'diagnosed', message: `Cas hors catalogue : ${reply.reason || 'raison non précisée'}`, details: { learned: 'unsupported' } });
+      return false;
+    }
+    if (reply.status !== 'memory' && reply.status !== 'generated') return false;
+
+    const compiled = compileProcedure(reply.procedure, reply.procedureId);
+    if (!compiled.ok) {
+      // L'agent est la dernière barrière : une étape hors catalogue (ou d'une autre version) n'est jamais exécutée.
+      await knowledge.outcome(reply.procedureId, 'rejected_by_agent', compiled.error);
+      await log({ type: 'diagnosed', message: `Procédure refusée par l'agent : ${compiled.error}`, details: { learned: 'rejected', procedureId: reply.procedureId } });
+      return false;
+    }
+
+    ui.info(
+      reply.status === 'generated'
+        ? "Je n'avais pas encore de solution toute prête pour ce cas. J'ai demandé à notre IA de me proposer un plan : je l'ai contrôlé, il n'utilise que des opérations sûres et connues. Si cela marche, je m'en souviendrai pour la prochaine fois."
+        : reply.trust === 'trusted'
+          ? "Ce cas m'est connu : je l'ai déjà résolu. Je vous explique chaque étape avant de la faire."
+          : "J'ai déjà un plan préparé pour ce cas. Je ne fais que des opérations sûres et connues, et je vérifie le résultat avec vous.",
+    );
+    await log({ type: 'diagnosed', message: `Procédure ${reply.status === 'generated' ? 'proposée par l\'IA' : 'retrouvée en mémoire'} : ${compiled.value.procedure.title}`, details: { learned: reply.status, trust: reply.trust, procedureId: reply.procedureId } });
+
+    const outcome = await runAndNote(compiled.value.skill);
+    outcomes.push(outcome);
+    await knowledge.outcome(reply.procedureId, learnResultOf(outcome));
+    return true;
   }
 
   async function handleUnclear() {

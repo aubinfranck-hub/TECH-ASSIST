@@ -13,6 +13,7 @@ import { diagnosticsRouter } from './routes/diagnostics.js';
 import { emailVerificationRouter } from './routes/emailVerification.js';
 import { healthRouter } from './routes/health.js';
 import { humanRelayRouter } from './routes/humanRelay.js';
+import { knowledgeAdminRouter, knowledgeRouter } from './routes/knowledge.js';
 import { leadsRouter } from './routes/leads.js';
 import { ordersRouter } from './routes/orders.js';
 import { paymentsRouter } from './routes/payments.js';
@@ -85,6 +86,7 @@ export function createApp() {
   app.use('/api', emailVerificationRouter);
   app.use('/api', paymentsRouter);
   app.use('/api', appRouter);
+  app.use('/api', knowledgeRouter);
   app.use('/api', diagnosticsRouter);
   app.use('/api', humanRelayRouter);
   app.use('/api', sessionsRouter);
@@ -93,6 +95,7 @@ export function createApp() {
   app.use('/api/auth', technicianAuthRouter);
   app.use('/api/auth', companyAuthRouter);
   app.use('/api', leadsRouter);
+  app.use('/api/admin/knowledge', knowledgeAdminRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/company', companyRouter);
 

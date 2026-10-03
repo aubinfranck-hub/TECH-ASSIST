@@ -5,6 +5,7 @@ import { runSkill } from './agent.js';
 import { AppApi, DEFAULT_API_BASE, FileAccountStore, answerCompanyRequest, humanAccessFor, joinCompany, readHardwareHash, signIn, startCovered } from './appAccount.js';
 import { collectFleetHealth } from './skills/fleetStatus.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
+import { HttpKnowledge, type Knowledge } from './knowledge.js';
 import { ChatUi, DEFAULT_SITE } from './chatServer.js';
 import { appWindowPlan, cleanupProfile } from './browser.js';
 import { converse } from './conversation.js';
@@ -78,6 +79,7 @@ async function main() {
   if (online) reporters.push(new HttpReporter(apiBase!, token!, sessionId!));
   const reporter = new CompositeReporter(reporters);
   const assistant: Assistant | undefined = online ? new HttpAssistant(apiBase!, token!, sessionId!) : undefined;
+  const knowledge: Knowledge | undefined = online ? new HttpKnowledge(apiBase!, token!, sessionId!) : undefined;
   const runner = new PowerShellRunner();
   // Nom de l'ordinateur pour l'en-tête des rapports (affichage seulement ; jamais utilisé dans un script).
   const machine = hostname().replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 40) || undefined;
@@ -107,7 +109,7 @@ async function main() {
   // Mode conversation (par défaut) : page de chat dans le navigateur, ou terminal avec --console.
   if (flag('console')) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const result = await converse({ runner, ui: consoleUi(rl), reporter, assistant, machine });
+    const result = await converse({ runner, ui: consoleUi(rl), reporter, assistant, machine, knowledge });
     console.log(`\nConversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);
     rl.close();
     process.exit(0);
@@ -120,6 +122,7 @@ async function main() {
   // Sans session fournie en ligne de commande (cas du double-clic) : connexion par email, puis assistance couverte.
   let conversationReporter: Reporter = reporter;
   let conversationAssistant: Assistant | undefined = assistant;
+  let conversationKnowledge: Knowledge | undefined = knowledge;
   let companyDeps: Parameters<typeof converse>[0]['company'];
   let conversationScope: Parameters<typeof converse>[0]['scope'];
   let startedSession: { token: string; sessionId: string } | null = null;
@@ -146,6 +149,7 @@ async function main() {
       chat.technicianIncluded = () => human.included;
       conversationReporter = new CompositeReporter([new ConsoleReporter(), new HttpReporter(base, started.token, started.sessionId, fetch, human)]);
       conversationAssistant = new HttpAssistant(base, started.token, started.sessionId);
+      conversationKnowledge = new HttpKnowledge(base, started.token, started.sessionId);
       // L'agent installé sur le PC fait lui-même le travail : « agent IA indisponible » ne concerne que l'assistant en ligne (questions).
       chat.info(
         started.coverage === 'free_offer'
@@ -182,7 +186,7 @@ async function main() {
   const progressTarget = relayTarget();
   const progress = progressTarget ? new ProgressSync(apiBase ?? DEFAULT_API_BASE, progressTarget.token, progressTarget.sessionId) : null;
   if (progress) chat.onTasks = (snapshot) => progress.update(snapshot);
-  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps, scope: conversationScope, autonomous: true, isAdmin: isAdmin(), requestAdmin: () => launchElevated(process.argv) });
+  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, knowledge: conversationKnowledge, machine, company: companyDeps, scope: conversationScope, autonomous: true, isAdmin: isAdmin(), requestAdmin: () => launchElevated(process.argv) });
   if (result.handedOver && !result.relaunched) {
     const recorded = !result.escalationFailed && (buttonHandoff ? await buttonHandoff : true);
     const target = relayTarget();
