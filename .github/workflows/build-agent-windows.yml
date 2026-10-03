@@ -31,6 +31,10 @@ jobs:
           npm install --no-save --prefix "$RUNNER_TEMP/rc" rcedit@4.0.1
           node -e "require(process.env.RUNNER_TEMP + '/rc/node_modules/rcedit')('tech-assist-agent.exe', {icon: 'apps/agent/assets/icon.ico', 'version-string': {ProductName: 'Tech Assist', FileDescription: 'Tech Assist - votre technicien informatique IA', CompanyName: 'NTIC Strategy', LegalCopyright: 'NTIC Strategy', OriginalFilename: 'tech-assist-agent.exe', InternalName: 'tech-assist'}, 'file-version': '0.1.0.0', 'product-version': '0.1.0.0'}).catch(e => { console.error(e); process.exit(1); })"
           npx --yes postject@1.0.0-alpha.6 tech-assist-agent.exe NODE_SEA_BLOB sea.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+      - name: Masquer la console Windows
+        shell: powershell
+        run: |
+          & "C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\Tools\MSVC\**\bin\Hostx64\x64\editbin.exe" | Select-Object -First 1 | ForEach-Object { & $_ /SUBSYSTEM:WINDOWS tech-assist-agent.exe }
       - name: Test de démarrage
         shell: bash
         run: ./tech-assist-agent.exe --skill inconnu || true
