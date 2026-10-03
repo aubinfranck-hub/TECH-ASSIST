@@ -145,8 +145,11 @@ export class AppApi {
     return this.call<{
       order: { id: string; amount_fcfa: number };
       plan: { name: string; scope: Scope };
-      payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean };
+      payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean; methods?: string[] };
     }>('/app/orders', { planId }, token);
+  }
+  payOrder(token: string, id: string, method: string) {
+    return this.call<{ url: string }>(`/app/orders/${encodeURIComponent(id)}/pay`, { method }, token);
   }
   orderStatus(token: string, id: string) {
     return this.call<{ order: { status: string; used: boolean } }>(`/app/orders/${encodeURIComponent(id)}`, null, token, 'GET');
@@ -256,6 +259,8 @@ export async function signIn(deps: AccountDeps): Promise<{ token: string; entitl
   return null;
 }
 
+const METHOD_LABELS: Record<string, string> = { wave: 'Wave', orange: 'Orange Money', mtn: 'MTN Mobile Money', moov: 'Moov Money', djamo: 'Djamo' };
+
 const fcfa = (n: number) => `${n.toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ')} FCFA`;
 
 export interface StartDeps extends AccountDeps {
@@ -315,7 +320,20 @@ export async function startCovered(deps: StartDeps, login: { token: string; enti
     return null;
   }
   ui.info(`Forfait « ${ordered.plan.name} » : ${fcfa(ordered.payment.amountFcfa)}. Référence de paiement : ${ordered.payment.reference}.`);
-  if (ordered.payment.automatic && ordered.payment.url) {
+  let payUrl = ordered.payment.url ?? null;
+  if (ordered.payment.automatic && !payUrl && ordered.payment.methods?.length) {
+    const labels = ordered.payment.methods.map((m) => METHOD_LABELS[m] ?? m);
+    const choice = await ui.choose('Comment voulez-vous payer ?', [...labels, 'Plus tard']);
+    if (choice === null || choice >= labels.length) return null;
+    try {
+      payUrl = (await api.payOrder(token, ordered.order.id, ordered.payment.methods[choice]!)).url;
+    } catch (err) {
+      ui.info(err instanceof Error ? err.message : 'Impossible de préparer le paiement.');
+      return null;
+    }
+  }
+  if (ordered.payment.automatic && payUrl) {
+    ordered.payment.url = payUrl;
     ui.info(`Payez en toute sécurité ici : ${ordered.payment.url}`);
     ui.info("Dès que votre paiement est reçu, votre assistance démarre toute seule, sans rien d'autre à faire. Laissez cette fenêtre ouverte.");
     deps.openUrl?.(ordered.payment.url);

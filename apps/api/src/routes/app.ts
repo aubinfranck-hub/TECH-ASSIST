@@ -18,6 +18,7 @@ import {
   imageMatchesMime,
 } from '../assistant/officeAssistant.js';
 import { TRAINING_STEPS, TRAINING_TRACK_IDS, findTrack } from '../assistant/trainingCatalog.js';
+import { JEKO_METHODS, JekoError, createJekoPayment, jekoConfigured, type JekoMethod } from '../payments/jeko.js';
 import { paymentLink } from './payments.js';
 import { createSessionForOrder } from './sessions.js';
 
@@ -334,12 +335,35 @@ appRouter.post('/app/orders', limiter, requireAppInstall, validateBody(orderSche
       reference: String(order.id).slice(0, 8).toUpperCase(),
       // Paiement automatique : le client paie sur le lien, le prestataire confirme, l'assistance démarre seule.
       url: paymentLink(order, install.email),
-      automatic: Boolean(process.env.PAYMENT_WEBHOOK_SECRET && process.env.PAYMENT_LINK_TEMPLATE),
+      // Jèko : le client choisit sa méthode, puis POST /app/orders/:id/pay donne le lien de paiement.
+      automatic: jekoConfigured() || Boolean(process.env.PAYMENT_WEBHOOK_SECRET && process.env.PAYMENT_LINK_TEMPLATE),
+      methods: jekoConfigured() ? JEKO_METHODS : [],
       instructions:
         process.env.PAYMENT_INSTRUCTIONS ??
         'Envoyez le montant par Mobile Money au numéro indiqué par notre équipe en précisant la référence. Un technicien confirme la réception, puis votre assistance démarre.',
     },
   });
+});
+
+const paySchema = z.object({ method: z.enum(JEKO_METHODS) });
+
+/** Crée le paiement Jèko de la commande avec la méthode choisie (Wave, Orange, MTN, Moov, Djamo) ; renvoie le lien. */
+appRouter.post('/app/orders/:id/pay', limiter, requireAppInstall, validateBody(paySchema), async (req, res) => {
+  const install = req.appInstall!;
+  if (!jekoConfigured()) return res.status(503).json({ error: 'Paiement en ligne indisponible pour le moment.' });
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'Commande introuvable' });
+  const { rows } = await pool.query(
+    `SELECT id, amount_fcfa FROM orders WHERE id = $1 AND app_install_id = $2 AND status = 'pending_payment'`,
+    [req.params.id, install.id],
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Commande introuvable ou déjà payée' });
+  try {
+    const payment = await createJekoPayment({ orderId: rows[0].id, amountFcfa: Number(rows[0].amount_fcfa), method: (req.body as z.infer<typeof paySchema>).method as JekoMethod });
+    res.json({ url: payment.redirectUrl });
+  } catch (err) {
+    if (err instanceof JekoError) return res.status(502).json({ error: err.message });
+    throw err;
+  }
 });
 
 /** Suivi d'une commande (le client attend la confirmation du paiement). */

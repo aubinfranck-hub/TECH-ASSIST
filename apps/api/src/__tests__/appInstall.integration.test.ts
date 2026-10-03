@@ -217,55 +217,101 @@ describe('Application : inscription par email, assistance offerte en base, abonn
     });
   });
 
-  describe('paiement automatique (webhook du prestataire)', () => {
+  describe('paiement automatique Jèko', () => {
     const SECRET = 'whsec_test';
     const sign = (body: string) => createHmac('sha256', SECRET).update(body).digest('hex');
+    const jeko = (orderId: string, over: Record<string, unknown> = {}) => ({
+      id: 'txn_1',
+      status: 'success',
+      amount: { amount: 2000, currency: 'XOF' },
+      transactionType: 'payment',
+      storeId: 'store-1',
+      paymentMethod: 'wave',
+      transactionDetails: { reference: orderId },
+      ...over,
+    });
     const hook = (payload: object, signature?: string) => {
       const body = JSON.stringify(payload);
-      return request(app).post('/api/payments/webhook').set('Content-Type', 'application/json').set('X-Signature', signature ?? sign(body)).send(body);
+      return request(app)
+        .post('/api/payments/webhook')
+        .set('Content-Type', 'application/json')
+        .set('Jeko-Event', 'TRANSACTION_COMPLETED')
+        .set('Jeko-Signature', signature ?? sign(body))
+        .send(body);
+    };
+    const configure = () => {
+      process.env.PAYMENT_WEBHOOK_SECRET = SECRET;
+      process.env.JEKO_API_KEY = 'k';
+      process.env.JEKO_API_KEY_ID = 'kid';
+      process.env.JEKO_STORE_ID = 'store-1';
+      process.env.PUBLIC_WEB_URL = 'https://site.example';
     };
     afterEach(() => {
-      delete process.env.PAYMENT_WEBHOOK_SECRET;
-      delete process.env.PAYMENT_LINK_TEMPLATE;
+      for (const k of ['PAYMENT_WEBHOOK_SECRET', 'JEKO_API_KEY', 'JEKO_API_KEY_ID', 'JEKO_STORE_ID', 'PUBLIC_WEB_URL']) delete process.env[k];
     });
 
     async function pendingOrder() {
       const r = await register();
       await request(app).post('/api/app/assistance').set(auth(r)).send({});
       const order = await request(app).post('/api/app/orders').set(auth(r)).send({ planId: 'assistance_rapide' });
-      return { r, order };
+      return { r, order, id: order.body.order.id as string };
     }
 
     it('fermé tant qu\'aucun secret n\'est configuré', async () => {
-      const { order } = await pendingOrder();
-      expect((await hook({ orderId: order.body.order.id, status: 'success', amount: 2000 })).status).toBe(503);
+      const { id } = await pendingOrder();
+      expect((await hook(jeko(id))).status).toBe(503);
     });
 
-    it('signature valide + bon montant : la commande est payée, l\'assistance démarre sans technicien', async () => {
-      process.env.PAYMENT_WEBHOOK_SECRET = SECRET;
-      process.env.PAYMENT_LINK_TEMPLATE = 'https://pay.example/checkout?ref={orderId}&amount={amount}';
-      const { r, order } = await pendingOrder();
-      expect(order.body.payment.url).toBe(`https://pay.example/checkout?ref=${order.body.order.id}&amount=2000`);
+    it('la commande propose les méthodes Jèko quand le paiement est configuré', async () => {
+      configure();
+      const { order } = await pendingOrder();
       expect(order.body.payment.automatic).toBe(true);
+      expect(order.body.payment.methods).toEqual(['wave', 'orange', 'mtn', 'moov', 'djamo']);
+    });
 
-      const ok = await hook({ orderId: order.body.order.id, status: 'success', amount: 2000, transactionId: 'T1' });
-      expect(ok.status).toBe(200);
-      expect((await request(app).get(`/api/app/orders/${order.body.order.id}`).set(auth(r))).body.order.status).toBe('paid');
-      expect((await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: order.body.order.id })).status).toBe(201);
+    it('crée le paiement chez Jèko en centimes avec la référence de la commande', async () => {
+      configure();
+      const { r, id } = await pendingOrder();
+      const seen: { url: string; headers: Record<string, string>; body: Record<string, unknown> }[] = [];
+      const real = globalThis.fetch;
+      globalThis.fetch = (async (url: string, init: RequestInit) => {
+        seen.push({ url, headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) });
+        return new Response(JSON.stringify({ id: 'pr_1', redirectUrl: 'https://pay.jeko.africa/abc', status: 'pending' }), { status: 200 });
+      }) as typeof fetch;
+      try {
+        const res = await request(app).post(`/api/app/orders/${id}/pay`).set(auth(r)).send({ method: 'wave' });
+        expect(res.status).toBe(200);
+        expect(res.body.url).toBe('https://pay.jeko.africa/abc');
+        expect(seen[0]!.url).toBe('https://api.jeko.africa/partner_api/payment_requests');
+        expect(seen[0]!.headers['X-API-KEY']).toBe('k');
+        expect(seen[0]!.body).toMatchObject({ storeId: 'store-1', amountCents: 200000, currency: 'XOF', reference: id });
+        expect((seen[0]!.body.paymentDetails as { data: { paymentMethod: string } }).data.paymentMethod).toBe('wave');
+        expect((await request(app).post(`/api/app/orders/${id}/pay`).set(auth(r)).send({ method: 'bitcoin' })).status).toBe(400);
+        const other = await register();
+        expect((await request(app).post(`/api/app/orders/${id}/pay`).set(auth(other)).send({ method: 'wave' })).status).toBe(404);
+      } finally {
+        globalThis.fetch = real;
+      }
+    });
 
-      // Notification rejouée : sans effet.
-      const replay = await hook({ orderId: order.body.order.id, status: 'success', amount: 2000, transactionId: 'T1' });
+    it('notification signée, bon montant : commande payée, l\'assistance démarre sans technicien, rejeu sans effet', async () => {
+      configure();
+      const { r, id } = await pendingOrder();
+      expect((await hook(jeko(id))).status).toBe(200);
+      expect((await request(app).get(`/api/app/orders/${id}`).set(auth(r))).body.order.status).toBe('paid');
+      expect((await request(app).post('/api/app/assistance').set(auth(r)).send({ orderId: id })).status).toBe(201);
+      const replay = await hook(jeko(id));
       expect(replay.status).toBe(200);
       expect(replay.body.alreadyPaid).toBe(true);
     });
 
-    it('mauvaise signature, mauvais montant, paiement échoué : jamais payée', async () => {
-      process.env.PAYMENT_WEBHOOK_SECRET = SECRET;
-      const { r, order } = await pendingOrder();
-      const id = order.body.order.id;
-      expect((await hook({ orderId: id, status: 'success', amount: 2000 }, 'deadbeef')).status).toBe(401);
-      expect((await hook({ orderId: id, status: 'success', amount: 500 })).status).toBe(409);
-      expect((await hook({ orderId: id, status: 'failed', amount: 2000 })).status).toBe(200);
+    it('mauvaise signature, mauvais montant, autre boutique, paiement en erreur : jamais payée', async () => {
+      configure();
+      const { r, id } = await pendingOrder();
+      expect((await hook(jeko(id), 'deadbeef')).status).toBe(401);
+      expect((await hook(jeko(id, { amount: { amount: 500, currency: 'XOF' } }))).body.ignored).toBe('montant');
+      expect((await hook(jeko(id, { storeId: 'autre' }))).body.ignored).toBe('store');
+      expect((await hook(jeko(id, { status: 'error' }))).body.ignored).toBe('error');
       expect((await request(app).get(`/api/app/orders/${id}`).set(auth(r))).body.order.status).toBe('pending_payment');
     });
   });

@@ -17,41 +17,53 @@ export function validSignature(rawBody: Buffer | undefined, header: string | und
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-const webhookSchema = z.object({
-  /** Identifiant de la commande Tech Assist, transmis au prestataire à la création du paiement. */
-  orderId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
-  status: z.enum(['success', 'failed', 'pending']),
-  /** Montant réellement payé, en FCFA. */
-  amount: z.number().int().positive(),
-  /** Référence de la transaction chez le prestataire. */
-  transactionId: z.string().max(100).optional(),
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const jekoSchema = z.object({
+  id: z.string().max(100).optional(),
+  status: z.enum(['pending', 'success', 'error']),
+  amount: z.object({ amount: z.number().positive() }),
+  storeId: z.string().optional(),
+  transactionType: z.string().optional(),
+  transactionDetails: z.object({ reference: z.string() }).partial().optional(),
 });
 
 /**
- * Confirmation automatique du paiement par le prestataire (Mobile Money). Sans secret configuré la route est fermée :
- * personne ne peut marquer une commande payée. Le montant doit correspondre à celui de la commande.
+ * Confirmation automatique du paiement par Jèko (notification TRANSACTION_COMPLETED signée en HMAC-SHA256 hex
+ * dans `Jeko-Signature`). Sans secret configuré la route est fermée : personne ne peut marquer une commande payée.
+ * Réponse 200 pour toute notification authentique (Jèko désactive un webhook après 15 échecs consécutifs).
  */
 paymentsRouter.post('/payments/webhook', async (req: Request, res) => {
   const secret = process.env.PAYMENT_WEBHOOK_SECRET;
   if (!secret) return res.status(503).json({ error: 'Paiement automatique non configuré' });
   const raw = (req as Request & { rawBody?: Buffer }).rawBody;
-  const header = (req.headers['x-signature'] ?? req.headers['x-webhook-signature']) as string | undefined;
+  const header = (req.headers['jeko-signature'] ?? req.headers['x-signature']) as string | undefined;
   if (!validSignature(raw, header, secret)) return res.status(401).json({ error: 'Signature invalide' });
 
-  const parsed = webhookSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Notification invalide' });
-  const { orderId, status, amount, transactionId } = parsed.data;
-  if (status !== 'success') return res.json({ ok: true, ignored: status });
+  const event = req.headers['jeko-event'];
+  if (typeof event === 'string' && event !== 'TRANSACTION_COMPLETED') return res.json({ ok: true, ignored: event });
+
+  const parsed = jekoSchema.safeParse(req.body);
+  if (!parsed.success) return res.json({ ok: true, ignored: 'format' });
+  const p = parsed.data;
+  if (p.status !== 'success') return res.json({ ok: true, ignored: p.status });
+  if (p.transactionType && p.transactionType !== 'payment') return res.json({ ok: true, ignored: p.transactionType });
+  if (process.env.JEKO_STORE_ID && p.storeId && p.storeId !== process.env.JEKO_STORE_ID) return res.json({ ok: true, ignored: 'store' });
+
+  const orderId = p.transactionDetails?.reference ?? '';
+  if (!UUID.test(orderId)) return res.json({ ok: true, ignored: 'reference' });
 
   const found = await pool.query('SELECT status, amount_fcfa FROM orders WHERE id = $1', [orderId]);
   const order = found.rows[0];
-  if (!order) return res.status(404).json({ error: 'Commande introuvable' });
-  if (order.status === 'paid') return res.json({ ok: true, alreadyPaid: true }); // le prestataire peut rejouer la notification
-  if (Number(order.amount_fcfa) !== amount) {
-    await logAudit(pool, { actorType: 'system', actorId: 'payment-provider', orderId, action: 'order.payment_amount_mismatch', details: { expected: order.amount_fcfa, received: amount, transactionId } });
-    return res.status(409).json({ error: 'Montant différent de la commande' });
+  if (!order) return res.json({ ok: true, ignored: 'commande inconnue' });
+  if (order.status === 'paid') return res.json({ ok: true, alreadyPaid: true }); // notification rejouée
+  // Le montant du webhook est en FCFA ; accepté aussi en centimes (x100) car la demande de paiement se fait en centimes.
+  const expected = Number(order.amount_fcfa);
+  if (p.amount.amount !== expected && p.amount.amount !== expected * 100) {
+    await logAudit(pool, { actorType: 'system', actorId: 'jeko', orderId, action: 'order.payment_amount_mismatch', details: { expected, received: p.amount.amount, transactionId: p.id } });
+    return res.json({ ok: false, ignored: 'montant' });
   }
-  const result = await markOrderPaid(orderId, { technicianId: null, provider: process.env.PAYMENT_PROVIDER ?? 'geco', providerRef: transactionId });
+  const result = await markOrderPaid(orderId, { technicianId: null, provider: 'jeko', providerRef: p.id });
   res.json({ ok: true, alreadyPaid: !result.ok });
 });
 

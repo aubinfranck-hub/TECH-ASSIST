@@ -150,6 +150,24 @@ describe('démarrage de l\'assistance', () => {
     expect(calls.find((c) => c.path === '/app/assistance')!.body.orderId).toBe('ord-1');
   });
 
+  it('paiement automatique : choix de la méthode, lien Jèko affiché et ouvert, démarrage dès la confirmation', async () => {
+    const opened: string[] = [];
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/orders/ord-5/pay': () => ({ status: 200, json: { url: 'https://pay.jeko.africa/zz' } }),
+      '/app/orders/ord-5': () => ({ status: 200, json: { order: { status: 'paid', used: false } } }),
+      '/app/orders': () => ({ status: 201, json: { order: { id: 'ord-5', amount_fcfa: 2000 }, plan: { name: 'Dépannage', scope: 'fix' }, payment: { amountFcfa: 2000, reference: 'R5', instructions: '', url: null, automatic: true, methods: ['wave', 'orange'] } } }),
+      '/app/assistance': () => ({ status: 201, json: { session: { id: 'S5' }, coverage: 'paid_forfait', scope: 'fix', fallbackToHuman: false } }),
+    }, calls));
+    const ui = new ScriptedConversation({ picks: [1, 1] }); // Dépannage, puis Orange Money
+    const started = await startCovered({ ui, api, store: memoryStore(), ...noWait, openUrl: (u) => opened.push(u) }, { token: 'T', entitlements: USED });
+    expect(started).toMatchObject({ sessionId: 'S5', scope: 'fix' });
+    expect(calls.find((c) => c.path === '/app/orders/ord-5/pay')!.body.method).toBe('orange');
+    expect(opened).toEqual(['https://pay.jeko.africa/zz']);
+    expect(ui.said).toContain('démarre toute seule');
+    expect(ui.said).not.toContain('technicien');
+  });
+
   it('paiement jamais confirmé : rend la main sans démarrer, et le dit', async () => {
     const calls: { path: string; body: Record<string, unknown> }[] = [];
     const api = new AppApi('https://x.test', fakeFetch({

@@ -28,6 +28,7 @@ interface Payment {
   instructions: string;
   url?: string | null;
   automatic?: boolean;
+  methods?: string[];
 }
 interface Turn {
   role: 'user' | 'assistant';
@@ -219,10 +220,25 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
     setBusy(true);
     setError(null);
     try {
-      const r = await call<{ order: { id: string }; payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean } }>('/app/orders', { planId }, token);
-      setPayment({ orderId: r.order.id, reference: r.payment.reference, amount: r.payment.amountFcfa, instructions: r.payment.instructions, url: r.payment.url, automatic: r.payment.automatic });
+      const r = await call<{ order: { id: string }; payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean; methods?: string[] } }>('/app/orders', { planId }, token);
+      setPayment({ orderId: r.order.id, reference: r.payment.reference, amount: r.payment.amountFcfa, instructions: r.payment.instructions, url: r.payment.url, automatic: r.payment.automatic, methods: r.payment.methods });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Impossible de créer la commande.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function payWith(method: string) {
+    if (!payment) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await call<{ url: string }>(`/app/orders/${payment.orderId}/pay`, { method }, token);
+      setPayment({ ...payment, url: r.url });
+      window.open(r.url, '_blank', 'noopener');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Impossible de préparer le paiement.');
     } finally {
       setBusy(false);
     }
@@ -319,7 +335,18 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <p className="font-extrabold">{payment.amount.toLocaleString('fr-FR')} FCFA à payer</p>
             <p className="mt-2 text-sm text-slate-700">Référence : <strong>{payment.reference}</strong></p>
-            {payment.automatic && payment.url ? (
+            {payment.automatic && !payment.url && payment.methods?.length ? (
+              <>
+                <p className="mt-3 text-sm font-semibold">Payer avec :</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {payment.methods.map((m) => (
+                    <button key={m} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-bold hover:border-brand-600 disabled:opacity-60" disabled={busy} onClick={() => payWith(m)}>
+                      {({ wave: 'Wave', orange: 'Orange Money', mtn: 'MTN Money', moov: 'Moov Money', djamo: 'Djamo' } as Record<string, string>)[m] ?? m}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : payment.automatic && payment.url ? (
               <>
                 <a href={payment.url} target="_blank" rel="noreferrer" className="ta-button-primary mt-4 inline-flex">Payer maintenant</a>
                 <p className="mt-3 text-sm text-slate-600">Après le paiement, revenez sur cette page : l’assistance démarre toute seule.</p>
