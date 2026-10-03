@@ -12,7 +12,7 @@ export type EarningStatus = 'pending' | 'approved' | 'paid' | 'cancelled';
 
 export type CreditResult =
   | { credited: true; earningId: string; kind: EarningKind; amountFcfa: number }
-  | { credited: false; reason: 'not_found' | 'not_completed' | 'not_assistance' | 'no_technician' | 'not_staff' | 'no_human' | 'already_credited' | 'no_rate' };
+  | { credited: false; reason: 'not_found' | 'not_completed' | 'not_assistance' | 'no_technician' | 'not_staff' | 'no_human' | 'self_confirmed' | 'already_credited' | 'no_rate' };
 
 /**
  * Crédite le technicien d'une assistance terminée. Appelé à la fin de l'assistance (par le technicien ou par l'arrêt de la session) :
