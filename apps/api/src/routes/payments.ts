@@ -76,3 +76,28 @@ export function paymentLink(order: { id: string; amount_fcfa: number }, email?: 
     .replaceAll('{amount}', String(order.amount_fcfa))
     .replaceAll('{email}', encodeURIComponent(email ?? ''));
 }
+
+// TEMPORAIRE : liste les boutiques Jèko pour retrouver le storeId (protégé par le secret). À retirer.
+paymentsRouter.get('/payments/jeko/stores', async (req, res) => {
+  const secret = process.env.PAYMENT_WEBHOOK_SECRET ?? '';
+  const given = String(req.query.k ?? '');
+  const a = Buffer.from(given);
+  const b = Buffer.from(secret);
+  if (!secret || a.length !== b.length || !timingSafeEqual(a, b)) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  const base = (process.env.JEKO_API_URL ?? 'https://api.jeko.africa').replace(/\/$/, '');
+  try {
+    const r = await fetch(`${base}/partner_api/stores`, {
+      headers: {
+        'X-API-KEY': process.env.JEKO_API_KEY ?? '',
+        'X-API-KEY-ID': process.env.JEKO_API_KEY_ID ?? '',
+      },
+    });
+    const text = await r.text();
+    res.status(r.status).type('application/json').send(text);
+  } catch (e) {
+    res.status(502).json({ error: String(e) });
+  }
+});
