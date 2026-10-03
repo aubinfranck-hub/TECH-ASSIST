@@ -5,12 +5,16 @@ import { entrepriseIncludes, entrepriseOffers, particulierIncludes, particulierO
 
 export function PricingTable() {
   const [plans, setPlans] = useState<PricingPlan[]>([]);
+  const [free, setFree] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api
-      .get<{ plans: PricingPlan[] }>('/api/pricing')
-      .then((res) => setPlans(res.plans))
+      .get<{ plans: PricingPlan[]; freeLaunch?: boolean }>('/api/pricing')
+      .then((res) => {
+        setPlans(res.plans);
+        setFree(res.freeLaunch === true);
+      })
       .catch(() => setError('Impossible de charger les tarifs pour le moment.'));
   }, []);
 
@@ -22,19 +26,19 @@ export function PricingTable() {
     return <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">Chargement des tarifs…</p>;
   }
 
-  return <PricingCards plans={plans} />;
+  return <PricingCards plans={plans} freeLaunch={free} />;
 }
 
 /** Affichage seul (testable sans réseau). */
-export function PricingCards({ plans }: { plans: PricingPlan[] }) {
+export function PricingCards({ plans, freeLaunch = false }: { plans: PricingPlan[]; freeLaunch?: boolean }) {
   const forfaits = particulierOffers(plans);
   const entreprises = entrepriseOffers(plans);
 
   return (
     <>
       <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-5">
-        <p className="font-bold text-green-900">Première assistance offerte</p>
-        <p className="mt-1 text-sm text-green-800">Pour essayer, avec un technicien si besoin, sans paiement. Ensuite, vous payez uniquement l’assistance dont vous avez besoin.</p>
+        <p className="font-bold text-green-900">{freeLaunch ? 'Lancement : toutes les assistances sont gratuites, technicien compris' : 'Première assistance offerte'}</p>
+        <p className="mt-1 text-sm text-green-800">{freeLaunch ? 'Profitez-en pendant la durée du lancement : les tarifs ci-dessous s’appliqueront ensuite. ' : ''}Pour essayer, avec un technicien si besoin, sans paiement. Ensuite, vous payez uniquement l’assistance dont vous avez besoin.</p>
         <Link to="/assistance" className="ta-button-primary mt-4">Installer l’application</Link>
       </div>
 
@@ -45,8 +49,9 @@ export function PricingCards({ plans }: { plans: PricingPlan[] }) {
             <p className="text-sm font-semibold text-brand-700">Par assistance</p>
             <h4 className="mt-2 text-xl font-black text-slate-950">{plan.name}</h4>
             <div className="mt-5">
-              <span className="text-3xl font-black tracking-tight text-slate-950">{plan.price_fcfa.toLocaleString('fr-FR')}</span>
-              <span className="ml-1 text-sm font-semibold text-slate-500">FCFA</span>
+              {freeLaunch && <span className="mr-2 rounded-full bg-green-100 px-2.5 py-1 align-middle text-sm font-black text-green-800">GRATUIT</span>}
+              <span className={`text-3xl font-black tracking-tight ${freeLaunch ? 'text-slate-400 line-through decoration-2' : 'text-slate-950'}`}>{plan.price_fcfa.toLocaleString('fr-FR')}</span>
+              <span className={`ml-1 text-sm font-semibold text-slate-500 ${freeLaunch ? 'line-through' : ''}`}>FCFA</span>
               {plan.duration_minutes && <p className="mt-1 text-sm text-slate-500">jusqu’à {plan.duration_minutes} min</p>}
             </div>
             <ul className="mt-5 flex-1 space-y-2 text-sm leading-6 text-slate-600">
@@ -72,8 +77,9 @@ export function PricingCards({ plans }: { plans: PricingPlan[] }) {
                 <p className="text-sm font-semibold text-brand-400">Jusqu’à {postes(plan.metadata?.maxDevices ?? 0)}</p>
                 <h4 className="mt-2 text-xl font-black">{plan.name}</h4>
                 <div className="mt-5">
-                  <span className="text-3xl font-black tracking-tight">{plan.price_fcfa.toLocaleString('fr-FR')}</span>
-                  <span className="ml-1 text-sm font-semibold text-slate-400">FCFA / mois</span>
+                  {freeLaunch && <span className="mr-2 rounded-full bg-green-500 px-2.5 py-1 align-middle text-sm font-black text-white">GRATUIT</span>}
+                  <span className={`text-3xl font-black tracking-tight ${freeLaunch ? 'text-slate-500 line-through decoration-2' : ''}`}>{plan.price_fcfa.toLocaleString('fr-FR')}</span>
+                  <span className={`ml-1 text-sm font-semibold text-slate-400 ${freeLaunch ? 'line-through' : ''}`}>FCFA / mois</span>
                 </div>
                 <ul className="mt-5 flex-1 space-y-2 text-sm leading-6 text-slate-300">
                   {entrepriseIncludes(plan).map((line) => (

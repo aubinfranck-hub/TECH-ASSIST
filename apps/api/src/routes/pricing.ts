@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
+import { freeLaunch } from '../utils/offers.js';
 
 export const pricingRouter = Router();
 
@@ -16,5 +17,5 @@ pricingRouter.get('/', async (_req, res) => {
        AND COALESCE((metadata->>'viewerSession')::boolean, FALSE) = FALSE
      ORDER BY sort_order ASC`,
   );
-  res.json({ plans: rows });
+  res.json({ plans: rows, freeLaunch: freeLaunch() });
 });
