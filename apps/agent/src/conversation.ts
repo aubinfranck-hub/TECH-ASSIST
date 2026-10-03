@@ -32,6 +32,8 @@ export interface ConversationDeps {
    * une demande floue lance l'analyse complète au lieu d'un menu, et plusieurs pistes sont traitées à la suite sans question.
    */
   autonomous?: boolean;
+  /** false : l'agent tourne sans droits administrateur (compte standard, ou fenêtre Windows refusée). */
+  isAdmin?: boolean;
   company?: { join(code: string, deviceName: string): Promise<{ ok: true; companyName: string } | { ok: false; error: string }> };
 }
 
@@ -44,6 +46,10 @@ export interface ConversationResult {
 
 const GREETING =
   "Bonjour, je suis AI PC, votre technicien informatique. Dites-moi en une phrase ce que vous voulez — par exemple « mon ordinateur est lent » (je l'analyse et je le répare), « je n'ai pas Internet », « mon imprimante ne marche pas », « je n'accède pas au serveur », « je pense avoir un virus », « Outlook plante », « Teams ne se connecte pas », « OneDrive ne se synchronise plus », « Word dit produit non activé », « installe VLC », « je veux désinstaller Skype » — ou « apprends-moi Excel » pour une formation, ou posez-moi une question sur Office.";
+
+/** Compte standard (ou fenêtre Windows refusée) : on dit simplement ce qui est possible, sans jargon. */
+export const NO_ADMIN_TEXT =
+  "Windows ne m'a pas donné les droits d'administrateur (ce compte est un compte « standard », ou la fenêtre de Windows a été refusée). Je peux quand même analyser votre PC et corriger ce qui est à votre portée (nettoyage, démarrage, Outlook, Teams…). Pour le reste, il faut le mot de passe de l'administrateur de ce PC — souvent la personne qui l'a installé : relancez Tech Assist et saisissez-le dans la fenêtre de Windows — ou demandez un technicien.";
 
 /** Ce que l'agent ne fait pas : dit franchement, puis un technicien. */
 const HUMAN_ONLY_TEXT: Record<HumanOnlyTopic, string> = {
@@ -102,6 +108,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   };
 
   ui.info(GREETING);
+  if (deps.autonomous && deps.isAdmin === false) ui.info(NO_ADMIN_TEXT);
   // Accord unique : sauf forfait « diagnostic » (rien n'est modifié), le client autorise une fois pour toute la session.
   if (deps.autonomous && deps.scope !== 'diagnostic') {
     ui.info(CONSENT_TEXT);
@@ -212,7 +219,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   }
 
   async function runAndNote(skill: Skill): Promise<Outcome> {
-    const outcome = await runSkill(skill, { runner, ui, reporter, machine: deps.machine, readOnly: deps.scope === 'diagnostic', friendly: deps.autonomous });
+    const outcome = await runSkill(skill, { runner, ui, reporter, machine: deps.machine, readOnly: deps.scope === 'diagnostic', friendly: deps.autonomous, isAdmin: deps.isAdmin });
     // Si le serveur n'a pas enregistré la demande, la conversation continue : le client peut réessayer ou utiliser le bouton.
     if (outcome.status === 'escalated' && outcome.recorded) handedOver = true;
     else if (outcome.status === 'fixed') ui.info('Parfait, c\'est réglé.');
@@ -275,7 +282,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
       ui.info("L'analyse et la réparation complète du PC font partie du forfait Intervention complète (5 000 FCFA). Avec votre forfait Dépannage, décrivez un problème précis (Internet, imprimante, Outlook, lenteur…).");
       return;
     }
-    const out = await repairMyPc({ runner, ui, reporter, machine: deps.machine, friendly: deps.autonomous });
+    const out = await repairMyPc({ runner, ui, reporter, machine: deps.machine, friendly: deps.autonomous, isAdmin: deps.isAdmin });
     if (out.status === 'repaired' || out.status === 'partial') {
       if (out.escalated) handedOver = true;
       else if (out.status === 'repaired' && out.reboot !== 'accepted') ui.info("Parfait, votre ordinateur est en bon état.");

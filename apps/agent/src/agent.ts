@@ -36,6 +36,8 @@ export interface AgentContext {
   readOnly?: boolean;
   /** Mode grand public : messages simples, sans détails techniques bruts. */
   friendly?: boolean;
+  /** false : l'agent n'a pas les droits administrateur ; les actions qui les exigent sont mises de côté au lieu d'échouer. Absent = inconnu (on essaie). */
+  isAdmin?: boolean;
 }
 
 /** Ce que l'agent a constaté et fait, pour le rapport d'intervention. */
@@ -137,6 +139,14 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
     const doneBefore = done.length;
     for (const action of fresh) {
       attempted.add(key(action));
+      if (ctx.isAdmin === false && action.requiresAdmin) {
+        // Sans droits administrateur, Windows refuserait : on ne tente pas, on le dit simplement.
+        declinedAny = true;
+        trace.actions.push({ title: action.title, result: 'declined' });
+        ctx.ui.info(`« ${action.title} » demande les droits administrateur : je ne peux pas le faire sans. Un technicien ou le mot de passe administrateur de ce PC est nécessaire.`);
+        await report({ type: 'action_declined', action: action.id, message: 'Droits administrateur absents' });
+        continue;
+      }
       await report({ type: 'action_proposed', action: action.id, message: action.title });
       const approved = await ctx.ui.confirmAction(action);
       if (!approved) {

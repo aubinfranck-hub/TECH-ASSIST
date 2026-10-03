@@ -7,7 +7,7 @@ import { collectFleetHealth } from './skills/fleetStatus.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
 import { ChatUi } from './chatServer.js';
 import { converse } from './conversation.js';
-import { relaunchAsAdminIfNeeded } from './elevate.js';
+import { isAdmin, relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
 import { CompositeReporter, ConsoleReporter, HttpReporter } from './reporters.js';
@@ -149,7 +149,7 @@ async function main() {
   chat.onHandoff = () => {
     conversationReporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
   };
-  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps, scope: conversationScope, autonomous: true });
+  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps, scope: conversationScope, autonomous: true, isAdmin: isAdmin() });
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();
   console.log(`Conversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);

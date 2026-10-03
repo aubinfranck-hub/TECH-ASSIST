@@ -70,3 +70,19 @@ describe('messages d’erreur lisibles', () => {
     expect(cleanErrorMessage('#< CLIXML\n<Objs><S S="Error">Erreur_x000D__x000A_bizarre</S></Objs>')).toBe('Erreur bizarre');
   });
 });
+
+describe('sans droits administrateur (compte standard)', () => {
+  it("explique la situation et ne tente pas les actions qui exigent ces droits", async () => {
+    let ran = false;
+    const adminOnly: Action = { ...action('svc', 'Démarrer le service'), requiresAdmin: true, run: async () => { ran = true; return { ok: true, message: 'OK' }; } };
+    const skill: Skill = {
+      id: 'sound', title: 'sound', verifyQuestion: 'Ça va ?',
+      diagnose: async (): Promise<Diagnosis> => ({ summary: 'Un service est arrêté.', problems: ['x'], actions: [adminOnly], advice: [], healthy: false, needsHuman: false }),
+    };
+    const ui = new ScriptedConversation({ asks: ["je n'ai plus de son", 'non'], picks: [0] });
+    await converse({ runner: new ScriptedRunner([]), ui, reporter: new Recorder(), autonomous: true, isAdmin: false, resolve: () => skill });
+    expect(ran).toBe(false);
+    expect(ui.said).toContain("Windows ne m'a pas donné les droits d'administrateur");
+    expect(ui.said).toContain('demande les droits administrateur');
+  });
+});

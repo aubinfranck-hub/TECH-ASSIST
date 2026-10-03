@@ -235,17 +235,14 @@ export async function signIn(deps: AccountDeps): Promise<{ token: string; entitl
   }
   if (verification) ui.info(`Un code à 6 chiffres vient d'être envoyé à ${email}. Pensez à regarder les courriers indésirables.`);
 
-  let phone: string | undefined;
-  if (verification) {
-    const phoneAnswer = await askValid(
-      ui,
-      'Votre numéro de téléphone (pour que nous puissions vous joindre) :',
-      (v) => PHONE.test(v.replace(/[\s.-]/g, '')),
-      'Numéro invalide : 8 à 15 chiffres, avec ou sans +.',
-    );
-    if (!phoneAnswer) return null;
-    phone = phoneAnswer.replace(/[\s.-]/g, '');
-  }
+  const phoneAnswer = await askValid(
+    ui,
+    'Votre numéro de téléphone (pour que nous puissions vous joindre) :',
+    (v) => PHONE.test(v.replace(/[\s.-]/g, '')),
+    'Numéro invalide : 8 à 15 chiffres, avec ou sans +.',
+  );
+  if (!phoneAnswer) return null;
+  const phone = phoneAnswer.replace(/[\s.-]/g, '');
 
   if (!verification) {
     try {
