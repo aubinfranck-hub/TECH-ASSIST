@@ -303,4 +303,80 @@ describe('Passage de main : alerte des techniciens, console, discussion avec le 
       expect((await request(app).post(`/api/technician/sessions/${sessionId}/messages`).set(t.auth).send({ body: '' })).status).toBe(400);
     });
   });
+
+  describe("avancement des tâches de l'agent", () => {
+    const tasks = {
+      complete: false,
+      items: [
+        { id: 'phase:scan', title: 'Analyse de votre ordinateur', state: 'done', min: 60, max: 150, seconds: 74 },
+        { id: 'dism|Réparer Windows', title: 'Réparer les fichiers de Windows (DISM)', state: 'running', min: 600, max: 2400, elapsed: 192 },
+        { id: 'sfc|Vérifier', title: 'Vérifier les fichiers système', state: 'pending', min: 600, max: 1800 },
+      ],
+    };
+    const put = (c: { auth: Record<string, string> }, sessionId: string, body: unknown) =>
+      request(app).put(`/api/app/sessions/${sessionId}/progress`).set(c.auth).send(body as object);
+    async function claimed() {
+      const t = await technician('awa');
+      const c = await registerClient();
+      const sessionId = await startSession(c);
+      await request(app).patch(`/api/technician/sessions/${sessionId}/claim`).set(t.auth);
+      return { t, c, sessionId };
+    }
+
+    it("le technicien voit ce que l'agent fait en ce moment, dans le dossier, la discussion et sa liste", async () => {
+      const { t, c, sessionId } = await claimed();
+      const before = await request(app).get(`/api/technician/sessions/${sessionId}`).set(t.auth);
+      expect(before.body.progress).toBeNull();
+
+      expect((await put(c, sessionId, tasks)).status).toBe(200);
+
+      const detail = await request(app).get(`/api/technician/sessions/${sessionId}`).set(t.auth);
+      expect(detail.body.progress).toMatchObject({ complete: false, items: tasks.items });
+      expect(detail.body.progress.ageSeconds).toBeLessThan(5);
+      const poll = await request(app).get(`/api/technician/sessions/${sessionId}/messages?after=0`).set(t.auth);
+      expect(poll.body.progress.items).toHaveLength(3);
+      const mine = await request(app).get('/api/technician/my-sessions').set(t.auth);
+      expect(mine.body.sessions[0]).toMatchObject({ id: sessionId, agent_task: 'Réparer les fichiers de Windows (DISM)' });
+      expect(mine.body.sessions[0]).not.toHaveProperty('task_progress');
+    });
+
+    it("l'état le plus récent remplace le précédent", async () => {
+      const { t, c, sessionId } = await claimed();
+      await put(c, sessionId, tasks);
+      await put(c, sessionId, { complete: true, items: [{ id: 'a', title: 'Tout est fait', state: 'done', min: 5, max: 60, seconds: 9 }] });
+      const detail = await request(app).get(`/api/technician/sessions/${sessionId}`).set(t.auth);
+      expect(detail.body.progress.complete).toBe(true);
+      expect(detail.body.progress.items).toHaveLength(1);
+      expect((await request(app).get('/api/technician/my-sessions').set(t.auth)).body.sessions[0].agent_task).toBeNull();
+    });
+
+    it("sans nouvelles de l'agent depuis plusieurs minutes, l'ancienneté le dit et la liste n'affiche plus de tâche en cours", async () => {
+      const { t, c, sessionId } = await claimed();
+      await put(c, sessionId, tasks);
+      await pool.query(`UPDATE sessions SET task_progress_at = now() - interval '10 minutes' WHERE id = $1`, [sessionId]);
+      const detail = await request(app).get(`/api/technician/sessions/${sessionId}`).set(t.auth);
+      expect(detail.body.progress.ageSeconds).toBeGreaterThanOrEqual(600);
+      expect((await request(app).get('/api/technician/my-sessions').set(t.auth)).body.sessions[0].agent_task).toBeNull();
+    });
+
+    it("refuse un état mal formé, une session d'un autre client et l'absence d'identification", async () => {
+      const { c, sessionId } = await claimed();
+      expect((await put(c, sessionId, { complete: false, items: [{ id: 'a', title: 'x', state: 'explose', min: 1, max: 2 }] })).status).toBe(400);
+      expect((await put(c, sessionId, { complete: false, items: [{ id: 'a', title: 'x', state: 'running', min: -1, max: 2 }] })).status).toBe(400);
+      expect((await put(c, sessionId, { complete: false })).status).toBe(400);
+      expect((await put(c, sessionId, { complete: false, items: Array.from({ length: 61 }, (_, i) => ({ id: String(i), title: 't', state: 'pending', min: 1, max: 2 })) })).status).toBe(400);
+      const other = await registerClient('Autre');
+      expect((await put(other, sessionId, tasks)).status).toBe(404);
+      expect((await put(c, 'pas-un-uuid', tasks)).status).toBe(404);
+      expect((await request(app).put(`/api/app/sessions/${sessionId}/progress`).send(tasks)).status).toBe(401);
+    });
+
+    it("un technicien ne voit pas l'avancement d'une demande suivie par un autre", async () => {
+      const { c, sessionId } = await claimed();
+      await put(c, sessionId, tasks);
+      const bob = await technician('bob');
+      expect((await request(app).get(`/api/technician/sessions/${sessionId}`).set(bob.auth)).status).toBe(403);
+      expect((await request(app).get(`/api/technician/sessions/${sessionId}/messages`).set(bob.auth)).status).toBe(403);
+    });
+  });
 });

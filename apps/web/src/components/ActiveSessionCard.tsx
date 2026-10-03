@@ -12,6 +12,8 @@ export interface MySession {
   consent_control_at: string | null;
   client_phone: string;
   client_name: string | null;
+  /** Tâche que l'agent exécute en ce moment sur le PC du client. */
+  agent_task?: string | null;
 }
 
 interface Credentials {
@@ -71,6 +73,12 @@ export function ActiveSessionCard({ session }: { session: MySession }) {
           Ouvrir
         </Link>
       </div>
+      {session.agent_task && (
+        <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <span aria-hidden="true" className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-emerald-200 border-t-emerald-600 motion-reduce:animate-none" />
+          <span className="min-w-0 break-words">L'agent travaille : {session.agent_task}</span>
+        </p>
+      )}
       <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} />
     </li>
   );

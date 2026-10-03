@@ -13,6 +13,7 @@ import { relayWithTechnician } from './humanRelay.js';
 import { isAdmin, launchElevated, relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
+import { ProgressSync } from './progressSync.js';
 import { CompositeReporter, ConsoleReporter, HttpReporter } from './reporters.js';
 import { resolveSkill, SKILL_MENU } from './skills/index.js';
 import type { Action, ConversationUi, Reporter } from './types.js';
@@ -171,6 +172,10 @@ async function main() {
     const base = apiBase ?? DEFAULT_API_BASE;
     return startedSession ? { api: new AppApi(base), token: startedSession.token, sessionId: startedSession.sessionId } : null;
   };
+  // Le technicien suit l'intervention en direct : l'état des tâches part vers le serveur (sans effet sans session ouverte).
+  const progressTarget = relayTarget();
+  const progress = progressTarget ? new ProgressSync(apiBase ?? DEFAULT_API_BASE, progressTarget.token, progressTarget.sessionId) : null;
+  if (progress) chat.onTasks = (snapshot) => progress.update(snapshot);
   const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps, scope: conversationScope, autonomous: true, isAdmin: isAdmin(), requestAdmin: () => launchElevated(process.argv) });
   if (result.handedOver && !result.relaunched) {
     const recorded = !result.escalationFailed && (buttonHandoff ? await buttonHandoff : true);
@@ -185,6 +190,8 @@ async function main() {
     }
   }
   if (!result.relaunched) chat.info("C'est terminé. Tech Assist se ferme : aucun accès n'est conservé sur votre ordinateur, aucun compte n'a été créé.");
+  progress?.stop();
+  await Promise.race([progress?.flush(), new Promise((r) => setTimeout(r, 3000))]); // dernier état envoyé au technicien
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();
   cleanupProfile(windowPlan);

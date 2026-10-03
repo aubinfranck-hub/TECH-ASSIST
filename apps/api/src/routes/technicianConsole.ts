@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { pushPublicKey, sendPush } from '../notify/push.js';
 import { logAudit } from '../utils/audit.js';
+import { progressView } from '../utils/taskProgress.js';
 
 /**
  * Console du technicien (téléphone ou ordinateur) : permanence et alertes, détail d'une demande avec ce que l'agent a
@@ -101,6 +102,9 @@ interface Detail {
   client_name: string | null;
   client_phone: string;
   client_email: string | null;
+  task_progress: unknown;
+  /** Il y a combien de secondes l'agent a donné de ses nouvelles (null : jamais). */
+  progress_age: string | number | null;
 }
 
 async function loadDetail(id: string): Promise<Detail | undefined> {
@@ -108,7 +112,8 @@ async function loadDetail(id: string): Promise<Detail | undefined> {
   const { rows } = await pool.query(
     `SELECT s.id, s.session_code, s.status, s.platform, s.mode, s.created_at, s.started_at, s.ends_at, s.human_requested_at,
             s.technician_id, t.full_name AS technician_name, s.consent_screen_at, s.consent_control_at,
-            o.client_name, o.client_phone, COALESCE(a.client_email, o.client_email) AS client_email
+            o.client_name, o.client_phone, COALESCE(a.client_email, o.client_email) AS client_email,
+            s.task_progress, EXTRACT(EPOCH FROM (now() - s.task_progress_at)) AS progress_age
      FROM sessions s JOIN orders o ON o.id = s.order_id
      LEFT JOIN app_installs a ON a.id = o.app_install_id
      LEFT JOIN technicians t ON t.id = s.technician_id
@@ -203,6 +208,7 @@ technicianConsoleRouter.get('/technician/sessions/:id', async (req, res) => {
       consentControl: d.consent_control_at !== null,
     },
     client: { name: d.client_name, phone: d.client_phone, email: d.client_email },
+    progress: progressView(d.task_progress, d.progress_age),
     timeline,
     messages: messages.rows.map((m) => ({ id: Number(m.id), sender: m.sender, body: m.body, at: m.created_at, name: m.sender === 'technician' ? firstName(m.full_name) : null })),
   });
@@ -221,6 +227,7 @@ technicianConsoleRouter.get('/technician/sessions/:id/messages', async (req, res
   res.json({
     status: d.status,
     canWrite: canWrite(d, req),
+    progress: progressView(d.task_progress, d.progress_age),
     messages: rows.map((m) => ({ id: Number(m.id), sender: m.sender, body: m.body, at: m.created_at, name: m.sender === 'technician' ? firstName(m.full_name) : null })),
   });
 });

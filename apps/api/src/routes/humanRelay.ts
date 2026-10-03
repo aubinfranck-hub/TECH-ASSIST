@@ -6,6 +6,7 @@ import { requireAppInstall } from '../middleware/appAuth.js';
 import { validateBody } from '../middleware/validate.js';
 import { inBackground, pingAssignedTechnician } from '../notify/technicianAlerts.js';
 import { logAudit } from '../utils/audit.js';
+import { progressSchema } from '../utils/taskProgress.js';
 
 /**
  * Côté application : après un passage de main, la fenêtre de l'agent reste ouverte et dialogue avec le technicien.
@@ -74,6 +75,17 @@ humanRelayRouter.get('/app/sessions/:id/messages', limiter, requireAppInstall, a
     },
     messages: rows.map((m) => ({ id: Number(m.id), sender: m.sender, body: m.body, at: m.created_at, name: m.sender === 'technician' ? firstName(m.full_name) : null })),
   });
+});
+
+/**
+ * Avancement des tâches de l'agent : l'état complet remplace le précédent (idempotent). Le technicien le voit en direct
+ * dans sa console. Aucune trace dans le journal d'audit : ce n'est pas un événement, c'est un état.
+ */
+humanRelayRouter.put('/app/sessions/:id/progress', limiter, requireAppInstall, validateBody(progressSchema), async (req, res) => {
+  const session = await ownedSession(req.params.id!, req.appInstall!.id);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  await pool.query(`UPDATE sessions SET task_progress = $2::jsonb, task_progress_at = now() WHERE id = $1`, [session.id, JSON.stringify(req.body)]);
+  res.json({ recorded: true });
 });
 
 const messageSchema = z.object({ body: z.string().trim().min(1).max(1000) });

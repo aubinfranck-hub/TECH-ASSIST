@@ -6,6 +6,7 @@ import { validateBody } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 import { alertInBackground } from '../notify/technicianAlerts.js';
 import { logAudit, type Db } from '../utils/audit.js';
+import { progressView, STALE_PROGRESS_SECONDS } from '../utils/taskProgress.js';
 
 export const sessionsRouter = Router();
 
@@ -202,13 +203,21 @@ sessionsRouter.get('/technician/my-sessions', requireAuth('technician', 'admin')
   const { rows } = await pool.query(
     `SELECT s.id, s.session_code, s.platform, s.status, s.ends_at,
             s.consent_screen_at, s.consent_control_at,
-            o.client_phone, o.client_name
+            o.client_phone, o.client_name,
+            s.task_progress, EXTRACT(EPOCH FROM (now() - s.task_progress_at)) AS progress_age
      FROM sessions s JOIN orders o ON o.id = s.order_id
      WHERE s.technician_id = $1 AND s.status = 'active'
      ORDER BY s.started_at ASC`,
     [req.auth!.sub],
   );
-  res.json({ sessions: rows });
+  // En un coup d'œil : ce que l'agent fait en ce moment sur le PC du client (détail dans le dossier de la demande).
+  res.json({
+    sessions: rows.map(({ task_progress, progress_age, ...s }) => {
+      const view = progressView(task_progress, progress_age);
+      const running = view?.items.find((t) => t.state === 'running');
+      return { ...s, agent_task: running && view!.ageSeconds < STALE_PROGRESS_SECONDS ? running.title : null };
+    }),
+  });
 });
 
 /** RF-30 : le technicien prend une demande de la file. */

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../lib/api.js';
+import type { Progress } from '../lib/taskProgress.js';
 import { RemoteAccess } from './ActiveSessionCard.js';
+import { TaskProgressCard } from './TaskProgressCard.js';
 
 interface Message {
   id: number;
@@ -34,6 +36,7 @@ interface Detail {
     consentControl: boolean;
   };
   client: { name: string | null; phone: string; email: string | null };
+  progress: Progress | null;
   timeline: Entry[];
   messages: Message[];
 }
@@ -41,6 +44,7 @@ interface Detail {
 interface MessagesPoll {
   status: string;
   canWrite: boolean;
+  progress: Progress | null;
   messages: Message[];
 }
 
@@ -78,6 +82,8 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
   const [error, setError] = useState<string | null>(null);
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  /** Avancement des tâches de l'agent, avec l'instant de réception (le chronomètre avance entre deux relevés). */
+  const [progress, setProgress] = useState<{ data: Progress; at: number } | null>(null);
   const lastId = useRef(0);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -93,6 +99,7 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
     try {
       const d = await api.get<Detail>(`/api/technician/sessions/${sessionId}`);
       setDetail(d);
+      setProgress(d.progress ? { data: d.progress, at: Date.now() } : null);
       setMessages(d.messages);
       lastId.current = d.messages.at(-1)?.id ?? 0;
       setError(null);
@@ -109,6 +116,7 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
         setMessages((m) => [...m, ...res.messages.filter((x) => !m.some((y) => y.id === x.id))]);
       }
       setDetail((d) => (d ? { ...d, session: { ...d.session, status: res.status, canWrite: res.canWrite } } : d));
+      setProgress(res.progress ? { data: res.progress, at: Date.now() } : null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) onUnauthorized();
     }
@@ -233,6 +241,8 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
           </div>
         )}
       </section>
+
+      {progress && <TaskProgressCard progress={progress.data} receivedAt={progress.at} live={open} />}
 
       <section className="ta-card p-4">
         <h3 className="mb-3 font-semibold">Ce que l'agent a constaté et fait</h3>

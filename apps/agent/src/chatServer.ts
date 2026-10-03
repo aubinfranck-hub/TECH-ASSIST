@@ -122,6 +122,8 @@ export class ChatUi implements ConversationUi {
   url = '';
   /** Appelé quand le client demande un technicien. */
   onHandoff?: () => void;
+  /** Appelé à chaque changement de l'état des tâches (sert à tenir le technicien au courant). */
+  onTasks?: (snapshot: { items: TaskView[]; complete: boolean }) => void;
 
   private readonly log: ChatEvent[] = [];
   private seq = 0;
@@ -246,6 +248,11 @@ export class ChatUi implements ConversationUi {
     if (this.closed) return;
     for (let i = this.log.length - 1; i >= 0; i--) if (this.log[i]!.type === 'tasks') this.log.splice(i, 1);
     this.push({ type: 'tasks', items: this.taskList.map((t) => ({ ...t })), now: Date.now(), complete: this.tasksComplete });
+    try {
+      this.onTasks?.({ items: this.taskList, complete: this.tasksComplete });
+    } catch {
+      /* le suivi côté serveur ne doit jamais gêner la fenêtre du client */
+    }
   }
 
   wasHandedOff(): boolean {
