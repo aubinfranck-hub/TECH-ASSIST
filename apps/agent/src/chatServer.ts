@@ -15,6 +15,7 @@ import type { Action, ConversationUi } from './types.js';
 
 type ChatEvent =
   | { seq: number; type: 'say'; text: string }
+  | { seq: number; type: 'tech'; name: string; text: string }
   | { seq: number; type: 'user'; text: string }
   | { seq: number; type: 'ask'; id: string; text: string }
   | { seq: number; type: 'confirm'; id: string; title: string; text: string; yes: string; no: string }
@@ -181,6 +182,15 @@ export class ChatUi implements ConversationUi {
     return this.handoff;
   }
 
+  fromTechnician(name: string, text: string): void {
+    this.push({ type: 'tech', name: name.slice(0, 40), text });
+  }
+
+  /** Après un passage de main, la fenêtre reste ouverte pour discuter avec le technicien : les questions sont de nouveau possibles. */
+  resumeAfterHandoff(): void {
+    this.handoff = false;
+  }
+
   /** Étape affichée en haut de la fenêtre : 1 coordonnées, 2 demande, 3 intervention, 4 tout est terminé. */
   progress(step: 1 | 2 | 3 | 4): void {
     if (this.closed) return;
@@ -198,7 +208,7 @@ export class ChatUi implements ConversationUi {
   requestHandoff(): void {
     if (this.handoff || this.closed) return;
     this.handoff = true;
-    this.push({ type: 'say', text: 'Un technicien a été demandé. Il verra cette conversation et vous répondra.' });
+    this.push({ type: 'say', text: 'Je préviens un technicien…' });
     this.settleAll();
     this.onHandoff?.();
   }
@@ -520,6 +530,8 @@ main { flex:1; min-height:0; overflow-y:auto; padding:18px 26px; }
 .b { max-width:min(84%,560px); padding:11px 16px; border-radius:18px; white-space:pre-wrap; word-wrap:break-word; overflow-wrap:anywhere; }
 .agent { background:#f1f5f9; border-bottom-left-radius:6px; }
 .user { background:var(--brand); color:#fff; border-bottom-right-radius:6px; }
+.tech { background:#0f172a; color:#fff; border-bottom-left-radius:6px; }
+.tech .who { display:block; font-size:.74rem; font-weight:700; letter-spacing:.02em; color:#fca5a5; margin-bottom:2px; }
 .note { text-align:center; color:var(--muted); font-size:.85rem; margin:18px 0; }
 @keyframes rise { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 .welcome { text-align:center; padding:26px 8px 8px; }
@@ -680,14 +692,17 @@ form button.act { flex:0 0 auto; min-width:170px; }
       if (num === n) s.setAttribute('aria-current', 'step'); else s.removeAttribute('aria-current');
     });
   }
-  function bubble(cls, text) {
+  function bubble(cls, text, who) {
     var welcome = document.getElementById('welcome'); if (welcome) welcome.remove();
     hideTyping();
     if (cls === 'note') { log.appendChild(el('div', 'note', text)); }
     else {
       var row = el('div', 'msg from-' + cls);
-      if (cls === 'agent') row.appendChild(avatar());
-      row.appendChild(el('div', 'b ' + cls, text)); log.appendChild(row);
+      if (cls === 'agent' || cls === 'tech') row.appendChild(avatar());
+      var b = el('div', 'b ' + cls);
+      if (who) b.appendChild(el('span', 'who', who + ' · technicien Tech Assist'));
+      b.appendChild(document.createTextNode(text));
+      row.appendChild(b); log.appendChild(row);
     }
     scrollDown();
   }
@@ -845,7 +860,8 @@ form button.act { flex:0 0 auto; min-width:170px; }
   var es = new EventSource('/events?t=' + encodeURIComponent(token));
   es.onmessage = function (m) {
     var ev = JSON.parse(m.data);
-    if (ev.type === 'say') { bubble('agent', ev.text); showTyping(); }
+    if (ev.type === 'say') { bubble('agent', ev.text); if (!current) showTyping(); }
+    else if (ev.type === 'tech') bubble('tech', ev.text, ev.name);
     else if (ev.type === 'user') bubble('user', ev.text);
     else if (ev.type === 'ask') { hideTyping(); current = ev.id; showAsk(ev); }
     else if (ev.type === 'confirm') { hideTyping(); current = ev.id; showConfirm(ev); }

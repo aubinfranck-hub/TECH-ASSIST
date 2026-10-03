@@ -1,12 +1,13 @@
 {
-  "name": "Tech Assist",
-  "short_name": "Tech Assist",
-  "description": "Assistance informatique à distance pour particuliers et PME en Côte d'Ivoire.",
+  "name": "Tech Assist — Console technicien",
+  "short_name": "TA Technicien",
+  "description": "Alertes de permanence et interventions des techniciens Tech Assist.",
   "lang": "fr-CI",
-  "start_url": "/",
+  "id": "/technicien",
+  "start_url": "/technicien",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
+  "background_color": "#f7f8fa",
   "theme_color": "#dc2626",
   "icons": [
     {

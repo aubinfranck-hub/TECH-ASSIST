@@ -61,7 +61,11 @@ Variables d'environnement :
 | `CORS_ORIGIN` | `https://tech-assist-web.onrender.com` |
 | `DATABASE_URL` | `ntic-shared-db`, schéma `tech_assist` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | **à renseigner avant d'ouvrir l'application** : envoi des codes de vérification par e-mail (sans eux, la production refuse d'envoyer un code) |
-| `AI_AGENT_ENABLED` | `false` tant que l'agent n'est pas distribué (les demandes « IA » vont alors à un technicien) |
+| `AI_AGENT_ENABLED` | `true` : l'agent (.exe) est distribué ; la session reste « IA » jusqu'à ce que le client demande un technicien (elle entre alors dans la file). `false` : toutes les demandes vont directement à un technicien |
+| `PUBLIC_WEB_URL` | `https://tech-assist-web.onrender.com` : adresse du site, utilisée dans les liens des alertes (notification, email) |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | notifications sur le téléphone ou l'ordinateur des techniciens (Web Push). Paire de clés générée une fois (`node -e "console.log(require('web-push').generateVAPIDKeys())"` dans `apps/api`) ; la clé privée ne se partage jamais. Si la paire change, chaque technicien doit réactiver les notifications. `VAPID_SUBJECT` = `mailto:` d'un contact |
+| `TECH_ALERT_EMAILS` | adresses (séparées par des virgules) qui reçoivent TOUJOURS l'alerte « un client demande un technicien », en plus des techniciens de permanence. Nécessite SMTP ; sans SMTP, seules les notifications du téléphone sont envoyées |
+| `ALERT_WEBHOOK_URL` | (facultatif) adresse d'un webhook (Slack, Discord, WhatsApp via un service tiers…) appelé à chaque demande de technicien |
 | `GEMINI_API_KEY` | vide (moteur de diagnostic local utilisé à la place) |
 | `RUSTDESK_ID_SERVER`, `RUSTDESK_RELAY_SERVER`, `RUSTDESK_PUBLIC_KEY` | vides tant que `infra/rustdesk/` n'est pas déployé séparément |
 

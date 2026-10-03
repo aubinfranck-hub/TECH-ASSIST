@@ -5,10 +5,11 @@ import { runSkill } from './agent.js';
 import { AppApi, DEFAULT_API_BASE, FileAccountStore, answerCompanyRequest, joinCompany, readHardwareHash, signIn, startCovered } from './appAccount.js';
 import { collectFleetHealth } from './skills/fleetStatus.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
-import { ChatUi } from './chatServer.js';
+import { ChatUi, DEFAULT_SITE } from './chatServer.js';
 import { appWindowPlan, cleanupProfile } from './browser.js';
 import { converse } from './conversation.js';
 import { notifyFatal } from './fatal.js';
+import { relayWithTechnician } from './humanRelay.js';
 import { isAdmin, launchElevated, relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
@@ -120,6 +121,7 @@ async function main() {
   let conversationAssistant: Assistant | undefined = assistant;
   let companyDeps: Parameters<typeof converse>[0]['company'];
   let conversationScope: Parameters<typeof converse>[0]['scope'];
+  let startedSession: { token: string; sessionId: string } | null = null;
   if (!online && !flag('offline')) {
     const api = new AppApi(apiBase ?? DEFAULT_API_BASE);
     const deps = { ui: chat, api, store: new FileAccountStore(), hardwareHash: await readHardwareHash(runner) };
@@ -135,21 +137,21 @@ async function main() {
     const started = login ? await startCovered({ ...deps, openUrl: (u) => { if (!flag('no-browser')) openBrowser(u); } }, login) : null;
     conversationScope = started?.scope;
     if (started) {
+      startedSession = { token: started.token, sessionId: started.sessionId };
       const base = apiBase ?? DEFAULT_API_BASE;
       conversationReporter = new CompositeReporter([new ConsoleReporter(), new HttpReporter(base, started.token, started.sessionId)]);
       conversationAssistant = new HttpAssistant(base, started.token, started.sessionId);
+      // L'agent installé sur le PC fait lui-même le travail : « agent IA indisponible » ne concerne que l'assistant en ligne (questions).
       chat.info(
-        started.fallbackToHuman
-          ? "L'agent IA n'est pas disponible pour le moment : un technicien prendra le relais. Décrivez votre problème."
-          : started.coverage === 'free_offer'
-            ? 'Votre assistance offerte est démarrée.'
-            : started.coverage === 'company'
-              ? "L'abonnement de votre entreprise couvre ce poste."
-              : started.coverage === 'paid_forfait'
-                ? started.scope === 'diagnostic'
-                  ? 'Votre forfait Diagnostic est actif : j\'analyse et j\'explique, sans rien modifier.'
-                  : 'Votre forfait est actif.'
-                : 'Votre abonnement est actif.',
+        started.coverage === 'free_offer'
+          ? 'Votre assistance offerte est démarrée.'
+          : started.coverage === 'company'
+            ? "L'abonnement de votre entreprise couvre ce poste."
+            : started.coverage === 'paid_forfait'
+              ? started.scope === 'diagnostic'
+                ? 'Votre forfait Diagnostic est actif : j\'analyse et j\'explique, sans rien modifier.'
+                : 'Votre forfait est actif.'
+              : 'Votre abonnement est actif.',
       );
     } else {
       chat.info("Je continue sans compte : je peux réparer votre PC, mais l'assistant en ligne (questions, formation) n'est pas disponible.");
@@ -157,10 +159,31 @@ async function main() {
   }
 
   chat.progress(2);
+  // Le bouton « Parler à un technicien » : on retient si le serveur a bien enregistré la demande (c'est lui qui alerte les techniciens).
+  let buttonHandoff: Promise<boolean> | null = null;
   chat.onHandoff = () => {
-    conversationReporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
+    buttonHandoff = conversationReporter
+      .event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' })
+      .then(() => true, () => false);
+  };
+  const relayTarget = () => {
+    if (online) return { api: new AppApi(apiBase!), token: token!, sessionId: sessionId! };
+    const base = apiBase ?? DEFAULT_API_BASE;
+    return startedSession ? { api: new AppApi(base), token: startedSession.token, sessionId: startedSession.sessionId } : null;
   };
   const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps, scope: conversationScope, autonomous: true, isAdmin: isAdmin(), requestAdmin: () => launchElevated(process.argv) });
+  if (result.handedOver && !result.relaunched) {
+    const recorded = !result.escalationFailed && (buttonHandoff ? await buttonHandoff : true);
+    const target = relayTarget();
+    if (recorded && target) {
+      chat.resumeAfterHandoff();
+      await relayWithTechnician({ ui: chat, api: target.api, token: target.token, sessionId: target.sessionId });
+    } else {
+      chat.info(
+        `Je n'ai pas réussi à prévenir un technicien (connexion Internet, ou assistance non démarrée). Réessayez dans un moment, ou écrivez-nous depuis ${DEFAULT_SITE.replace('https://', '')} : votre demande sera traitée.`,
+      );
+    }
+  }
   if (!result.relaunched) chat.info("C'est terminé. Tech Assist se ferme : aucun accès n'est conservé sur votre ordinateur, aucun compte n'a été créé.");
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();

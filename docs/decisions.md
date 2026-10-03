@@ -131,3 +131,24 @@ Remplace l'abonnement particulier à 10 000 FCFA/mois (qui reste techniquement p
 ## D11 — Paiement automatique (Jèko)
 
 Prestataire : [Jèko](https://developer.jeko.africa) (Wave, Orange, MTN, Moov, Djamo). Parcours : le client choisit sa méthode, `POST /app/orders/:id/pay` crée la demande de paiement chez Jèko (`POST /partner_api/payment_requests`, `amountCents` = FCFA × 100, `reference` = id de la commande) et renvoie le `redirectUrl`. Jèko notifie `POST /api/payments/webhook` (événement `TRANSACTION_COMPLETED`, en-tête `Jeko-Signature` = HMAC-SHA256 hex du corps brut avec le secret webhook). Le serveur vérifie la signature, la boutique, le statut `success`, la référence et le montant (FCFA, ou centimes), marque la commande payée une seule fois (`markOrderPaid`, aussi utilisé par la confirmation manuelle) et répond 200 (Jèko désactive un webhook après 15 échecs consécutifs). L'agent et la page téléphone sondent la commande et démarrent l'assistance dès qu'elle est payée. Variables : `JEKO_API_KEY`, `JEKO_API_KEY_ID`, `JEKO_STORE_ID`, `PAYMENT_WEBHOOK_SECRET`, `PUBLIC_WEB_URL`. Sans elles, le parcours manuel (confirmation par un technicien) reste actif. Non validé avec un vrai paiement : le format exact du montant dans la notification est à confirmer par un premier paiement test (boutique dédiée, 500 FCFA). Webhook à enregistrer dans le Dashboard : `https://<api>/api/payments/webhook`.
+
+## D12 — Passage de main à un technicien (FAIT)
+
+Constat : l'agent disait « je passe la main à un technicien qui verra tout » mais il n'y avait pas de route : personne n'était prévenu, le technicien n'avait pas d'outil pour voir le dossier ni répondre.
+
+Décision : (1) tout passage de main enregistré par le serveur **alerte automatiquement les techniciens de permanence** (notification du téléphone, email, webhook) ; (2) le technicien dispose d'une **console pensée pour le téléphone** (permanence, file, dossier avec journal de l'agent, discussion, prise en charge, fin) ; (3) le client **garde sa fenêtre ouverte** et converse avec lui. Aucun message n'annonce un technicien si le serveur n'a pas enregistré la demande. Voir `docs/agent.md` (« Passage de main à un technicien »). Notifications : Web Push (VAPID), sans application à installer ; iPhone = page ajoutée à l'écran d'accueil.
+
+## D13 — Plateforme des techniciens partenaires (proposé, non commencé)
+
+Demande du porteur : un technicien indépendant (« TS ») utilise Tech Assist pour assister **ses propres clients**, paie son abonnement **via Tech Assist** (ordre de grandeur : 500 FCFA par ordinateur et par mois) et accède au PC de son client **par la plateforme** plutôt qu'avec TeamViewer ou AnyDesk.
+
+Ce que l'existant fournit déjà : comptes techniciens (+ 2FA), candidatures (`technician_applications`), codes de rattachement d'un poste (`joinCompany`), accès à distance RustDesk avec accord du client et journal (`remote*`), paiement Jèko.
+
+Ce qui manque (ordre proposé) :
+1. **Compte partenaire** : inscription, validation par l'administrateur, 2FA obligatoire, CGU partenaire (le partenaire est responsable de sa relation avec son client).
+2. **Parc du partenaire** : ses clients rattachent leur PC avec un code du partenaire (comme le rattachement entreprise) ; chaque PC rattaché = une ligne d'abonnement.
+3. **Abonnement par PC** : facturation mensuelle via Jèko (les demandes de paiement Jèko sont ponctuelles : prévoir un lien de renouvellement et un rappel). Prix à fixer.
+4. **Accès à distance par Tech Assist** : nécessite l'infrastructure RustDesk (`infra/rustdesk/`, aujourd'hui non déployée) ; accord du client à chaque session ou accord permanent explicite, révocable, avec journal visible par le client. L'accès permanent (PC non surveillé) demande un service Windows persistant : modèle de consentement et de sûreté à concevoir à part de l'agent actuel (une session, un accord).
+5. Tableau de bord du partenaire (PC, sessions, facturation) et commission éventuelle de Tech Assist.
+
+Prérequis : test réel du paiement Jèko, déploiement RustDesk, validation juridique des CGU partenaire.

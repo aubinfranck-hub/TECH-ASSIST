@@ -12,6 +12,7 @@ import { companyAuthRouter } from './routes/companyAuth.js';
 import { diagnosticsRouter } from './routes/diagnostics.js';
 import { emailVerificationRouter } from './routes/emailVerification.js';
 import { healthRouter } from './routes/health.js';
+import { humanRelayRouter } from './routes/humanRelay.js';
 import { leadsRouter } from './routes/leads.js';
 import { ordersRouter } from './routes/orders.js';
 import { paymentsRouter } from './routes/payments.js';
@@ -19,6 +20,7 @@ import { pricingRouter } from './routes/pricing.js';
 import { remoteRouter } from './routes/remote.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { technicianAuthRouter } from './routes/technicianAuth.js';
+import { technicianConsoleRouter } from './routes/technicianConsole.js';
 
 export function createApp() {
   const app = express();
@@ -84,7 +86,9 @@ export function createApp() {
   app.use('/api', paymentsRouter);
   app.use('/api', appRouter);
   app.use('/api', diagnosticsRouter);
+  app.use('/api', humanRelayRouter);
   app.use('/api', sessionsRouter);
+  app.use('/api', technicianConsoleRouter);
   app.use('/api', remoteRouter);
   app.use('/api/auth', technicianAuthRouter);
   app.use('/api/auth', companyAuthRouter);

@@ -45,6 +45,8 @@ export interface ConversationResult {
   turns: number;
   /** Un technicien a été demandé (par l'agent ou par le client). */
   handedOver: boolean;
+  /** true : l'agent a voulu passer la main mais le serveur n'a pas enregistré la demande (aucun technicien n'a été prévenu). */
+  escalationFailed?: boolean;
   outcomes: Outcome[];
 }
 
@@ -92,18 +94,21 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   let handedOver = false;
   let privacyNoted = false;
 
-  const log = async (event: Omit<AgentEvent, 'skill'>) => {
+  let escalationFailed = false;
+  const log = async (event: Omit<AgentEvent, 'skill'>): Promise<boolean> => {
     try {
       await reporter.event({ ...event, skill: 'conversation', message: event.message === undefined ? undefined : truncate(event.message, 500) });
+      return true;
     } catch (err) {
       console.error(`[journal] impossible d'enregistrer « ${event.type} » :`, err instanceof Error ? err.message : err);
+      return false;
     }
   };
 
   const handOver = async (reason: string) => {
     handedOver = true;
-    await log({ type: 'escalated', message: reason });
-    ui.info("Je passe la main à un technicien, qui verra notre conversation et tout ce que j'ai constaté.");
+    if (!(await log({ type: 'escalated', message: reason }))) escalationFailed = true;
+    ui.info(escalationFailed ? "Je n'ai pas pu transmettre votre demande à un technicien." : "Je passe la main à un technicien, qui verra notre conversation et tout ce que j'ai constaté.");
   };
 
   const offerTechnician = async () => {
@@ -216,7 +221,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   if (ui.wasHandedOff?.()) handedOver = true;
   ui.progress?.(4);
   if (!handedOver) ui.info('Merci. N\'hésitez pas à me redemander de l\'aide à tout moment.');
-  return { turns, handedOver, outcomes };
+  return { turns, handedOver, escalationFailed: escalationFailed || undefined, outcomes };
 
   // --- étapes ---
 

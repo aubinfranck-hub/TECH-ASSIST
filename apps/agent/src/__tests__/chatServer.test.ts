@@ -355,10 +355,31 @@ describe('ChatUi — passage de main et fermeture', () => {
     expect(calls).toBe(1);
     await s.waitFor('resolved', 3);
     expect(s.events.filter((e) => e.type === 'resolved')).toHaveLength(3);
-    expect(s.events.some((e) => e.type === 'say' && /technicien a été demandé/.test(e.text ?? ''))).toBe(true);
+    expect(s.events.some((e) => e.type === 'say' && /Je préviens un technicien/.test(e.text ?? ''))).toBe(true);
 
     await post(ui, '/handoff', {});
     expect(calls).toBe(1);
+    s.stop();
+  });
+
+  it('après le passage de main, la fenêtre reste ouverte : les réponses du technicien s’affichent et les questions redeviennent possibles', async () => {
+    const ui = await start();
+    const s = stream(ui);
+    ui.requestHandoff();
+    await expect(ui.ask('Dites-moi')).resolves.toBeNull();
+
+    ui.resumeAfterHandoff();
+    expect(ui.wasHandedOff()).toBe(false);
+    ui.fromTechnician('Marc', 'Bonjour, je regarde votre dossier.');
+    await s.waitFor('tech');
+    const tech = s.events.find((e) => e.type === 'tech');
+    expect(tech).toMatchObject({ name: 'Marc', text: 'Bonjour, je regarde votre dossier.' });
+
+    const answer = ui.ask('Écrivez à votre technicien :');
+    await s.waitFor('ask', 1);
+    expect(await Promise.race([answer, Promise.resolve('en attente')])).toBe('en attente');
+    await ui.close();
+    await expect(answer).resolves.toBeNull();
     s.stop();
   });
 

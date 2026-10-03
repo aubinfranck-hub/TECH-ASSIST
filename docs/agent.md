@@ -188,3 +188,17 @@ Les droits administrateur ne servent que le temps de l'intervention : l'agent se
 - **Version client sans fenêtre noire** : le workflow met le sous-système de l'exécutable à GUI (`apps/agent/scripts/pe-subsystem.mjs`, 2 octets de l'en-tête, sans outil Visual Studio) puis vérifie que le programme démarre encore (code de sortie 2 sur une compétence inconnue). Une copie `tech-assist-agent-console.exe`, avec fenêtre de terminal, est publiée pour les techniciens (`--skill`, `--console`, messages visibles).
 - **Rien ne reste caché** : sans console, la fermeture de la fenêtre arrête l'agent. Si la page ne se reconnecte pas pendant 60 s, ou ne s'ouvre jamais pendant 2 min, les questions en attente sont closes et la conversation se termine d'elle-même après l'action en cours.
 - **Erreur au démarrage** : sans console, une petite boîte de message Windows affiche l'erreur en français (`fatal.ts`).
+
+## Passage de main à un technicien (de bout en bout)
+
+Quand le client touche « Parler à un technicien », ou quand l'agent estime ne plus pouvoir aider :
+
+1. **L'agent** enregistre l'événement `escalated` (`POST /app/sessions/:id/events`). Le serveur passe la session en mode « humain » (elle entre dans `/technician/queue`) et **alerte les techniciens** (`apps/api/src/notify/technicianAlerts.ts`) : notification du téléphone ou de l'ordinateur (Web Push) à chaque technicien **de permanence**, email aux techniciens de permanence qui ont une adresse d'alerte et à `TECH_ALERT_EMAILS`, webhook `ALERT_WEBHOOK_URL`. Une seule alerte par demande (`sessions.human_requested_at`), même si l'agent et le bouton la signalent ensemble.
+2. **Le client** garde sa fenêtre ouverte (`humanRelay.ts`) : elle affiche « Je préviens un technicien… », puis les réponses du technicien, et le client peut lui écrire. Si le serveur n'a pas enregistré la demande, l'agent le dit franchement (au lieu d'annoncer un technicien prévenu) et indique le site.
+3. **Le technicien** ouvre l'alerte (`/technicien?session=…`, console pour téléphone) : coordonnées du client, **ce que l'agent a constaté et fait** (journal lisible), discussion, **Prendre en charge**, identifiants de prise en main à distance (si le client l'a autorisée), **Terminer l'assistance** (le client en est informé, l'accès à distance est coupé).
+
+Routes : agent `GET|POST /app/sessions/:id/messages` ; technicien `GET /technician/alerts`, `PATCH /technician/alerts` (permanence, email d'alerte), `POST /technician/push/subscribe|unsubscribe|test`, `GET /technician/sessions/:id`, `GET|POST /technician/sessions/:id/messages`, `POST /technician/sessions/:id/finish`. Un technicien ne voit que les demandes libres et les siennes ; l'administrateur voit tout.
+
+Console mobile : `apps/web/src/pages/TechnicianPage.tsx` (permanence, notifications, file, interventions), `TechnicianRequest.tsx` (dossier), `public/sw.js` (service worker : affiche l'alerte, ouvre la bonne demande), `lib/push.ts`. Sur Android/ordinateur (Chrome) : activer les notifications depuis la console. **Sur iPhone** : les notifications n'existent que pour une page ajoutée à l'écran d'accueil (Safari > Partager > Sur l'écran d'accueil), puis activées depuis l'icône. La console a son propre manifeste (`technicien.webmanifest`) : l'icône ouvre directement la console.
+
+Non validé en conditions réelles : l'arrivée d'une vraie notification sur un téléphone (testée jusqu'à l'envoi ; le navigateur de test n'a pas accès au service de notification de Google). Le bouton « Envoyer un essai » de la console sert à le vérifier sur chaque appareil.

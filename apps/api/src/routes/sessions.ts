@@ -4,6 +4,7 @@ import { pool } from '../db/pool.js';
 import { generateSessionCode, SESSION_CODE_TTL_MINUTES } from '../utils/sessionCode.js';
 import { validateBody } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
+import { alertInBackground } from '../notify/technicianAlerts.js';
 import { logAudit, type Db } from '../utils/audit.js';
 
 export const sessionsRouter = Router();
@@ -124,6 +125,7 @@ sessionsRouter.post('/sessions/:id/escalate', async (req, res) => {
     sessionId: req.params.id,
     action: 'session.escalated_to_human',
   });
+  alertInBackground(req.params.id!);
 
   res.json({ session: rows[0] });
 });
@@ -181,7 +183,7 @@ sessionsRouter.post('/sessions/:id/stop', validateBody(stopSchema), async (req, 
  */
 sessionsRouter.get('/technician/queue', requireAuth('technician', 'admin'), async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT s.id, s.session_code, s.platform, s.created_at, s.duration_minutes,
+    `SELECT s.id, s.session_code, s.platform, s.created_at, s.duration_minutes, s.human_requested_at,
             s.requested_mode, o.client_phone, o.client_name,
             c.name AS company_name, chr.priority AS company_priority
      FROM sessions s
@@ -229,6 +231,14 @@ sessionsRouter.patch('/technician/sessions/:id/claim', requireAuth('technician',
     sessionId: req.params.id,
     action: 'session.claimed',
   });
+  // Le client le voit tout de suite dans la fenêtre de l'agent.
+  const name = (await pool.query('SELECT full_name FROM technicians WHERE id = $1', [req.auth!.sub])).rows[0]?.full_name as string | undefined;
+  const first = name?.trim().split(/\s+/)[0] ?? 'Un technicien';
+  await pool.query(`INSERT INTO session_messages (session_id, sender, technician_id, body) VALUES ($1, 'system', $2, $3)`, [
+    req.params.id,
+    req.auth!.sub,
+    `${first}, technicien Tech Assist, a pris votre demande. Écrivez-lui ici : il voit tout ce que j'ai fait.`,
+  ]);
 
   res.json({ session: rows[0] });
 });

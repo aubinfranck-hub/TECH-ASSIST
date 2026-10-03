@@ -98,6 +98,17 @@ class ApiError extends Error {
   }
 }
 
+export interface RelayMessage {
+  id: number;
+  sender: 'client' | 'technician' | 'system';
+  body: string;
+  name: string | null;
+}
+export interface RelayPoll {
+  state: { status: string; requested: boolean; claimed: boolean; technician: string | null };
+  messages: RelayMessage[];
+}
+
 export class AppApi {
   constructor(
     private readonly base: string,
@@ -175,6 +186,13 @@ export class AppApi {
   }
   answerRequest(token: string, id: string, body: { status: 'done' | 'declined'; worst?: string; summary?: string }) {
     return this.call<{ ok: boolean }>(`/app/company/requests/${encodeURIComponent(id)}/answer`, body, token);
+  }
+  /** Messages du technicien et état de la demande (après l'identifiant `after`). */
+  relayPoll(token: string, sessionId: string, after: number) {
+    return this.call<RelayPoll>(`/app/sessions/${encodeURIComponent(sessionId)}/messages?after=${after}`, null, token, 'GET');
+  }
+  relaySend(token: string, sessionId: string, body: string) {
+    return this.call<{ id: number }>(`/app/sessions/${encodeURIComponent(sessionId)}/messages`, { body }, token);
   }
   subscribe(token: string) {
     return this.call<{ order: { id: string; amount_fcfa: number } }>('/app/subscribe', {}, token);

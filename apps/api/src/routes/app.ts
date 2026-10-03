@@ -5,6 +5,7 @@ import { consumeJoinCode } from '../utils/joinCodes.js';
 import { pool } from '../db/pool.js';
 import { requireAppInstall, signAppToken } from '../middleware/appAuth.js';
 import { validateBody } from '../middleware/validate.js';
+import { alertInBackground } from '../notify/technicianAlerts.js';
 import { logAudit, type Db } from '../utils/audit.js';
 import { isDisposableEmail, normalizeEmail } from '../utils/email.js';
 import { consumeEmailCode, emailField, emailVerificationEnabled } from './emailVerification.js';
@@ -604,6 +605,7 @@ appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateB
     await pool.query(`UPDATE sessions SET mode = 'humain' WHERE id = $1 AND status IN ('created','waiting_technician','active')`, [
       req.params.id,
     ]);
+    alertInBackground(req.params.id!, body.message);
   }
   res.status(201).json({ recorded: true });
 });
