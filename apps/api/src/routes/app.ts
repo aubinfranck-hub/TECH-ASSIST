@@ -73,7 +73,13 @@ async function companyCovers(db: Db, installId: string): Promise<boolean> {
   return (r.rowCount ?? 0) > 0;
 }
 
+/** Lancement gratuit : tant que FREE_LAUNCH=true, toute assistance est offerte et rien n'est facturé. */
+function freeLaunch(): boolean {
+  return process.env.FREE_LAUNCH === 'true';
+}
+
 async function freeOfferUsed(db: Db, email: string, hardwareHash: string | null): Promise<boolean> {
+  if (freeLaunch()) return false;
   const { rows } = await db.query(
     `SELECT 1 FROM app_installs
      WHERE free_offer_used_at IS NOT NULL
@@ -436,7 +442,7 @@ appRouter.post('/app/assistance', limiter, requireAppInstall, validateBody(start
     } else if (!(await freeOfferUsed(client, install.email, install.hardwareHash))) {
       coverage = 'free_offer';
       planId = FREE_OFFER_PLAN_ID;
-      await client.query('UPDATE app_installs SET free_offer_used_at = now() WHERE id = $1', [install.id]);
+      if (!freeLaunch()) await client.query('UPDATE app_installs SET free_offer_used_at = now() WHERE id = $1', [install.id]);
     } else {
       await client.query('ROLLBACK');
       return res.status(402).json({

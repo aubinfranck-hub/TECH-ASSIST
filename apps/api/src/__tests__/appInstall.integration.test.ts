@@ -578,4 +578,21 @@ describe('Application : inscription par email, assistance offerte en base, abonn
       expect(queue.body.queue).toHaveLength(1);
     });
   });
+
+
+  describe('lancement gratuit (FREE_LAUNCH)', () => {
+    it("offre chaque assistance sans consommer l'offre", async () => {
+      process.env.FREE_LAUNCH = 'true';
+      try {
+        const r = await register();
+        for (let i = 0; i < 2; i += 1) {
+          const res = await request(app).post('/api/app/assistance').set(auth(r)).send({});
+          expect(res.status).toBe(201);
+          expect(res.body.coverage).toBe('free_offer');
+        }
+      } finally {
+        delete process.env.FREE_LAUNCH;
+      }
+    });
+  });
 });
