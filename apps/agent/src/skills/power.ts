@@ -1,5 +1,5 @@
-import type { Diagnosis, Skill } from '../types.js';
-import { extractJson, guarded, nonNegative, readScript } from './common.js';
+import type { Action, Diagnosis, Skill } from '../types.js';
+import { extractJson, guarded, nonNegative, readScript, runScript } from './common.js';
 
 /**
  * Veille et verrouillage : l'ordinateur se met en veille et demande Ctrl+Alt+Suppr au réveil,
@@ -85,7 +85,23 @@ export function parsePowerFacts(stdout: string): PowerFacts {
   };
 }
 
+/** Désactive le démarrage rapide (cause classique de réveils ratés). Réversible, demande l'accord du client. */
+const disableFastStartup = (): Action => ({
+  id: 'disable_fast_startup',
+  title: 'Désactiver le « démarrage rapide » de Windows',
+  explanation:
+    "Le démarrage rapide garde une partie de Windows en mémoire à l'extinction ; avec certains pilotes, il empêche l'ordinateur de se réveiller correctement. Je le désactive : l'ordinateur démarrera quelques secondes plus lentement, mais se réveillera de façon plus fiable. Vous pouvez le réactiver dans Panneau de configuration > Options d'alimentation > « Choisir l'action des boutons d'alimentation ».",
+  requiresAdmin: true,
+  verified: true,
+  needsReboot: true,
+  run: async (runner) => {
+    const res = await runScript(runner, guarded(`powercfg /hibernate on | Out-Null\nSet-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power' -Name HiberbootEnabled -Value 0 -Type DWord\nWrite-Output 'OK'`));
+    return res.ok ? { ok: true, message: 'Démarrage rapide désactivé', effect: 'Démarrage rapide : désactivé' } : res;
+  },
+});
+
 export function diagnosePower(facts: PowerFacts): Diagnosis {
+  const actions: Action[] = [];
   const advice: string[] = [];
   const problems: string[] = [];
   const parts: string[] = [];
@@ -127,7 +143,7 @@ export function diagnosePower(facts: PowerFacts): Diagnosis {
     wakeSuspect = true;
     problems.push('fast_startup');
     parts.push('le démarrage rapide de Windows est activé');
-    advice.push('Le démarrage rapide peut empêcher un réveil propre : Panneau de configuration > Options d\'alimentation > « Choisir l\'action des boutons d\'alimentation » > décocher « Activer le démarrage rapide ».');
+    actions.push(disableFastStartup());
   }
   if (facts.modernStandby) {
     parts.push('cet ordinateur utilise la « veille moderne »');
@@ -137,7 +153,7 @@ export function diagnosePower(facts: PowerFacts): Diagnosis {
   const summary = parts.length
     ? `${parts.join(' ; ')}.`.replace(/^./, (c) => c.toUpperCase())
     : "Réglages de veille lus ; rien d'anormal dans les réglages. Si l'écran ne se réveille pas, la cause est le plus souvent le pilote de la carte graphique : un technicien peut le vérifier avec vous.";
-  return { summary, problems, actions: [], advice, healthy: true, needsHuman: (problems.includes('ctrl_alt_del_required') && facts.domainJoined !== true) || wakeSuspect };
+  return { summary, problems, actions, advice, healthy: true, needsHuman: (problems.includes('ctrl_alt_del_required') && facts.domainJoined !== true) || wakeSuspect };
 }
 
 export function powerSkill(): Skill {

@@ -41,6 +41,11 @@ export interface AgentContext {
   friendly?: boolean;
   /** false : l'agent n'a pas les droits administrateur ; les actions qui les exigent sont mises de côté au lieu d'échouer. Absent = inconnu (on essaie). */
   isAdmin?: boolean;
+  /**
+   * Avant de passer la main : l'assistant en ligne (IA) cherche avec le client quand les vérifications automatiques n'ont rien réglé.
+   * Renvoie true si le client dit que c'est réglé. Absent = passage de main direct.
+   */
+  consult?: (info: { skill: string; summary: string; reason: string }) => Promise<boolean>;
 }
 
 /** Ce que l'agent a constaté et fait, pour le rapport d'intervention. */
@@ -101,6 +106,18 @@ function buildReport(skill: Skill, outcome: Outcome, trace: Trace, durationMs: n
 
 async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<Outcome> {
   const done: string[] = [];
+  let consulted = false;
+  /** Le problème persiste : l'IA essaie d'abord (une seule fois), puis seulement le technicien. */
+  const persistOrEscalate = async (reason: string, summary: string): Promise<Outcome> => {
+    if (ctx.consult && !consulted) {
+      consulted = true;
+      if (await ctx.consult({ skill: skill.title, summary, reason })) {
+        trace.test += ' Réglé avec l\'aide de l\'assistant IA.';
+        return { status: 'fixed', actionsDone: done };
+      }
+    }
+    return escalate(ctx, report, done, reason);
+  };
   const report = (event: Omit<AgentEvent, 'skill'>) =>
     safeReport(ctx.reporter, { ...event, skill: skill.id, message: truncate(event.message) });
 
@@ -129,7 +146,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
     const ok = await ctx.ui.confirmFixed(`Tout semble correct côté Windows. ${skill.verifyQuestion}`);
     trace.test = ok ? 'Rien d\'anormal côté Windows ; confirmé par le client.' : 'Rien d\'anormal côté Windows ; le problème persiste pour le client.';
     if (ok) return { status: 'fixed', actionsDone: done };
-    return escalate(ctx, report, done, 'Le système semble correct mais le problème persiste pour le client');
+    return persistOrEscalate('Le système semble correct mais le problème persiste pour le client', diagnosis.summary);
   }
 
   if (ctx.readOnly) {
@@ -231,7 +248,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
       const ok = await ctx.ui.confirmFixed(skill.verifyQuestion);
       trace.test += ok ? ' Confirmé par le client.' : ' Le problème persiste pour le client.';
       if (ok) return { status: 'fixed', actionsDone: done };
-      return escalate(ctx, report, done, 'Corrections appliquées mais le problème persiste pour le client');
+      return persistOrEscalate('Corrections appliquées mais le problème persiste pour le client', after.summary);
     }
     if (after.needsHuman) return escalate(ctx, report, done, after.summary);
     // Un problème auparavant masqué peut apparaître une fois le premier réglé : on repropose.
@@ -244,7 +261,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
     const ok = await ctx.ui.confirmFixed(skill.verifyQuestion);
     trace.test = ok ? 'Aucune correction automatique possible ; confirmé par le client après les conseils.' : 'Aucune correction automatique possible ; le problème persiste.';
     if (ok) return { status: 'fixed', actionsDone: done };
-    return escalate(ctx, report, done, 'Aucune correction automatique possible');
+    return persistOrEscalate('Aucune correction automatique possible', current.summary);
   }
 
   const summary = after?.summary ?? current.summary;

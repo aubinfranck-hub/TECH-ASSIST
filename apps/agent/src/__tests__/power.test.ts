@@ -16,7 +16,10 @@ describe('veille : réveil qui échoue', () => {
   it('démarrage rapide activé : conseil précis', () => {
     const d = diagnosePower({ ...base, fastStartup: true });
     expect(d.problems).toContain('fast_startup');
-    expect(d.advice.join(' ')).toContain('démarrage rapide');
+    const a = d.actions.find((x) => x.id === 'disable_fast_startup')!;
+    expect(a.requiresAdmin).toBe(true);
+    expect(a.needsReboot).toBe(true);
+    expect(a.explanation).toContain('réactiver');
   });
   it('pilote très ancien signalé, jamais de modification automatique', () => {
     const d = diagnosePower({ ...base, gpuDriverAgeDays: 1200, gpuName: 'NVIDIA GeForce' });

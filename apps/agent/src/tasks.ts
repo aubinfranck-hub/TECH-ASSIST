@@ -40,6 +40,7 @@ const ESTIMATES: Record<string, [number, number]> = {
   clean_system_caches: [30, 4 * MIN],
   disable_startup_apps: [5, 45],
   set_balanced_power: [2, 15],
+  disable_fast_startup: [3, 20],
   update_signatures: [30, 3 * MIN],
   quick_scan: [5 * MIN, 20 * MIN],
   remove_threats: [30, 5 * MIN],

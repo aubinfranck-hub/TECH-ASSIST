@@ -101,6 +101,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   let turns = 0;
   let handedOver = false;
   let privacyNoted = false;
+  let lastMessage = '';
 
   let escalationFailed = false;
   const log = async (event: Omit<AgentEvent, 'skill'>): Promise<boolean> => {
@@ -167,6 +168,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     if (first) ui.progress?.(3);
     first = false;
     turns += 1;
+    lastMessage = message;
     await log({ type: 'user_request', message });
 
     let intents = routeIntent(message);
@@ -260,8 +262,25 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     return 'Urgence';
   }
 
+  /** L'IA prend le relais de la conversation quand les vérifications automatiques ne règlent rien, avant le technicien. */
+  async function consult(info: { skill: string; summary: string; reason: string }): Promise<boolean> {
+    if (!privacyNoted) {
+      privacyNoted = true;
+      ui.info("Je demande l'avis de notre assistant en ligne (une IA). N'y écrivez jamais de mot de passe, de code reçu par SMS ou de numéro de carte.");
+    }
+    const brief = truncate(
+      `Le client signale : « ${lastMessage} ». Mon diagnostic automatique (${info.skill}) : ${info.summary} Il n'a rien réglé et le problème persiste. Propose au client 2 ou 3 vérifications simples qu'il peut faire lui-même, une par une, sans toucher à ses fichiers, et dis quand un technicien est nécessaire.`,
+      1000,
+    );
+    const reply = await deps.assistant!.answer(brief, history.slice(-8));
+    if (!reply.available) return false;
+    history.push({ role: 'user', text: truncate(lastMessage, 500) }, { role: 'assistant', text: truncate(reply.text, 1500) });
+    ui.info(reply.text);
+    return ui.confirmFixed('Est-ce que cela règle votre problème ?');
+  }
+
   async function runAndNote(skill: Skill): Promise<Outcome> {
-    const outcome = await runSkill(skill, { runner, ui, reporter, machine: deps.machine, readOnly: deps.scope === 'diagnostic', friendly: deps.autonomous, isAdmin: deps.isAdmin });
+    const outcome = await runSkill(skill, { runner, ui, reporter, machine: deps.machine, readOnly: deps.scope === 'diagnostic', friendly: deps.autonomous, isAdmin: deps.isAdmin, ...(deps.assistant ? { consult } : {}) });
     // Si le serveur n'a pas enregistré la demande, la conversation continue : le client peut réessayer ou utiliser le bouton.
     if (outcome.status === 'escalated' && outcome.recorded) handedOver = true;
     else if (outcome.status === 'fixed') ui.info('Parfait, c\'est réglé.');
