@@ -175,3 +175,7 @@ Quand l'agent travaille plus de 2 secondes, la page de chat affiche des diaposit
 ## Compte standard (sans droits administrateur)
 
 Si l'agent n'est pas administrateur après la demande de Windows (compte « standard » ou fenêtre refusée), il le dit simplement au client (`NO_ADMIN_TEXT`), analyse quand même, et **ne tente pas** les actions qui exigent ces droits (elles seraient refusées) : il les liste comme à faire avec le mot de passe administrateur du PC ou un technicien. Les corrections « à portée d'utilisateur » (cache des navigateurs, démarrage, Outlook, Teams…) restent possibles. Limite connue : quand Windows demande les identifiants d'un autre compte administrateur, les réglages propres à l'utilisateur (démarrage, cache) s'appliquent à ce compte-là ; à traiter plus tard (étape utilisateur avant la relance). L'inscription demande l'email **et** le téléphone, enregistrés pour joindre le client.
+
+## Droits temporaires, rien de permanent
+
+Les droits administrateur ne servent que le temps de l'intervention : l'agent se ferme à la fin, ne crée ni compte, ni service, ni tâche planifiée, et le dit au client (texte d'accord et message de fin). Un compte administrateur (cas d'un PC personnel) valide d'un « Oui » ; un compte standard se voit proposer « Continuer sans » ou la saisie du mot de passe administrateur s'il l'a (`requestAdmin`) — jamais imposé au novice.

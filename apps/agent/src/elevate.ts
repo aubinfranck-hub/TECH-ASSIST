@@ -16,6 +16,21 @@ export function isAdmin(): boolean {
   }
 }
 
+/** Le compte est-il membre du groupe Administrateurs (SID S-1-5-32-544), même sans être élevé ? Alors Windows ne demande qu'un « Oui », sans mot de passe. */
+export function hasAdminGroup(whoamiGroupsOutput: string): boolean {
+  return /\bS-1-5-32-544\b/.test(whoamiGroupsOutput);
+}
+
+export function isAdminAccount(): boolean {
+  if (process.platform !== 'win32') return false;
+  try {
+    const res = spawnSync('whoami', ['/groups'], { encoding: 'utf8', windowsHide: true });
+    return res.status === 0 && hasAdminGroup(String(res.stdout));
+  } catch {
+    return false;
+  }
+}
+
 /** Valeur entre apostrophes pour PowerShell ; null si elle contient quelque chose d'inattendu. */
 export function quoteForPowerShell(value: string): string | null {
   if (/[\u0000-\u001f\u007f-\u009f‘’‚‛“”„`$]/.test(value)) return null;
@@ -38,6 +53,14 @@ export function elevationCommand(execPath: string, argv: string[]): string | nul
  */
 export async function relaunchAsAdminIfNeeded(argv: string[], execPath = process.execPath): Promise<boolean> {
   if (process.platform !== 'win32' || argv.includes('--elevated') || argv.includes('--no-elevate') || isAdmin()) return false;
+  // Compte « standard » : Windows exigerait le mot de passe d'un administrateur. Le novice ne l'a peut-être pas : on ne le lui
+  // impose pas d'entrée, c'est la conversation qui lui propose de continuer sans, ou de saisir ce mot de passe s'il l'a.
+  if (!isAdminAccount()) return false;
+  return launchElevated(argv, execPath);
+}
+
+/** Relance l'agent avec la fenêtre de Windows (« Oui » pour un administrateur, identifiants pour un compte standard). */
+export async function launchElevated(argv: string[], execPath = process.execPath): Promise<boolean> {
   const command = elevationCommand(execPath, argv);
   if (!command) return false;
   return new Promise((resolve) => {

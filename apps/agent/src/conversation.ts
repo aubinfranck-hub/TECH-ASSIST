@@ -34,10 +34,14 @@ export interface ConversationDeps {
   autonomous?: boolean;
   /** false : l'agent tourne sans droits administrateur (compte standard, ou fenêtre Windows refusée). */
   isAdmin?: boolean;
+  /** Relance l'agent avec la demande d'identifiants de Windows ; true = une nouvelle instance prend le relais (celle-ci doit s'arrêter). */
+  requestAdmin?: () => Promise<boolean>;
   company?: { join(code: string, deviceName: string): Promise<{ ok: true; companyName: string } | { ok: false; error: string }> };
 }
 
 export interface ConversationResult {
+  /** Une nouvelle instance avec droits administrateur a pris le relais. */
+  relaunched?: true;
   turns: number;
   /** Un technicien a été demandé (par l'agent ou par le client). */
   handedOver: boolean;
@@ -49,7 +53,7 @@ const GREETING =
 
 /** Compte standard (ou fenêtre Windows refusée) : on dit simplement ce qui est possible, sans jargon. */
 export const NO_ADMIN_TEXT =
-  "Windows ne m'a pas donné les droits d'administrateur (ce compte est un compte « standard », ou la fenêtre de Windows a été refusée). Je peux quand même analyser votre PC et corriger ce qui est à votre portée (nettoyage, démarrage, Outlook, Teams…). Pour le reste, il faut le mot de passe de l'administrateur de ce PC — souvent la personne qui l'a installé : relancez Tech Assist et saisissez-le dans la fenêtre de Windows — ou demandez un technicien.";
+  "Windows ne m'a pas donné les droits d'administrateur (ce compte est un compte « standard », ou la fenêtre de Windows a été refusée). Je peux quand même analyser votre PC et corriger ce qui est à votre portée (nettoyage, démarrage, Outlook, Teams…). Pour le reste, il faut le mot de passe de l'administrateur de ce PC (souvent la personne qui l'a installé). Si vous ne l'avez pas, ce n'est pas grave : continuez sans, et un technicien pourra faire le reste avec vous.";
 
 /** Ce que l'agent ne fait pas : dit franchement, puis un technicien. */
 const HUMAN_ONLY_TEXT: Record<HumanOnlyTopic, string> = {
@@ -108,7 +112,17 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   };
 
   ui.info(GREETING);
-  if (deps.autonomous && deps.isAdmin === false) ui.info(NO_ADMIN_TEXT);
+  if (deps.autonomous && deps.isAdmin === false) {
+    ui.info(NO_ADMIN_TEXT);
+    if (deps.requestAdmin) {
+      const pick = await ui.choose("Que voulez-vous faire ?", ['Continuer sans (je fais ce que je peux)', "J'ai le mot de passe administrateur"]);
+      if (pick === 1) {
+        ui.info("Windows va vous demander l'identifiant et le mot de passe de l'administrateur. Une nouvelle fenêtre s'ouvre ensuite : je continue là-bas.");
+        if (await deps.requestAdmin()) return { relaunched: true, turns: 0, handedOver: false, outcomes: [] };
+        ui.info("Les droits n'ont pas été accordés : je continue sans.");
+      }
+    }
+  }
   // Accord unique : sauf forfait « diagnostic » (rien n'est modifié), le client autorise une fois pour toute la session.
   if (deps.autonomous && deps.scope !== 'diagnostic') {
     ui.info(CONSENT_TEXT);

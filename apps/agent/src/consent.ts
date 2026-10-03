@@ -12,6 +12,7 @@ export const CONSENT_TEXT = [
   '✔ J’analyse votre ordinateur, puis je corrige directement ce qui ne va pas (services Windows, réseau, démarrage, nettoyage des fichiers temporaires, du cache des navigateurs et de la corbeille), sans vous redemander à chaque étape.',
   '✔ Avant un changement délicat, je crée un point de restauration Windows : on peut toujours revenir en arrière.',
   '✔ Tout ce que je fais est noté dans un rapport que vous recevez à la fin.',
+  '✔ Les droits que Windows m’accorde ne servent que pour cette intervention : quand j’ai terminé, je me ferme et je ne garde aucun accès à votre ordinateur.',
   '✘ Je ne touche jamais à vos documents, photos, courriers ni mots de passe.',
   '✘ Je ne crée aucun compte utilisateur et je ne laisse rien de caché sur votre ordinateur.',
   '',

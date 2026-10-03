@@ -17,3 +17,36 @@ describe('relance en administrateur', () => {
     expect(elevationCommand('C:\\a.exe', ['', '', 'ok\u2019; calc'])).toBeNull();
   });
 });
+
+import { hasAdminGroup } from '../elevate.js';
+import { converse } from '../conversation.js';
+import { Recorder, ScriptedConversation, ScriptedRunner } from './fakeScripts.js';
+
+describe('compte administrateur ou standard', () => {
+  it('reconnaît l’appartenance au groupe Administrateurs, même sans élévation', () => {
+    expect(hasAdminGroup('BUILTIN\\Administrators  Alias  S-1-5-32-544  Groupe utilisé uniquement pour le refus')).toBe(true);
+    expect(hasAdminGroup('BUILTIN\\Users  Alias  S-1-5-32-545  Groupe obligatoire')).toBe(false);
+  });
+
+  it("un compte standard peut continuer sans, sans jamais exiger le mot de passe", async () => {
+    let asked = 0;
+    const ui = new ScriptedConversation({ picks: [0] });
+    const out = await converse({ runner: new ScriptedRunner([]), ui, reporter: new Recorder(), autonomous: true, isAdmin: false, requestAdmin: async () => { asked += 1; return true; } });
+    expect(asked).toBe(0);
+    expect(out.relaunched).toBeUndefined();
+    expect(ui.choices[0]!.options[0]).toMatch(/Continuer sans/);
+  });
+
+  it("s'il a le mot de passe, l'agent se relance avec les droits et cède la place", async () => {
+    const ui = new ScriptedConversation({ picks: [1] });
+    const out = await converse({ runner: new ScriptedRunner([]), ui, reporter: new Recorder(), autonomous: true, isAdmin: false, requestAdmin: async () => true });
+    expect(out).toEqual({ relaunched: true, turns: 0, handedOver: false, outcomes: [] });
+  });
+
+  it('si Windows refuse, la conversation continue sans droits', async () => {
+    const ui = new ScriptedConversation({ picks: [1] });
+    const out = await converse({ runner: new ScriptedRunner([]), ui, reporter: new Recorder(), autonomous: true, isAdmin: false, requestAdmin: async () => false });
+    expect(out.relaunched).toBeUndefined();
+    expect(ui.said).toContain('continue sans');
+  });
+});
