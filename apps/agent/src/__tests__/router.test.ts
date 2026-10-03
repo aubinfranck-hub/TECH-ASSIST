@@ -99,3 +99,12 @@ describe('routeur : urgences et cas limites', () => {
     expect(skills('Réseau coupé')).toContain('network');
   });
 });
+
+describe('veille et verrouillage', () => {
+  it("route « mon ordinateur va en veille et il faut Ctrl Alt Supp » vers la compétence power", () => {
+    const ids = routeIntent("mon ordinateur va en veille et pour ressortir il faut forcement control alt supp sans cela rien")
+      .filter((i) => i.kind === 'skill')
+      .map((i) => (i as { skillId: string }).skillId);
+    expect(ids).toContain('power');
+  });
+});

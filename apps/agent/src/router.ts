@@ -60,6 +60,7 @@ const MEMORY_CPU = /\b(memoire|ram|processeur|cpu|surchauffe\w*|ventilateur)\b/;
 const SKILL_RULES: { skillId: string; pattern: RegExp }[] = [
   { skillId: 'windows', pattern: /\b(analyse (complete|globale)|verifi\w* tout|tout verifier|diagnostic complet|check-?up)\b/ },
   { skillId: 'lan-map', pattern: /\b(cartographie|carte du reseau|appareils? (connectes?|sur (le|mon) reseau)|qui est connecte|qui utilise mon (wi-?fi|reseau)|qui (se )?connecte (a|sur) mon)\b/ },
+  { skillId: 'power', pattern: /\b(veille|mise en veille|se met en veille|ctrl ?\+? ?alt ?\+? ?(supp\w*|del\w*)|control ?alt ?supp\w*|ecran de verrouillage|se reveille pas|reveil de l'ordinateur|sortir de (la )?veille)\b/ },
   { skillId: 'network', pattern: /\b(internet|wi-?fi|reseau|connexion|ethernet|dns|box|navigu\w*|wlan|pas de connexion)\b/ },
   { skillId: 'print', pattern: /\b(imprim\w*|spool\w*)\b/ },
   { skillId: 'performance', pattern: MEMORY_CPU },

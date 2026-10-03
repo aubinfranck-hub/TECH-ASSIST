@@ -4,6 +4,7 @@ import { crashesSkill } from './crashes.js';
 import { diskSkill } from './disk.js';
 import { driversSkill } from './drivers.js';
 import { batterySkill } from './battery.js';
+import { powerSkill } from './power.js';
 import { networkMapSkill } from './networkMap.js';
 import { installSkill } from './install.js';
 import { malwareSkill } from './malware.js';
@@ -48,6 +49,7 @@ export const SKILL_MENU: SkillChoice[] = [
   { id: 'security', label: 'Sécurité : antivirus, pare-feu, mises à jour', build: securitySkill },
   { id: 'windows-repair', label: 'Réparer les fichiers système de Windows', build: () => windowsRepairSkill({ runSfc: true }) },
   { id: 'battery', label: 'Batterie : usure', build: batterySkill },
+  { id: 'power', label: 'Veille et verrouillage : Ctrl+Alt+Suppr au réveil', build: powerSkill },
   { id: 'update', label: 'Mises à jour Windows bloquées', build: () => serviceSkill('update') },
   { id: 'bluetooth', label: 'Bluetooth', build: () => serviceSkill('bluetooth') },
   { id: 'search', label: 'Recherche Windows', build: () => serviceSkill('search') },
