@@ -1,3 +1,5 @@
+import type { TaskTracker } from './tasks.js';
+
 /** Résultat d'une commande exécutée sur l'appareil du client. */
 export interface CommandResult {
   stdout: string;
@@ -98,6 +100,8 @@ export interface Ui {
   confirmAction(action: Action): Promise<boolean>;
   /** « Entendez-vous du son maintenant ? » — l'agent ne peut pas l'entendre lui-même. */
   confirmFixed(question: string): Promise<boolean>;
+  /** Suivi des tâches (tâche en cours, temps écoulé, durée habituelle) : seule la fenêtre du client l'affiche. */
+  tasks?: TaskTracker;
 }
 
 /** Interface de conversation : en plus des confirmations, l'utilisateur écrit et choisit. */

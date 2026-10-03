@@ -1,6 +1,7 @@
 import { formatReport, type InterventionReport, type ReportAction, type ReportStatus } from './report.js';
 import { cleanErrorMessage } from './skills/common.js';
 import { confirmOnly, rebootAction } from './skills/safety.js';
+import { DIAGNOSE_TASK, VERIFY_TASK, taskInfoFor, tracked } from './tasks.js';
 import type { Action, ActionResult, AgentEvent, CommandRunner, Diagnosis, Reporter, Skill, Ui } from './types.js';
 
 export type Outcome =
@@ -64,7 +65,10 @@ export async function runSkill(skill: Skill, ctx: AgentContext): Promise<Outcome
   const started = now();
   const trace: Trace = { diagnosis: '', actions: [], test: '', rebootNeeded: false };
   const outcome = await runCore(skill, ctx, trace);
-  if (!ctx.quiet) ctx.ui.info(formatReport(buildReport(skill, outcome, trace, now() - started, ctx.machine)));
+  if (!ctx.quiet) {
+    ctx.ui.tasks?.settle();
+    ctx.ui.info(formatReport(buildReport(skill, outcome, trace, now() - started, ctx.machine)));
+  }
   return outcome;
 }
 
@@ -89,7 +93,8 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
 
   let diagnosis: Diagnosis;
   try {
-    diagnosis = await skill.diagnose(ctx.runner);
+    // Analyse isolée : annoncée comme une tâche. Dans « Réparer mon PC » (quiet), l'analyse complète est déjà annoncée par l'appelant.
+    diagnosis = ctx.quiet ? await skill.diagnose(ctx.runner) : await tracked(ctx.ui, DIAGNOSE_TASK(skill.title), () => skill.diagnose(ctx.runner));
   } catch (err) {
     const reason = `Diagnostic impossible : ${err instanceof Error ? err.message : String(err)}`;
     trace.diagnosis = reason;
@@ -165,7 +170,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
         continue;
       }
 
-      const result = await runAction(action, ctx.runner);
+      const result = await tracked(ctx.ui, taskInfoFor(action), () => runAction(action, ctx.runner), (r) => r.ok);
       if (result.ok) {
         done.push(action.id);
         trace.actions.push({ title: action.title, result: 'done' });
@@ -197,7 +202,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
 
     // Vérification : on relit l'état, puis c'est au client de confirmer que ça fonctionne.
     try {
-      after = await skill.diagnose(ctx.runner);
+      after = ctx.quiet ? await skill.diagnose(ctx.runner) : await tracked(ctx.ui, VERIFY_TASK(skill.title), () => skill.diagnose(ctx.runner));
     } catch (err) {
       return escalate(ctx, report, done, `Vérification impossible : ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -252,7 +257,7 @@ type Report = (event: Omit<AgentEvent, 'skill'>) => Promise<boolean>;
 export async function ensurePrepared(action: Action, ctx: { runner: CommandRunner; ui: Ui }, report: Report, prepared: Set<string>): Promise<boolean> {
   const prep = action.prepare;
   if (!prep || prepared.has(prep.id)) return true;
-  const result = await runAction(prep, ctx.runner);
+  const result = await tracked(ctx.ui, taskInfoFor(prep), () => runAction(prep, ctx.runner), (r) => r.ok);
   if (result.ok) {
     prepared.add(prep.id);
     await report({ type: 'action_done', action: prep.id, message: prep.title });

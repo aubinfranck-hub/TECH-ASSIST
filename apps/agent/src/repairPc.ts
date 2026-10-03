@@ -11,6 +11,7 @@ import { securitySkill } from './skills/security.js';
 import { confirmOnly } from './skills/safety.js';
 import { startupSkill } from './skills/startup.js';
 import { windowsRepairSkill } from './skills/windowsRepair.js';
+import { plannedTasks, RESCAN_TASK, SCAN_TASK, tracked, type TaskInfo } from './tasks.js';
 import type { Action, Diagnosis, Reporter, Skill, Ui } from './types.js';
 
 /**
@@ -62,16 +63,23 @@ const MARK: Record<Severity, string> = { critical: '🔴', fixable: '🟠', watc
 
 /** Analyse complète en lecture seule. Une analyse qui échoue est signalée, jamais ignorée. */
 export async function scanPc(runner: AgentContext['runner'], steps: RepairStep[] = REPAIR_STEPS): Promise<Finding[]> {
+  return (await scanPcDetailed(runner, steps)).findings;
+}
+
+/** Comme `scanPc`, avec en plus les tâches que demanderaient les corrections de chaque point (pour annoncer le programme au client). */
+async function scanPcDetailed(runner: AgentContext['runner'], steps: RepairStep[]): Promise<{ findings: Finding[]; plans: Map<string, TaskInfo[]> }> {
   const findings: Finding[] = [];
+  const plans = new Map<string, TaskInfo[]>();
   for (const step of steps) {
     try {
       const d = await step.build().diagnose(runner);
       findings.push({ id: step.id, label: step.label, severity: classify(d), summary: d.summary, advice: d.advice });
+      if (d.actions.length > 0) plans.set(step.id, plannedTasks(d.actions));
     } catch (err) {
       findings.push({ id: step.id, label: step.label, severity: 'unknown', summary: `Analyse impossible : ${truncate(err instanceof Error ? err.message : String(err), 160)}`, advice: [] });
     }
   }
-  return findings;
+  return { findings, plans };
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
@@ -93,7 +101,8 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
     safeReport(ctx.reporter, { ...event, skill: 'repair-pc', message: truncate(event.message) });
 
   ctx.ui.info(ctx.friendly ? "Je regarde l'état de votre ordinateur. Rien n'est modifié pour l'instant, cela prend une à deux minutes." : 'Je commence par analyser votre ordinateur, sans rien modifier.');
-  const before = await scanPc(ctx.runner, steps);
+  const scan = await tracked(ctx.ui, SCAN_TASK, () => scanPcDetailed(ctx.runner, steps));
+  const before = scan.findings;
   const count = (s: Severity) => before.filter((f) => f.severity === s).length;
   const fixable = before.filter((f) => f.severity === 'fixable');
   const critical = before.filter((f) => f.severity === 'critical');
@@ -117,7 +126,10 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
   }
   await report({ type: 'diagnosed', message: `${issues} problème(s) : ${fixable.length} corrigeable(s), ${critical.length} pour un technicien, ${count('watch')} à surveiller`, details: { fixable: fixable.map((f) => f.id), critical: critical.map((f) => f.id) } });
 
-  if (issues === 0) return { status: 'nothing_to_fix', findings: before };
+  if (issues === 0) {
+    ctx.ui.tasks?.settle();
+    return { status: 'nothing_to_fix', findings: before };
+  }
 
   const log = new Recording(ctx.ui, ctx.reporter);
   const done: string[] = [];
@@ -135,10 +147,13 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
     );
     if (!go) {
       await report({ type: 'action_declined', message: 'Réparation complète refusée par le client' });
+      ctx.ui.tasks?.settle();
       ctx.ui.info("D'accord, je n'ai rien modifié.");
       ctx.ui.info(formatReport({ machine: ctx.machine, task: 'Réparer mon PC', diagnosis: formatFindings(before), actions: [], test: 'Aucune modification.', status: 'declined', durationMs: now() - started }));
       return { status: 'declined', findings: before };
     }
+    // Le programme complet est annoncé d'avance : le client voit ce qui l'attend et le temps restant approximatif.
+    ctx.ui.tasks?.plan([...fixable.flatMap((f) => scan.plans.get(f.id) ?? []), RESCAN_TASK]);
     for (const f of fixable) {
       const step = steps.find((s) => s.id === f.id)!;
       ctx.ui.info(`— ${f.label} —`);
@@ -164,7 +179,8 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
   }
 
   // Seconde analyse : on ne conclut pas sans avoir relu l'état (sauf si le redémarrage a été lancé : rien à relire maintenant).
-  const after = reboot === 'accepted' ? before : fixable.length > 0 || critical.length > 0 ? await scanPc(ctx.runner, steps) : before;
+  const after = reboot === 'accepted' ? before : fixable.length > 0 || critical.length > 0 ? await tracked(ctx.ui, RESCAN_TASK, () => scanPc(ctx.runner, steps)) : before;
+  ctx.ui.tasks?.settle();
   const remainingFix = reboot === 'accepted' ? 0 : after.filter((f) => f.severity === 'fixable').length;
   const remainingCrit = critical.length;
   if (fixable.length > 0 && reboot !== 'accepted') await report({ type: 'verified', message: `Seconde analyse : ${remainingFix} problème(s) corrigeable(s) restant(s)`, details: { remaining: after.filter((f) => f.severity === 'fixable').map((f) => f.id) } });
@@ -195,7 +211,10 @@ class Recording {
   constructor(
     private readonly inner: Ui,
     private readonly outer: Reporter,
-  ) {}
+  ) {
+    // Le suivi des tâches de la fenêtre reste branché pendant les corrections.
+    if (inner.tasks) this.ui.tasks = inner.tasks;
+  }
 
   private note(key: string, title: string, result: ReportAction['result']) {
     if (!this.titles.has(key)) this.order.push(key);

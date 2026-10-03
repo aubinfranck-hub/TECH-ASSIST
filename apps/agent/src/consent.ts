@@ -38,12 +38,14 @@ export function withStandingConsent(ui: ConversationUi): ConversationUi {
     confirmAction: async (action: Action) => {
       if (ALWAYS_ASK.has(action.id)) return ui.confirmAction(action);
       // « confirm_only » = accord de lot ou « continuer sans point de restauration » : déjà couvert par l'accord unique.
-      if (action.id !== 'confirm_only') ui.info(`▶ ${action.title}…`);
+      // Le détail de la tâche (avec sa durée habituelle) s'affiche en haut de la fenêtre ; sans fenêtre, on l'annonce en une ligne.
+      if (action.id !== 'confirm_only' && !ui.tasks) ui.info(`▶ ${action.title}…`);
       return true;
     },
   };
   if (ui.wasHandedOff) wrapped.wasHandedOff = () => ui.wasHandedOff!();
   if (ui.takeAttachment) wrapped.takeAttachment = () => ui.takeAttachment!();
   if (ui.progress) wrapped.progress = (step) => ui.progress!(step);
+  if (ui.tasks) wrapped.tasks = ui.tasks;
   return wrapped;
 }

@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { MAX_ATTACHMENT_CHARS, type Attachment } from './assistant.js';
+import type { TaskInfo, TaskResult, TaskTracker } from './tasks.js';
 import type { Action, ConversationUi } from './types.js';
 
 /**
@@ -22,7 +23,20 @@ type ChatEvent =
   | { seq: number; type: 'choose'; id: string; text: string; options: string[] }
   | { seq: number; type: 'resolved'; id: string }
   | { seq: number; type: 'step'; n: number }
+  | { seq: number; type: 'tasks'; items: TaskView[]; now: number; complete: boolean }
   | { seq: number; type: 'ended'; text: string };
+
+/** Une tâche telle que la fenêtre l'affiche ; les durées (min, max) sont en secondes, les dates en millisecondes. */
+export interface TaskView {
+  id: string;
+  title: string;
+  state: 'pending' | 'running' | TaskResult;
+  min: number;
+  max: number;
+  startedAt?: number;
+  /** Durée réelle, une fois la tâche terminée. */
+  seconds?: number;
+}
 
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type NewEvent = DistOmit<ChatEvent, 'seq'>;
@@ -110,6 +124,10 @@ export class ChatUi implements ConversationUi {
   onHandoff?: () => void;
 
   private readonly log: ChatEvent[] = [];
+  private seq = 0;
+  private taskList: TaskView[] = [];
+  /** La série de tâches est terminée pour de bon (l'agent a conclu), pas seulement entre deux tâches. */
+  private tasksComplete = false;
   private readonly pending = new Map<string, Pending>();
   private readonly streams = new Set<ServerResponse>();
   private readonly token = randomBytes(24).toString('hex');
@@ -176,6 +194,58 @@ export class ChatUi implements ConversationUi {
 
   choose(question: string, options: string[]): Promise<number | null> {
     return this.prompt<number | null>({ type: 'choose', text: question, options }, { kind: 'choose', options }, null);
+  }
+
+  /**
+   * Suivi des tâches : l'agent annonce chaque tâche (début, fin) et la fenêtre affiche la tâche en cours, son temps écoulé
+   * et sa durée habituelle. La série reste affichée jusqu'à ce que l'agent la conclue (`settle`) ; la suivante la remplace.
+   */
+  readonly tasks: TaskTracker = {
+    plan: (items: TaskInfo[]) => {
+      this.freshBatch();
+      for (const i of items) if (!this.taskList.some((t) => t.id === i.id)) this.taskList.push({ id: i.id, title: i.title, state: 'pending', min: i.min, max: i.max });
+      this.publishTasks();
+    },
+    start: (item: TaskInfo) => {
+      this.freshBatch();
+      let t = this.taskList.find((x) => x.id === item.id);
+      if (!t) {
+        t = { id: item.id, title: item.title, state: 'pending', min: item.min, max: item.max };
+        this.taskList.push(t);
+      }
+      t.state = 'running';
+      t.startedAt = Date.now();
+      delete t.seconds;
+      this.publishTasks();
+    },
+    end: (id: string, result: TaskResult) => {
+      const t = this.taskList.find((x) => x.id === id);
+      if (!t) return;
+      t.state = result;
+      t.seconds = t.startedAt ? Math.max(0, (Date.now() - t.startedAt) / 1000) : 0;
+      this.publishTasks();
+    },
+    settle: () => {
+      if (this.taskList.length === 0) return;
+      this.taskList = this.taskList.filter((t) => t.state !== 'pending');
+      this.tasksComplete = this.taskList.length > 0 && this.taskList.every((t) => t.state !== 'running');
+      this.publishTasks();
+    },
+  };
+
+  /** Une série conclue par l'agent (`settle`) est remplacée dès que de nouvelles tâches arrivent. */
+  private freshBatch() {
+    if (this.tasksComplete) {
+      this.taskList = [];
+      this.tasksComplete = false;
+    }
+  }
+
+  /** La fenêtre reçoit toujours l'état complet ; seul le dernier état est rejoué à une page rechargée. */
+  private publishTasks() {
+    if (this.closed) return;
+    for (let i = this.log.length - 1; i >= 0; i--) if (this.log[i]!.type === 'tasks') this.log.splice(i, 1);
+    this.push({ type: 'tasks', items: this.taskList.map((t) => ({ ...t })), now: Date.now(), complete: this.tasksComplete });
   }
 
   wasHandedOff(): boolean {
@@ -283,7 +353,7 @@ export class ChatUi implements ConversationUi {
   }
 
   private push(event: NewEvent): ChatEvent {
-    const full = { ...event, seq: this.log.length + 1 } as ChatEvent;
+    const full = { ...event, seq: ++this.seq } as ChatEvent;
     this.log.push(full);
     for (const stream of this.streams) this.write(stream, full);
     return full;
@@ -518,6 +588,38 @@ body { margin:0; font:16px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,sans-s
 .step .t { font-weight:700; font-size:.95rem; line-height:1.25; color:#475569; }
 .step.current .t, .step.done .t { color:var(--ink); }
 .step .s { color:var(--muted); font-size:.82rem; line-height:1.3; }
+/* Étape en cours : un anneau tourne autour du rond tant que l'agent travaille (il s'arrête quand il attend la réponse du client). */
+@keyframes turn { to { transform:rotate(360deg); } }
+.step.current .dot::before { content:''; position:absolute; inset:-7px; border-radius:50%; border:3px solid transparent; border-top-color:var(--brand); border-right-color:var(--brand); opacity:0; transition:opacity .2s; }
+body.working .step.current .dot::before { opacity:1; animation:turn 1s linear infinite; }
+
+/* Suivi de l'intervention : tâche en cours, temps écoulé, durée habituelle, reste approximatif */
+.tasks { flex:none; width:100%; max-width:820px; margin:0 auto; background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); padding:12px 16px; animation:rise .25s ease-out; }
+.tasks[hidden] { display:none; }
+.t-main { display:flex; align-items:center; gap:12px; }
+.t-icon { flex:none; width:26px; height:26px; display:grid; place-items:center; }
+.spin { display:inline-block; width:22px; height:22px; border-radius:50%; border:3px solid rgba(220,38,38,.18); border-top-color:var(--brand); animation:turn .9s linear infinite; }
+.okdot { width:26px; height:26px; border-radius:50%; background:var(--ok); color:#fff; display:grid; place-items:center; font-weight:700; font-size:.9rem; }
+.t-text { flex:1; min-width:0; }
+.t-text strong { display:block; font-size:.98rem; line-height:1.3; overflow-wrap:anywhere; }
+.t-text span { display:block; font-size:.84rem; color:var(--muted); line-height:1.35; }
+.t-text span.late { color:#92400e; }
+#t-toggle { flex:none; background:transparent; border:1px solid var(--line); border-radius:999px; padding:6px 12px; font:inherit; font-size:.8rem; font-weight:600; color:var(--ink); cursor:pointer; }
+#t-toggle:hover { border-color:var(--brand); color:var(--brand); }
+.t-bar { height:8px; margin:10px 0 6px; border-radius:99px; background:var(--line); overflow:hidden; }
+.t-bar i { display:block; height:100%; width:0; border-radius:99px; background:linear-gradient(90deg,var(--brand),#f97316); transition:width .8s ease; }
+.t-foot { display:flex; justify-content:space-between; gap:4px 14px; flex-wrap:wrap; font-size:.82rem; color:var(--muted); }
+.t-list { list-style:none; margin:8px 0 0; padding:8px 0 0; border-top:1px solid var(--line); max-height:150px; overflow-y:auto; display:grid; gap:6px; }
+.t-list[hidden] { display:none; }
+.t-list li { display:flex; align-items:center; gap:10px; font-size:.88rem; }
+.t-list .m { flex:none; width:18px; text-align:center; font-weight:700; display:grid; place-items:center; }
+.t-list .ok .m { color:var(--ok); }
+.t-list .ko .m { color:var(--no); }
+.t-list .wait { color:var(--muted); }
+.t-list .name { flex:1; min-width:0; overflow-wrap:anywhere; }
+.t-list .when { flex:none; color:var(--muted); font-variant-numeric:tabular-nums; }
+.t-list .spin { width:14px; height:14px; border-width:2px; }
+@media (prefers-reduced-motion: reduce) { .spin, body.working .step.current .dot::before { animation-duration:3s; } .t-bar i { transition:none; } }
 .panel { flex:1; min-height:0; display:flex; flex-direction:column; width:100%; max-width:820px; margin:0 auto; background:var(--card); border:1px solid var(--line); border-radius:22px; box-shadow:var(--shadow); overflow:hidden; }
 main { flex:1; min-height:0; overflow-y:auto; padding:18px 26px; }
 .foot { flex:none; display:flex; justify-content:center; flex-wrap:wrap; gap:2px 18px; font-size:.8rem; color:var(--muted); }
@@ -645,6 +747,12 @@ form button.act { flex:0 0 auto; min-width:170px; }
 <div class="step"><div class="dot"><span class="n">2</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div><div class="t">Votre demande</div><div class="s">Accord et problème à régler</div></div>
 <div class="step"><div class="dot"><span class="n">3</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div><div class="t">Intervention</div><div class="s">Analyse et correction</div></div>
 </nav>
+<section class="tasks" id="tasks" hidden aria-label="Suivi de l'intervention">
+<div class="t-main"><span class="t-icon" id="t-icon" aria-hidden="true"></span><div class="t-text"><strong id="t-title" aria-live="polite"></strong><span id="t-meta"></span></div><button type="button" id="t-toggle" aria-expanded="false">Voir le détail</button></div>
+<div class="t-bar" id="t-bar" role="progressbar" aria-label="Avancement de l'intervention" aria-valuemin="0" aria-valuemax="100"><i id="t-fill"></i></div>
+<div class="t-foot" id="t-foot"></div>
+<ul class="t-list" id="t-list" hidden></ul>
+</section>
 <div class="panel">
 <main id="log" aria-live="polite">
 <div class="welcome" id="welcome">
@@ -691,6 +799,84 @@ form button.act { flex:0 0 auto; min-width:170px; }
       s.className = 'step' + (num < n ? ' done' : num === n ? ' current' : '');
       if (num === n) s.setAttribute('aria-current', 'step'); else s.removeAttribute('aria-current');
     });
+  }
+  /* Suivi de l'intervention : tâche en cours, temps écoulé, durée habituelle, temps restant approximatif. */
+  var tBox = document.getElementById('tasks'), tIcon = document.getElementById('t-icon'), tTitle = document.getElementById('t-title'), tMeta = document.getElementById('t-meta');
+  var tFill = document.getElementById('t-fill'), tBar = document.getElementById('t-bar'), tFoot = document.getElementById('t-foot'), tList = document.getElementById('t-list'), tToggle = document.getElementById('t-toggle');
+  var taskData = null, taskTick = null, detailOpen = false;
+  function fmt(sec) {
+    sec = Math.max(0, Math.round(sec));
+    if (sec < 60) return sec + ' s';
+    var m = Math.round(sec / 60);
+    if (m < 60) return m + ' min';
+    var h = Math.floor(m / 60), r = m % 60;
+    return r ? h + ' h ' + r : h + ' h';
+  }
+  function clock(sec) { sec = Math.max(0, Math.floor(sec)); var r = sec % 60; return Math.floor(sec / 60) + ':' + (r < 10 ? '0' : '') + r; }
+  function range(a, b) {
+    if (b < 60) return Math.round(a) + ' à ' + Math.round(b) + ' s';
+    if (a >= 60) { var x = Math.round(a / 60), y = Math.round(b / 60); return x === y ? x + ' min' : x + ' à ' + y + ' min'; }
+    return fmt(a) + ' à ' + fmt(b);
+  }
+  function renderTasks() {
+    if (!taskData || !taskData.items.length) { tBox.hidden = true; return; }
+    tBox.hidden = false;
+    var items = taskData.items, now = Date.now() + taskData.offset;
+    var counted = items.filter(function (t) { return t.state !== 'skipped'; });
+    var running = null, pending = [], finished = [];
+    counted.forEach(function (t) { if (t.state === 'running') running = t; else if (t.state === 'pending') pending.push(t); else finished.push(t); });
+    function mid(t) { return (t.min + t.max) / 2; }
+    var elapsed = running ? Math.max(0, (now - running.startedAt) / 1000) : 0;
+    var total = 0, got = 0, lo = 0, hi = 0, spent = 0;
+    counted.forEach(function (t) { total += mid(t); });
+    finished.forEach(function (t) { got += mid(t); spent += t.seconds || 0; });
+    pending.forEach(function (t) { lo += t.min; hi += t.max; });
+    if (running) { got += Math.min(elapsed, mid(running) * 0.95); lo += Math.max(0, running.min - elapsed); hi += Math.max(0, running.max - elapsed); }
+    var allDone = !running && pending.length === 0;
+    var pct = allDone && taskData.complete ? 100 : allDone ? Math.min(97, Math.round(got / Math.max(total, 1) * 100)) : total > 0 ? Math.min(97, Math.round(got / total * 100)) : 0;
+    tFill.style.width = pct + '%';
+    tBar.setAttribute('aria-valuenow', String(pct));
+    var late = !!running && elapsed > running.max;
+    tIcon.replaceChildren(allDone ? el('span', 'okdot', '✓') : el('span', 'spin'));
+    tMeta.className = '';
+    if (running) {
+      tTitle.textContent = running.title;
+      tMeta.textContent = late ? "Cela prend plus de temps que d'habitude, c'est normal sur certains ordinateurs. Ne fermez pas cette fenêtre." : 'En cours depuis ' + clock(elapsed) + ' · durée habituelle : ' + range(running.min, running.max);
+      if (late) tMeta.className = 'late';
+    } else if (pending.length > 0) {
+      tTitle.textContent = 'Prochaine tâche : ' + pending[0].title;
+      tMeta.textContent = 'Durée habituelle : ' + range(pending[0].min, pending[0].max);
+    } else {
+      var failed = finished.filter(function (t) { return t.state === 'failed'; }).length;
+      var count = counted.length + (counted.length > 1 ? ' tâches' : ' tâche') + (failed ? ' · ' + failed + (failed > 1 ? ' non réussies' : ' non réussie') : '');
+      if (taskData.complete) { tTitle.textContent = 'Intervention terminée'; tMeta.textContent = count; }
+      else { tTitle.textContent = finished[finished.length - 1].title + ' : terminé'; tMeta.textContent = 'La suite dépend de vos réponses · ' + count; }
+    }
+    var left = allDone ? (taskData.complete ? 'Durée totale : ' : 'Durée : ') + fmt(spent) : 'Tâche ' + Math.min(counted.length, finished.length + 1) + ' sur ' + counted.length;
+    var right = allDone ? '' : hi < 60 ? "Il reste moins d'une minute" : 'Reste environ ' + range(lo, hi);
+    tFoot.replaceChildren(el('span', '', left), el('span', '', right));
+    tList.hidden = !detailOpen;
+    if (detailOpen) {
+      tList.replaceChildren();
+      items.forEach(function (t) {
+        var li = el('li', t.state === 'done' ? 'ok' : t.state === 'failed' ? 'ko' : t.state === 'running' ? 'run' : 'wait');
+        var mark = el('span', 'm');
+        if (t.state === 'running') mark.appendChild(el('span', 'spin')); else mark.textContent = t.state === 'done' ? '✓' : t.state === 'failed' ? '✗' : t.state === 'skipped' ? '–' : '○';
+        var when = t.state === 'running' ? clock((now - t.startedAt) / 1000) + ' / ' + range(t.min, t.max) : t.state === 'done' || t.state === 'failed' ? fmt(t.seconds || 0) : t.state === 'skipped' ? 'inutile' : '≈ ' + range(t.min, t.max);
+        li.appendChild(mark); li.appendChild(el('span', 'name', t.title)); li.appendChild(el('span', 'when', when));
+        tList.appendChild(li);
+      });
+    }
+    tToggle.textContent = detailOpen ? 'Masquer le détail' : 'Voir le détail';
+    tToggle.setAttribute('aria-expanded', String(detailOpen));
+  }
+  tToggle.onclick = function () { detailOpen = !detailOpen; renderTasks(); };
+  function setTasks(ev) {
+    taskData = { items: ev.items, offset: ev.now - Date.now(), complete: !!ev.complete };
+    renderTasks();
+    var live = ev.items.some(function (t) { return t.state === 'running'; });
+    if (live && !taskTick) taskTick = setInterval(renderTasks, 1000);
+    if (!live && taskTick) { clearInterval(taskTick); taskTick = null; }
   }
   function bubble(cls, text, who) {
     var welcome = document.getElementById('welcome'); if (welcome) welcome.remove();
@@ -856,7 +1042,10 @@ form button.act { flex:0 0 auto; min-width:170px; }
     });
     box.appendChild(row); controls.replaceChildren(box);
   }
-  var current = null;
+  var current = null, chatEnded = false;
+  /* L'anneau de l'étape en cours tourne tant que l'agent travaille ; il s'arrête quand il attend la réponse du client. */
+  function syncBusy() { document.body.classList.toggle('working', !current && !chatEnded); }
+  syncBusy();
   var es = new EventSource('/events?t=' + encodeURIComponent(token));
   es.onmessage = function (m) {
     var ev = JSON.parse(m.data);
@@ -867,8 +1056,10 @@ form button.act { flex:0 0 auto; min-width:170px; }
     else if (ev.type === 'confirm') { hideTyping(); current = ev.id; showConfirm(ev); }
     else if (ev.type === 'choose') { hideTyping(); current = ev.id; showChoose(ev); }
     else if (ev.type === 'step') setStep(ev.n);
+    else if (ev.type === 'tasks') setTasks(ev);
     else if (ev.type === 'resolved') { if (current === ev.id) { clearControls(); current = null; showTyping(); } }
-    else if (ev.type === 'ended') { hideTyping(); bubble('note', ev.text); clearControls(); setStep(4); es.close(); }
+    else if (ev.type === 'ended') { chatEnded = true; hideTyping(); bubble('note', ev.text); clearControls(); setStep(4); es.close(); }
+    syncBusy();
   };
   document.getElementById('handoff').onclick = function () { post('/handoff'); };
 })();
