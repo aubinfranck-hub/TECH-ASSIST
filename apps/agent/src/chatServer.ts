@@ -305,10 +305,20 @@ const PAGE = `<!doctype html>
 @media (prefers-color-scheme: dark) { :root { --bg:#0e1116; --card:#171b22; --ink:#e8eaed; --muted:#9aa3af; --line:#262c36; --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.3); } }
 * { box-sizing:border-box; }
 html { -webkit-text-size-adjust:100%; }
-body { margin:0; font:15.5px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+body { margin:0; font:16px/1.6 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
 .brand-mark { width:36px; height:36px; flex:none; }
 header { position:sticky; top:0; z-index:5; background:var(--card); border-bottom:1px solid var(--line); box-shadow:var(--shadow); }
 header > div { max-width:760px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:12px; }
+.trust { max-width:760px; margin:0 auto; padding:0 16px 9px; display:flex; gap:2px 14px; flex-wrap:wrap; font-size:.78rem; color:var(--muted); }
+.trust span::before { content:'✓ '; color:var(--ok); font-weight:700; }
+.chips { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+.chips button { background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:8px 14px; font:inherit; font-size:.9rem; cursor:pointer; }
+.chips button:hover { border-color:var(--brand); color:var(--brand); }
+.typing { display:flex; gap:10px; margin:14px 0; align-items:center; color:var(--muted); font-size:.88rem; }
+.typing i { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--muted); margin-right:4px; animation:blink 1.2s infinite ease-in-out; }
+.typing i:nth-child(2) { animation-delay:.2s; } .typing i:nth-child(3) { animation-delay:.4s; }
+@keyframes blink { 0%,80%,100% { opacity:.25; } 40% { opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .typing i { animation:none; opacity:.6; } }
 .title { flex:1; min-width:0; }
 .title h1 { margin:0; font-size:1rem; font-weight:700; letter-spacing:-.01em; }
 .status { display:flex; align-items:center; gap:6px; font-size:.78rem; color:var(--muted); }
@@ -355,11 +365,13 @@ input[type=text]:focus { border-color:var(--brand); }
 <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><rect x="4" y="4" width="112" height="112" rx="28" fill="#dc2626"/><text x="60" y="79" text-anchor="middle" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="58" font-weight="900" letter-spacing="-5">TA</text></svg>
 <div class="title"><h1>Tech Assist</h1><div class="status"><i></i>Votre technicien informatique IA</div></div>
 <button id="handoff" type="button">Parler à un technicien</button>
-</div></header>
+</div>
+<div class="trust"><span>Reste sur votre PC</span><span>Tout est noté</span><span>Vos fichiers protégés</span><span>Arrêt à tout moment</span></div>
+</header>
 <main id="log" aria-live="polite">
 <div class="welcome" id="welcome">
 <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><rect x="4" y="4" width="112" height="112" rx="28" fill="#dc2626"/><text x="60" y="79" text-anchor="middle" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="58" font-weight="900" letter-spacing="-5">TA</text></svg>
-<h2>Bonjour, je suis AI PC</h2><p>Décrivez votre problème : je diagnostique, j'agis avec votre accord, puis je vérifie.</p>
+<h2>Bonjour, je suis AI PC</h2><p>Dites-moi simplement ce qui ne va pas. Je m'occupe du reste : je cherche la cause, je corrige, puis je vérifie.</p>
 </div>
 </main>
 <section id="controls" aria-label="Votre réponse"></section>
@@ -377,6 +389,7 @@ input[type=text]:focus { border-color:var(--brand); }
   }
   function bubble(cls, text) {
     var welcome = document.getElementById('welcome'); if (welcome) welcome.remove();
+    hideTyping();
     if (cls === 'note') { log.appendChild(el('div', 'note', text)); }
     else {
       var row = el('div', 'msg from-' + cls);
@@ -389,6 +402,15 @@ input[type=text]:focus { border-color:var(--brand); }
     return fetch(path + '?t=' + encodeURIComponent(token), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
   }
   function clearControls() { controls.replaceChildren(); }
+  var typingEl = null;
+  function showTyping() {
+    if (typingEl) return;
+    typingEl = el('div', 'typing'); typingEl.appendChild(avatar());
+    var dots = el('span'); dots.appendChild(el('i')); dots.appendChild(el('i')); dots.appendChild(el('i')); typingEl.appendChild(dots);
+    typingEl.appendChild(el('span', '', 'Je travaille dessus…'));
+    log.appendChild(typingEl); window.scrollTo(0, document.body.scrollHeight);
+  }
+  function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
   function reply(id, value) { post('/reply', { id: id, value: value }); }
   /* Réduit la capture (1280 px, JPEG) dans le navigateur, puis l'envoie à l'agent local. */
   function sendImage(f, note) {
@@ -410,6 +432,14 @@ input[type=text]:focus { border-color:var(--brand); }
   }
   function showAsk(ev) {
     var box = el('div'); box.appendChild(el('p', '', ev.text));
+    if (!askedOnce) {
+      askedOnce = true;
+      var chips = el('div', 'chips');
+      ['Mon PC est lent', "Je n'ai pas Internet", 'Mon imprimante ne marche pas', 'Outlook plante', 'Je pense avoir un virus', 'Vérifier tout mon PC'].forEach(function (t) {
+        var c = el('button', '', t); c.type = 'button'; c.onclick = function () { reply(ev.id, t); }; chips.appendChild(c);
+      });
+      box.appendChild(chips);
+    }
     var form = el('form'); var input = el('input'); input.type = 'text'; input.maxLength = 1000; input.autocomplete = 'off'; input.setAttribute('aria-label', ev.text);
     var send = el('button', 'act', 'Envoyer'); send.type = 'submit';
     form.appendChild(input); form.appendChild(send);
@@ -441,16 +471,17 @@ input[type=text]:focus { border-color:var(--brand); }
     box.appendChild(row); controls.replaceChildren(box);
   }
   var current = null;
+  var askedOnce = false;
   var es = new EventSource('/events?t=' + encodeURIComponent(token));
   es.onmessage = function (m) {
     var ev = JSON.parse(m.data);
-    if (ev.type === 'say') bubble('agent', ev.text);
+    if (ev.type === 'say') { bubble('agent', ev.text); showTyping(); }
     else if (ev.type === 'user') bubble('user', ev.text);
-    else if (ev.type === 'ask') { current = ev.id; showAsk(ev); }
-    else if (ev.type === 'confirm') { current = ev.id; showConfirm(ev); }
-    else if (ev.type === 'choose') { current = ev.id; showChoose(ev); }
-    else if (ev.type === 'resolved') { if (current === ev.id) { clearControls(); current = null; } }
-    else if (ev.type === 'ended') { bubble('note', ev.text); clearControls(); es.close(); }
+    else if (ev.type === 'ask') { hideTyping(); current = ev.id; showAsk(ev); }
+    else if (ev.type === 'confirm') { hideTyping(); current = ev.id; showConfirm(ev); }
+    else if (ev.type === 'choose') { hideTyping(); current = ev.id; showChoose(ev); }
+    else if (ev.type === 'resolved') { if (current === ev.id) { clearControls(); current = null; showTyping(); } }
+    else if (ev.type === 'ended') { hideTyping(); bubble('note', ev.text); clearControls(); es.close(); }
   };
   document.getElementById('handoff').onclick = function () { post('/handoff'); };
 })();

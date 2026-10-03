@@ -92,19 +92,29 @@ export async function repairMyPc(ctx: AgentContext, steps: RepairStep[] = REPAIR
   const report = (event: { type: 'diagnosed' | 'action_proposed' | 'action_approved' | 'action_declined' | 'action_done' | 'action_failed' | 'verified' | 'escalated' | 'user_request'; action?: string; message?: string; details?: Record<string, unknown> }) =>
     safeReport(ctx.reporter, { ...event, skill: 'repair-pc', message: truncate(event.message) });
 
-  ctx.ui.info('Je commence par analyser votre ordinateur, sans rien modifier.');
+  ctx.ui.info(ctx.friendly ? "Je regarde l'état de votre ordinateur. Rien n'est modifié pour l'instant, cela prend une à deux minutes." : 'Je commence par analyser votre ordinateur, sans rien modifier.');
   const before = await scanPc(ctx.runner, steps);
   const count = (s: Severity) => before.filter((f) => f.severity === s).length;
   const fixable = before.filter((f) => f.severity === 'fixable');
   const critical = before.filter((f) => f.severity === 'critical');
   const issues = fixable.length + critical.length;
 
-  ctx.ui.info(
-    issues === 0
-      ? `Diagnostic : aucun problème à corriger.\n${formatFindings(before)}`
-      : `Diagnostic : ${plural(issues, 'problème détecté', 'problèmes détectés')}. ${plural(fixable.length, 'peut être corrigé', 'peuvent être corrigés')} automatiquement, ${plural(critical.length, 'nécessite', 'nécessitent')} un technicien.\n${formatFindings(before)}`,
-  );
-  for (const f of before) for (const line of f.advice) ctx.ui.info(`${f.label} : ${line}`);
+  if (ctx.friendly) {
+    const toFix = [...critical, ...fixable];
+    ctx.ui.info(
+      issues === 0
+        ? 'Bonne nouvelle : je ne vois aucun problème à corriger sur votre ordinateur.'
+        : `J'ai trouvé ${plural(issues, 'point à corriger', 'points à corriger')} :\n${toFix.map((f) => `• ${f.label} : ${f.summary.split('\n')[0]}`).join('\n')}\nTout le reste est en bon état.`,
+    );
+    for (const f of toFix) for (const line of f.advice) ctx.ui.info(`${f.label} : ${line}`);
+  } else {
+    ctx.ui.info(
+      issues === 0
+        ? `Diagnostic : aucun problème à corriger.\n${formatFindings(before)}`
+        : `Diagnostic : ${plural(issues, 'problème détecté', 'problèmes détectés')}. ${plural(fixable.length, 'peut être corrigé', 'peuvent être corrigés')} automatiquement, ${plural(critical.length, 'nécessite', 'nécessitent')} un technicien.\n${formatFindings(before)}`,
+    );
+    for (const f of before) for (const line of f.advice) ctx.ui.info(`${f.label} : ${line}`);
+  }
   await report({ type: 'diagnosed', message: `${issues} problème(s) : ${fixable.length} corrigeable(s), ${critical.length} pour un technicien, ${count('watch')} à surveiller`, details: { fixable: fixable.map((f) => f.id), critical: critical.map((f) => f.id) } });
 
   if (issues === 0) return { status: 'nothing_to_fix', findings: before };

@@ -161,3 +161,9 @@ Au lancement sous Windows, si l'agent n'est pas administrateur, il se relance un
 ## Veille et verrouillage
 
 Compétence `power` (lecture seule) : Ctrl+Alt+Suppr exigé à la connexion, délais de veille, dernier réveil. Le réglage de verrouillage est un réglage de sécurité : l'agent l'explique mais ne le modifie pas.
+
+## Accord unique et mode guidé
+
+Le programme lance la conversation en mode `autonomous` : un seul accord au début (texte `CONSENT_TEXT` dans `src/consent.ts`) couvre l'analyse et les réparations de la session ; l'agent annonce ce qu'il fait (« ▶ … »), crée un point de restauration avant les changements délicats et journalise tout, mais ne redemande plus à chaque correction. Seul le **redémarrage** reste soumis au client (travail non enregistré), ainsi que les questions « est-ce réglé ? ». Si le client refuse l'accord global, les confirmations par action reviennent. Forfait Diagnostic : aucun accord à demander, rien n'est modifié. Une demande floue lance l'analyse complète au lieu d'un menu ; plusieurs pistes (ex. son + Bluetooth) sont traitées à la suite.
+
+Décision : l'agent ne crée **jamais** de compte utilisateur ni de session cachée sur le PC du client. Les droits administrateur s'obtiennent par la fenêtre de Windows (voir « Droits administrateur »).

@@ -1,5 +1,6 @@
 import { runSkill, type Outcome } from './agent.js';
 import type { Assistant, ChatTurn } from './assistant.js';
+import { CONSENT_NO, CONSENT_TEXT, CONSENT_YES, withStandingConsent } from './consent.js';
 import { repairMyPc } from './repairPc.js';
 import { routeIntent, type HumanOnlyTopic, type Intent } from './router.js';
 import { SKILL_MENU, resolveSkill } from './skills/index.js';
@@ -26,6 +27,11 @@ export interface ConversationDeps {
   /** Rattachement à une entreprise ; absent si le client n'est pas connecté à son compte. */
   /** Portée du forfait payé : diagnostic (lecture seule), fix (un problème précis), full (tout). Absent = tout. */
   scope?: 'diagnostic' | 'fix' | 'full';
+  /**
+   * Mode guidé pour le grand public : un seul accord au début couvre les réparations (plus de « autoriser ? » à chaque étape),
+   * une demande floue lance l'analyse complète au lieu d'un menu, et plusieurs pistes sont traitées à la suite sans question.
+   */
+  autonomous?: boolean;
   company?: { join(code: string, deviceName: string): Promise<{ ok: true; companyName: string } | { ok: false; error: string }> };
 }
 
@@ -67,7 +73,8 @@ function truncate(text: string, max: number): string {
  * main à un technicien quand il le faut ou quand le client le demande.
  */
 export async function converse(deps: ConversationDeps): Promise<ConversationResult> {
-  const { runner, ui, reporter } = deps;
+  const { runner, reporter } = deps;
+  let ui = deps.ui;
   const resolve = deps.resolve ?? resolveSkill;
   const history: ChatTurn[] = [];
   const outcomes: Outcome[] = [];
@@ -95,6 +102,17 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   };
 
   ui.info(GREETING);
+  // Accord unique : sauf forfait « diagnostic » (rien n'est modifié), le client autorise une fois pour toute la session.
+  if (deps.autonomous && deps.scope !== 'diagnostic') {
+    ui.info(CONSENT_TEXT);
+    const pick = await ui.choose('Êtes-vous d’accord ?', [CONSENT_YES, CONSENT_NO]);
+    if (pick === 0) {
+      ui = withStandingConsent(ui);
+      await log({ type: 'action_approved', message: 'Accord unique du client pour la session (analyse et réparations)' });
+    } else if (pick === 1) {
+      ui.info("Pas de problème : je vous demanderai votre accord avant chaque modification.");
+    }
+  }
   let first = true;
   while (!handedOver) {
     const text = await ui.ask(first ? 'Que puis-je faire pour vous ?' : 'Autre chose ? (écrivez « non » pour terminer)');
@@ -114,6 +132,17 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     }
 
     // Plusieurs pistes (ex. « casque Bluetooth ») : le client tranche, on traite l'autre ensuite s'il le demande.
+    if (intents.length > 1 && deps.autonomous) {
+      // Pas de question au client : si ce sont toutes des compétences, on les traite à la suite ; sinon la première piste.
+      if (intents.every((i) => i.kind === 'skill')) {
+        for (const i of intents.slice(0, 3)) {
+          const sk = resolve((i as { skillId: string }).skillId);
+          if (sk && !handedOver) outcomes.push(await runAndNote(sk));
+        }
+        continue;
+      }
+      intents = [intents[0]!];
+    }
     if (intents.length > 1) {
       const labels = intents.map(describe);
       const pick = await ui.choose('Je peux traiter plusieurs choses. Par laquelle commencer ?', labels);
@@ -123,7 +152,12 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     const intent = intents[0];
 
     if (!intent) {
-      await handleUnclear();
+      if (deps.autonomous) {
+        ui.info("Je n'ai pas tout saisi, mais pas d'inquiétude : je regarde l'état complet de votre ordinateur pour trouver la cause.");
+        await handleRepair();
+      } else {
+        await handleUnclear();
+      }
       continue;
     }
 
@@ -178,7 +212,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
   }
 
   async function runAndNote(skill: Skill): Promise<Outcome> {
-    const outcome = await runSkill(skill, { runner, ui, reporter, machine: deps.machine, readOnly: deps.scope === 'diagnostic' });
+    const outcome = await runSkill(skill, { runner, ui, reporter, machine: deps.machine, readOnly: deps.scope === 'diagnostic', friendly: deps.autonomous });
     // Si le serveur n'a pas enregistré la demande, la conversation continue : le client peut réessayer ou utiliser le bouton.
     if (outcome.status === 'escalated' && outcome.recorded) handedOver = true;
     else if (outcome.status === 'fixed') ui.info('Parfait, c\'est réglé.');
@@ -241,7 +275,7 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
       ui.info("L'analyse et la réparation complète du PC font partie du forfait Intervention complète (5 000 FCFA). Avec votre forfait Dépannage, décrivez un problème précis (Internet, imprimante, Outlook, lenteur…).");
       return;
     }
-    const out = await repairMyPc({ runner, ui, reporter, machine: deps.machine });
+    const out = await repairMyPc({ runner, ui, reporter, machine: deps.machine, friendly: deps.autonomous });
     if (out.status === 'repaired' || out.status === 'partial') {
       if (out.escalated) handedOver = true;
       else if (out.status === 'repaired' && out.reboot !== 'accepted') ui.info("Parfait, votre ordinateur est en bon état.");

@@ -149,7 +149,7 @@ async function main() {
   chat.onHandoff = () => {
     conversationReporter.event({ type: 'escalated', skill: 'conversation', message: 'Le client demande un technicien' }).catch(() => undefined);
   };
-  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps, scope: conversationScope });
+  const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, machine, company: companyDeps, scope: conversationScope, autonomous: true });
   await new Promise((r) => setTimeout(r, 1500)); // laisse la page afficher le dernier message
   await chat.close();
   console.log(`Conversation terminée (${result.turns} demande(s)${result.handedOver ? ', technicien demandé' : ''}).`);

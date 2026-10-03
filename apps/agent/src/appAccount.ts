@@ -127,7 +127,7 @@ export class AppApi {
   requestCode(email: string) {
     return this.call<{ sent: boolean; verification?: boolean }>('/app/email-code', { email });
   }
-  register(input: { installId: string; email: string; code?: string; phone: string; name?: string; hardwareHash?: string }) {
+  register(input: { installId: string; email: string; code?: string; phone?: string; name?: string; hardwareHash?: string }) {
     return this.call<{ token: string; entitlements: Entitlements }>('/app/register', { platform: 'windows', ...input });
   }
   me(token: string) {
@@ -235,14 +235,17 @@ export async function signIn(deps: AccountDeps): Promise<{ token: string; entitl
   }
   if (verification) ui.info(`Un code à 6 chiffres vient d'être envoyé à ${email}. Pensez à regarder les courriers indésirables.`);
 
-  const phoneAnswer = await askValid(
-    ui,
-    'Votre numéro de téléphone (pour que nous puissions vous joindre) :',
-    (v) => PHONE.test(v.replace(/[\s.-]/g, '')),
-    'Numéro invalide : 8 à 15 chiffres, avec ou sans +.',
-  );
-  if (!phoneAnswer) return null;
-  const phone = phoneAnswer.replace(/[\s.-]/g, '');
+  let phone: string | undefined;
+  if (verification) {
+    const phoneAnswer = await askValid(
+      ui,
+      'Votre numéro de téléphone (pour que nous puissions vous joindre) :',
+      (v) => PHONE.test(v.replace(/[\s.-]/g, '')),
+      'Numéro invalide : 8 à 15 chiffres, avec ou sans +.',
+    );
+    if (!phoneAnswer) return null;
+    phone = phoneAnswer.replace(/[\s.-]/g, '');
+  }
 
   if (!verification) {
     try {

@@ -25,12 +25,37 @@ export function extractJson(stdout: string): Record<string, unknown> {
   return JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
 }
 
+/** Les erreurs de PowerShell arrivent parfois en XML (« #< CLIXML ») : on n'en garde que le texte lisible, et on traduit les refus de droits. */
+export function cleanErrorMessage(raw: string): string {
+  let text = raw.replace(/^\s*#<\s*CLIXML\s*/i, '');
+  const xmlAt = text.search(/<Objs\b/i);
+  const before = xmlAt >= 0 ? text.slice(0, xmlAt) : text;
+  let readable = before.trim();
+  if (!readable && xmlAt >= 0) {
+    readable = [...text.matchAll(/<S S="Error">([\s\S]*?)<\/S>/gi)].map((m) => m[1]).join(' ');
+  }
+  readable = readable
+    .replace(/_x000D_|_x000A_/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (/impossible d.ouvrir le service|acc[eè]s (est )?refus|access is denied|cannot open .* service|requires elevation|[ée]l[ée]vation/i.test(readable)) {
+    return "Windows a refusé cette opération : elle demande les droits administrateur.";
+  }
+  return readable || 'Erreur inconnue';
+}
+
 /** Exécute un script d'action ; ne lève jamais : renvoie un résultat lisible. */
 export async function runScript(runner: CommandRunner, script: string, timeoutMs = 60_000): Promise<ActionResult> {
   try {
     const res = await runner.runPowerShell(script, { timeoutMs });
     if (res.exitCode === 0) return { ok: true, message: res.stdout.trim() || 'OK' };
-    return { ok: false, message: res.stderr.trim() || `Échec (code ${res.exitCode})` };
+    return { ok: false, message: cleanErrorMessage(res.stderr) === 'Erreur inconnue' ? `Échec (code ${res.exitCode})` : cleanErrorMessage(res.stderr) };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
   }

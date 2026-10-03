@@ -1,4 +1,5 @@
 import { formatReport, type InterventionReport, type ReportAction, type ReportStatus } from './report.js';
+import { cleanErrorMessage } from './skills/common.js';
 import { confirmOnly, rebootAction } from './skills/safety.js';
 import type { Action, ActionResult, AgentEvent, CommandRunner, Diagnosis, Reporter, Skill, Ui } from './types.js';
 
@@ -33,6 +34,8 @@ export interface AgentContext {
   deferReboot?: boolean;
   /** Forfait « diagnostic » : on analyse et on explique, on ne modifie rien. */
   readOnly?: boolean;
+  /** Mode grand public : messages simples, sans détails techniques bruts. */
+  friendly?: boolean;
 }
 
 /** Ce que l'agent a constaté et fait, pour le rapport d'intervention. */
@@ -167,7 +170,9 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
           report,
           done,
           `Échec de l'action « ${action.id} » : ${result.message}`,
-          `Je n'ai pas réussi : ${truncate(result.message, 200)}`,
+          ctx.friendly
+            ? `Je n'ai pas réussi à faire « ${action.title} ». ${truncate(cleanErrorMessage(result.message), 200)}`
+            : `Je n'ai pas réussi : ${truncate(result.message, 200)}`,
         );
       }
     }
@@ -224,7 +229,7 @@ export async function runAction(action: Action, runner: CommandRunner): Promise<
   try {
     return await action.run(runner);
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    return { ok: false, message: cleanErrorMessage(err instanceof Error ? err.message : String(err)) };
   }
 }
 

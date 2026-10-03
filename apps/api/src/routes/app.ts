@@ -126,7 +126,7 @@ const registerSchema = z.object({
   platform: z.enum(['windows', 'android']),
   email: emailField,
   code: z.string().regex(/^[0-9]{6}$/, 'Le code comporte 6 chiffres').optional(),
-  phone: phoneSchema,
+  phone: phoneSchema.optional(), // facultatif : l'email suffit pour commencer
   name: z.string().max(120).optional(),
   hardwareHash: z.string().min(16).max(200).optional(),
 });
@@ -169,7 +169,7 @@ appRouter.post('/app/register', limiter, validateBody(registerSchema), async (re
            last_seen_at = now()
        WHERE app_installs.client_email = EXCLUDED.client_email
      RETURNING id, platform, hardware_hash`,
-    [body.installId, body.platform, body.hardwareHash ?? null, email, body.phone, body.name ?? null],
+    [body.installId, body.platform, body.hardwareHash ?? null, email, body.phone ?? '', body.name ?? null],
   );
   const install = rows[0];
   if (!install) {
