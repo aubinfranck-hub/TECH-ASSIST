@@ -580,6 +580,38 @@ describe('Application : inscription par email, assistance offerte en base, abonn
   });
 
 
+  describe('inscription sans code (EMAIL_VERIFICATION=off)', () => {
+    it("enregistre l'email tel que saisi, sans envoi de code", async () => {
+      process.env.EMAIL_VERIFICATION = 'off';
+      try {
+        testOutbox.length = 0;
+        const ask = await request(app).post('/api/app/email-code').send({ email: 'sans-code@example.com' });
+        expect(ask.status).toBe(200);
+        expect(ask.body.verification).toBe(false);
+        expect(testOutbox).toHaveLength(0);
+        const res = await request(app).post('/api/app/register').send({
+          installId: nextInstall(),
+          platform: 'windows',
+          email: 'sans-code@example.com',
+          phone: '+2250700002222',
+        });
+        expect(res.status).toBe(201);
+        expect(res.body.token).toBeTruthy();
+      } finally {
+        delete process.env.EMAIL_VERIFICATION;
+      }
+    });
+    it('exige toujours le code quand la vérification est active', async () => {
+      const res = await request(app).post('/api/app/register').send({
+        installId: nextInstall(),
+        platform: 'windows',
+        email: 'avec-code@example.com',
+        phone: '+2250700003333',
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('lancement gratuit (FREE_LAUNCH)', () => {
     it("offre chaque assistance sans consommer l'offre", async () => {
       process.env.FREE_LAUNCH = 'true';

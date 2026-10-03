@@ -125,9 +125,9 @@ export class AppApi {
   }
 
   requestCode(email: string) {
-    return this.call<{ sent: boolean }>('/app/email-code', { email });
+    return this.call<{ sent: boolean; verification?: boolean }>('/app/email-code', { email });
   }
-  register(input: { installId: string; email: string; code: string; phone: string; name?: string; hardwareHash?: string }) {
+  register(input: { installId: string; email: string; code?: string; phone: string; name?: string; hardwareHash?: string }) {
     return this.call<{ token: string; entitlements: Entitlements }>('/app/register', { platform: 'windows', ...input });
   }
   me(token: string) {
@@ -220,19 +220,20 @@ export async function signIn(deps: AccountDeps): Promise<{ token: string; entitl
     }
   }
 
-  ui.info("Pour commencer, je dois vérifier votre adresse email (c'est ce qui vous donne droit à votre assistance offerte).");
+  ui.info("Pour commencer, j'ai besoin de votre adresse email (c'est ce qui vous donne droit à votre assistance offerte).");
   const email = (
     await askValid(ui, 'Quelle est votre adresse email ?', (v) => EMAIL.test(v), "Cette adresse n'a pas l'air valide. Exemple : nom@exemple.com")
   )?.toLowerCase();
   if (!email) return null;
 
+  let verification = true;
   try {
-    await api.requestCode(email);
+    verification = (await api.requestCode(email)).verification !== false;
   } catch (err) {
     ui.info(err instanceof Error ? err.message : "Impossible d'envoyer le code.");
     return null;
   }
-  ui.info(`Un code à 6 chiffres vient d'être envoyé à ${email}. Pensez à regarder les courriers indésirables.`);
+  if (verification) ui.info(`Un code à 6 chiffres vient d'être envoyé à ${email}. Pensez à regarder les courriers indésirables.`);
 
   const phoneAnswer = await askValid(
     ui,
@@ -242,6 +243,17 @@ export async function signIn(deps: AccountDeps): Promise<{ token: string; entitl
   );
   if (!phoneAnswer) return null;
   const phone = phoneAnswer.replace(/[\s.-]/g, '');
+
+  if (!verification) {
+    try {
+      const result = await api.register({ installId: saved.installId, email, phone, hardwareHash: deps.hardwareHash });
+      store.save({ installId: saved.installId, token: result.token, email });
+      return { token: result.token, entitlements: result.entitlements };
+    } catch (err) {
+      ui.info(err instanceof Error ? err.message : 'Inscription impossible.');
+      return null;
+    }
+  }
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = await askValid(ui, 'Entrez le code reçu par email :', (v) => CODE.test(v), 'Le code comporte 6 chiffres.');

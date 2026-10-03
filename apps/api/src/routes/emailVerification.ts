@@ -38,6 +38,11 @@ function cooldownSeconds(): number {
   return Number.isFinite(value) ? value : 60;
 }
 
+/** EMAIL_VERIFICATION=off : l'adresse est enregistrée telle que saisie, sans code envoyé par email (lancement gratuit). */
+export function emailVerificationEnabled(): boolean {
+  return (process.env.EMAIL_VERIFICATION ?? 'on').toLowerCase() !== 'off';
+}
+
 export const emailField = z.string().trim().toLowerCase().email('Adresse email invalide').max(254);
 
 export type ConsumeCodeResult = 'ok' | 'invalid' | 'too_many_attempts';
@@ -88,6 +93,7 @@ emailVerificationRouter.post('/app/email-code', limiter, validateBody(requestSch
   if (isDisposableEmail(email)) {
     return res.status(400).json({ error: 'Utilisez une adresse email personnelle ou professionnelle.' });
   }
+  if (!emailVerificationEnabled()) return res.json({ sent: false, verification: false });
 
   const recent = await pool.query(
     `SELECT count(*)::int AS total, max(created_at) AS last

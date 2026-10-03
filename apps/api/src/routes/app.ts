@@ -7,7 +7,7 @@ import { requireAppInstall, signAppToken } from '../middleware/appAuth.js';
 import { validateBody } from '../middleware/validate.js';
 import { logAudit, type Db } from '../utils/audit.js';
 import { isDisposableEmail, normalizeEmail } from '../utils/email.js';
-import { consumeEmailCode, emailField } from './emailVerification.js';
+import { consumeEmailCode, emailField, emailVerificationEnabled } from './emailVerification.js';
 import {
   AssistantUnavailableError,
   MAX_HISTORY_TURNS,
@@ -125,7 +125,7 @@ const registerSchema = z.object({
   installId: z.string().min(16).max(100),
   platform: z.enum(['windows', 'android']),
   email: emailField,
-  code: z.string().regex(/^[0-9]{6}$/, 'Le code comporte 6 chiffres'),
+  code: z.string().regex(/^[0-9]{6}$/, 'Le code comporte 6 chiffres').optional(),
   phone: phoneSchema,
   name: z.string().max(120).optional(),
   hardwareHash: z.string().min(16).max(200).optional(),
@@ -147,12 +147,15 @@ appRouter.post('/app/register', limiter, validateBody(registerSchema), async (re
     return res.status(409).json({ error: 'Cette installation est déjà enregistrée avec une autre adresse email.' });
   }
 
-  const verdict = await consumeEmailCode(email, body.code);
-  if (verdict === 'too_many_attempts') {
-    return res.status(429).json({ error: "Trop d'essais. Demandez un nouveau code." });
-  }
-  if (verdict !== 'ok') {
-    return res.status(400).json({ error: 'Code invalide ou expiré.' });
+  if (emailVerificationEnabled()) {
+    if (!body.code) return res.status(400).json({ error: 'Le code reçu par email est nécessaire.' });
+    const verdict = await consumeEmailCode(email, body.code);
+    if (verdict === 'too_many_attempts') {
+      return res.status(429).json({ error: "Trop d'essais. Demandez un nouveau code." });
+    }
+    if (verdict !== 'ok') {
+      return res.status(400).json({ error: 'Code invalide ou expiré.' });
+    }
   }
 
   const { rows } = await pool.query(
