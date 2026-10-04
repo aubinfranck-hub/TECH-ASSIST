@@ -127,20 +127,16 @@ export function diagnosePower(facts: PowerFacts): Diagnosis {
   }
 
   // Écran qui ne se réveille pas / Ctrl+Alt+Suppr nécessaire : causes les plus fréquentes, de la plus probable à la moins probable.
-  let wakeSuspect = false;
   if (facts.displayDriverResets !== null && facts.displayDriverResets > 0) {
-    wakeSuspect = true;
     problems.push('display_driver_resets');
     parts.push(`le pilote de la carte graphique${facts.gpuName ? ` (${facts.gpuName})` : ''} a planté ${facts.displayDriverResets} fois ces 14 derniers jours`);
     advice.push("C'est la cause la plus probable d'un écran qui ne se réveille pas : le pilote de la carte graphique doit être mis à jour (ou réinstallé) depuis le site du fabricant de l'ordinateur ou de la carte. Un technicien peut le faire avec vous.");
   } else if (facts.gpuDriverAgeDays !== null && facts.gpuDriverAgeDays > 730) {
-    wakeSuspect = true;
     problems.push('old_gpu_driver');
     parts.push(`le pilote de la carte graphique${facts.gpuName ? ` (${facts.gpuName})` : ''} date de plus de ${Math.floor(facts.gpuDriverAgeDays / 365)} ans`);
     advice.push('Un pilote graphique ancien provoque souvent des réveils ratés : une mise à jour est recommandée.');
   }
   if (facts.fastStartup) {
-    wakeSuspect = true;
     problems.push('fast_startup');
     parts.push('le démarrage rapide de Windows est activé');
     actions.push(disableFastStartup());
@@ -153,7 +149,7 @@ export function diagnosePower(facts: PowerFacts): Diagnosis {
   const summary = parts.length
     ? `${parts.join(' ; ')}.`.replace(/^./, (c) => c.toUpperCase())
     : "Réglages de veille lus ; rien d'anormal dans les réglages. Si l'écran ne se réveille pas, la cause est le plus souvent le pilote de la carte graphique : un technicien peut le vérifier avec vous.";
-  return { summary, problems, actions, advice, healthy: true, needsHuman: (problems.includes('ctrl_alt_del_required') && facts.domainJoined !== true) || wakeSuspect };
+  return { summary, problems, actions, advice, healthy: problems.length === 0, needsHuman: problems.includes('ctrl_alt_del_required') && facts.domainJoined !== true };
 }
 
 export function powerSkill(): Skill {

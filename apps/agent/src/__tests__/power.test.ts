@@ -11,7 +11,8 @@ describe('veille : réveil qui échoue', () => {
     const d = diagnosePower({ ...base, displayDriverResets: 3, gpuName: 'Intel(R) UHD Graphics' });
     expect(d.problems).toContain('display_driver_resets');
     expect(d.summary).toContain('3 fois');
-    expect(d.needsHuman).toBe(true);
+    expect(d.healthy).toBe(false);
+    expect(d.needsHuman).toBe(false); // l'IA puis le technicien viennent après les vérifications, pas à la place
   });
   it('démarrage rapide activé : conseil précis', () => {
     const d = diagnosePower({ ...base, fastStartup: true });
