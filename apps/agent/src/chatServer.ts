@@ -478,7 +478,12 @@ export class ChatUi implements ConversationUi {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Security-Policy': `default-src 'none'; img-src 'self'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       });
-      res.end(PAGE.replaceAll('__NONCE__', nonce));
+      res.end(PAGE.replaceAll('__NONCE__', nonce).replaceAll('__TOKEN__', encodeURIComponent(this.token)));
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/icon.svg') {
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'private, max-age=86400' }).end(ICON_SVG);
       return;
     }
 
@@ -573,12 +578,16 @@ export class ChatUi implements ConversationUi {
 
 /* Page de l'assistant. Identité visuelle commune à toute l'application : fenêtre en deux parties (photo de l'équipe et
    engagements à gauche, étapes et conversation à droite). Aucune ressource externe : les images du site sont relayées par l'agent. */
+/** Icône de l'onglet (même logo « TA » rouge que le site). */
+const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect x="4" y="4" width="112" height="112" rx="28" fill="#dc2626"/><text x="60" y="79" text-anchor="middle" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="58" font-weight="900" letter-spacing="-5">TA</text></svg>`;
+
 const PAGE = `<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tech Assist — votre technicien informatique</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg?t=__TOKEN__">
 <style nonce="__NONCE__">
 :root { --brand:#dc2626; --brand-dark:#b91c1c; --navy:#0b1326; --bg:#f3f5f9; --card:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --ok:#15803d; --no:#b91c1c; --shadow:0 1px 2px rgba(15,23,42,.06),0 8px 24px rgba(15,23,42,.07); }
 * { box-sizing:border-box; }

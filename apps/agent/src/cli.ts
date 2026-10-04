@@ -14,7 +14,8 @@ import { relayWithTechnician } from './humanRelay.js';
 import { isAdmin, launchElevated, relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
-import { checkForUpdate, cleanupOldVersion } from './selfUpdate.js';
+import { AGENT_VERSION, checkForUpdate, cleanupOldVersion } from './selfUpdate.js';
+import { installShortcuts } from './shortcuts.js';
 import { ProgressSync } from './progressSync.js';
 import { CompositeReporter, ConsoleReporter, HttpReporter } from './reporters.js';
 import { resolveSkill, SKILL_MENU } from './skills/index.js';
@@ -72,6 +73,9 @@ async function main() {
   await cleanupOldVersion();
   const update = await checkForUpdate().catch(() => ({ status: 'skipped' as const, reason: 'erreur' }));
   if (update.status === 'restarting') process.exit(0);
+
+  // Raccourci « Tech Assist » (Bureau + menu Démarrer) au premier lancement, avant l'élévation : le Bureau est celui de l'utilisateur.
+  await installShortcuts({ version: AGENT_VERSION }).catch(() => undefined);
 
   // Les réparations exigent les droits administrateur : on les demande une fois (fenêtre de Windows).
   if (await relaunchAsAdminIfNeeded(process.argv)) process.exit(0);
