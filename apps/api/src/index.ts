@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createApp } from './app.js';
 import { expireOverdueSessions } from './utils/sessionClock.js';
+import { ensureOwnerAccount } from './utils/ownerAccount.js';
 
 const jwtSecret = process.env.JWT_SECRET ?? '';
 if (process.env.NODE_ENV === 'production' && (jwtSecret.length < 24 || /change-me|secret|password/i.test(jwtSecret))) {
@@ -13,6 +14,10 @@ const app = createApp();
 app.listen(port, () => {
   console.log(`Tech Assist API à l'écoute sur le port ${port}`);
 });
+
+ensureOwnerAccount()
+  .then((r) => r !== 'skipped' && console.log(`[compte] compte propriétaire ${r === 'created' ? 'créé' : 'mis à jour'}`))
+  .catch((err) => console.error('[compte] compte propriétaire en échec', err));
 
 // Fin des minutes du forfait : les assistances dépassées sont terminées côté serveur, même sans requête du client.
 setInterval(() => {
