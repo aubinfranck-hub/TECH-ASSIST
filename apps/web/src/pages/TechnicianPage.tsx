@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ActiveSessionCard, type MySession } from '../components/ActiveSessionCard.js';
+import { PannesSearch } from '../components/PannesSearch.js';
 import { TechnicianAlerts } from '../components/TechnicianAlerts.js';
 import { TechnicianEarningsCard } from '../components/TechnicianEarnings.js';
 import { TechnicianLoginForm } from '../components/TechnicianLoginForm.js';
@@ -220,6 +221,11 @@ export function TechnicianPage() {
           </ul>
         </section>
       )}
+
+      <section aria-label="Base de pannes">
+        <h2 className="mb-3 font-semibold">Base de pannes</h2>
+        <PannesSearch />
+      </section>
 
       <section aria-label="Mes gains">
         <h2 className="mb-3 font-semibold">Mes gains</h2>

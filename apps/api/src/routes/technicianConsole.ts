@@ -7,6 +7,7 @@ import { pushPublicKey, sendPush } from '../notify/push.js';
 import { balanceFor, creditEarningSafely } from '../partners/earnings.js';
 import { logAudit } from '../utils/audit.js';
 import { progressView } from '../utils/taskProgress.js';
+import { searchPannes } from '../assistant/pannes.js';
 
 /**
  * Console du technicien (téléphone ou ordinateur) : permanence et alertes, détail d'une demande avec ce que l'agent a
@@ -19,6 +20,20 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const firstName = (full: string | null | undefined) => (full ? full.trim().split(/\s+/)[0] ?? null : null);
 
 // --- Permanence et alertes ---
+
+/** Base de pannes (≈400 fiches cause/solution) : recherche par mots pour le technicien, depuis son téléphone. */
+technicianConsoleRouter.get('/technician/pannes', (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 200) : '';
+  const hits = searchPannes(q, 8, 2).map((h) => ({
+    id: h.panne.id,
+    category: h.panne.category,
+    title: h.panne.title,
+    cause: h.panne.cause || h.panne.symptom,
+    solution: h.panne.solution,
+    advanced: h.panne.advanced,
+  }));
+  res.json({ results: hits });
+});
 
 technicianConsoleRouter.get('/technician/alerts', async (req, res) => {
   const me = (await pool.query('SELECT full_name, on_duty, alert_email FROM technicians WHERE id = $1', [req.auth!.sub])).rows[0];

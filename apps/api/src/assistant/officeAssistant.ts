@@ -19,6 +19,7 @@ export const MAX_TURN_CHARS = 1500;
 export const MAX_ANSWER_CHARS = 3000;
 
 import { lessonInstruction, type TrainingStep, type TrainingTrack } from './trainingCatalog.js';
+import { referenceFor } from './pannes.js';
 
 const DEFAULT_MODEL = 'gemini-2.0-flash';
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -150,7 +151,8 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
               text:
                 (options.platform === 'android' ? PHONE_SYSTEM_PROMPT : SYSTEM_PROMPT) +
                 (options.lesson ? lessonInstruction(options.lesson.track, options.lesson.level, options.lesson.step, options.lesson.index) : '') +
-                (options.image ? IMAGE_RULES : ''),
+                (options.image ? IMAGE_RULES : '') +
+                (options.platform !== 'android' && !options.lesson ? referenceFor(message) : ''),
             },
           ],
         },
