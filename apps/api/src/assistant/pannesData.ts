@@ -1,5 +1,5 @@
 /**
- * Base de pannes PC, Windows et Office (≈400 fiches : cause + solution d'atelier), issue du répertoire de Franck.
+ * Base de pannes PC, Windows et Office (≈480 fiches : cause + solution d'atelier), issue du répertoire de Franck.
  * `advanced` : la solution touche au matériel, au BIOS ou au registre — réservée à un technicien, jamais dictée à un client.
  */
 export interface Panne {
@@ -576,12 +576,12 @@ export const PANNES: Panne[] = [
  },
  {
   "id": 57,
-  "domain": "Pannes PC et Windows",
-  "category": "Stockage, Disques durs & SSD",
-  "title": "BitLocker demande la clé de récupération à chaque démarrage",
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Demande de clé de récupération BitLocker à chaque amorçage",
   "symptom": "",
-  "cause": "Module TPM désynchronisé, modification matérielle ou mise à jour BIOS.",
-  "solution": "Saisir la clé de récupération, puis suspendre et réactiver BitLocker dans le Panneau de configuration pour rafraîchir les mesures PCR.",
+  "cause": "Registres de configuration de plateforme (PCR) modifiés sans suspension préalable de la protection.",
+  "solution": "Suspendre puis réactiver le chiffrement pour rafraîchir l'association TPM : manage-bde -protectors -disable C: manage-bde -protectors -enable C:",
   "advanced": true
  },
  {
@@ -976,12 +976,12 @@ export const PANNES: Panne[] = [
  },
  {
   "id": 97,
-  "domain": "Pannes PC et Windows",
-  "category": "Système d'exploitation, Mises à jour & Logiciels",
-  "title": "Session utilisateur Windows temporaire (« Vous avez été connecté avec un profil temporaire »)",
+  "domain": "Windows et Office",
+  "category": "Système Windows : Démarrage, Fichiers & Shell",
+  "title": "Windows affiche « Vous avez été connecté avec un profil temporaire »",
   "symptom": "",
-  "cause": "Profil utilisateur corrompu dans la base de registre suite à une mauvaise fermeture de session.",
-  "solution": "Aller dans HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList, supprimer la clé contenant .bak et restaurer le chemin correct du profil.",
+  "cause": "Échec de lecture du fichier NTUSER.DAT utilisateur, profil basculé sous extension .bak.",
+  "solution": "Ouvrir regedit, aller dans HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList, localiser le dossier avec .bak, retirer l'extension .bak et vérifier le chemin correct dans ProfileImagePath.",
   "advanced": true
  },
  {
@@ -3020,8 +3020,8 @@ export const PANNES: Panne[] = [
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Outlook bloqué sur « Traitement en cours... » ou « Démarrage en cours... »",
   "symptom": "",
-  "cause": "Profil de messagerie corrompu ou complément tiers (add-in) qui ne répond pas.",
-  "solution": "Lancer Outlook en mode sans échec (Win + R puis outlook.exe /safe), aller dans Options > Compléments > Compléments COM et désactiver les modules tiers.",
+  "cause": "Profil de messagerie corrompu ou complément COM tiers instable au chargement.",
+  "solution": "Lancer Outlook en mode sans échec (Win + R puis outlook.exe /safe), ouvrir Fichier > Options > Compléments, sélectionner Compléments COM puis désactiver les modules non Microsoft.",
   "advanced": true
  },
  {
@@ -3030,18 +3030,18 @@ export const PANNES: Panne[] = [
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Fichier de données Outlook (.PST ou .OST) corrompu",
   "symptom": "",
-  "cause": "Fermeture brutale du PC pendant la synchronisation d'un dossier.",
-  "solution": "Exécuter l'utilitaire de réparation intégré scanpst.exe (situé dans C:\\Program Files\\Microsoft Office\\root\\Office16), sélectionner le fichier et lancer la réparation.",
+  "cause": "Coupure inopinée ou arrêt forcé de l'ordinateur pendant la synchronisation.",
+  "solution": "Fermer Outlook, exécuter l'outil officiel scanpst.exe (situé dans C:\\Program Files\\Microsoft Office\\root\\Office16), sélectionner le fichier corrompu et cliquer sur Réparer.",
   "advanced": false
  },
  {
   "id": 303,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
-  "title": "Outlook redemande le mot de passe en boucle sans valider la connexion",
+  "title": "Outlook redemande le mot de passe en boucle sans valider l'accès",
   "symptom": "",
-  "cause": "Identifiants d'authentification moderne (MSAL) bloqués dans le cache local.",
-  "solution": "Ouvrir le Gestionnaire d'identification Windows > Informations d'identification Windows, puis supprimer toutes les entrées liées à MicrosoftOffice16_Data et MS.Outlook.",
+  "cause": "Jetons d'authentification moderne (ADAL/MSAL) corrompus dans le cache Windows.",
+  "solution": "Ouvrir le Gestionnaire d'identification Windows, aller dans Informations d'identification Windows et supprimer toutes les entrées préfixées par MicrosoftOffice16_Data et MS.Outlook.",
   "advanced": false
  },
  {
@@ -3050,8 +3050,8 @@ export const PANNES: Panne[] = [
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Recherche Outlook inactive ou renvoyant « Aucun résultat »",
   "symptom": "",
-  "cause": "Indexation Windows Search désynchronisée de la boîte de messagerie.",
-  "solution": "Aller dans Panneau de configuration > Options d'indexation > Avancé > cliquer sur Reconstruire.",
+  "cause": "Catalogue d'indexation Windows Search corrompu ou désynchronisé d'Outlook.",
+  "solution": "Ouvrir Panneau de configuration > Options d'indexation > Avancé, puis cliquer sur Reconstruire l'index.",
   "advanced": false
  },
  {
@@ -3067,11 +3067,11 @@ export const PANNES: Panne[] = [
  {
   "id": 306,
   "domain": "Windows et Office",
-  "category": "Suite Office : Outlook & Messagerie",
-  "title": "Erreur de synchronisation IMAP (ex. 0x800CCC0E ou 0x80042108)",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "Erreur de synchronisation IMAP 0x800CCC0E",
   "symptom": "",
-  "cause": "Ports de messagerie sécurisés (SSL/TLS) ou numéros de ports (993/465/587) mal configurés.",
-  "solution": "Vérifier les paramètres du compte : forcer le chiffrement SSL/TLS pour les serveurs entrant (993) et sortant (465 ou 587).",
+  "cause": "Blocage du port ou chiffrement SSL/TLS mal configuré.",
+  "solution": "Vérifier les paramètres du compte : IMAP entrant port 993 (SSL/TLS), SMTP sortant port 465 ou 587 (STARTTLS) avec authentification cochée.",
   "advanced": false
  },
  {
@@ -3108,10 +3108,10 @@ export const PANNES: Panne[] = [
   "id": 310,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
-  "title": "Dépassement de la taille maximale du fichier PST (bloqué à 50 Go)",
+  "title": "Taille maximale du fichier PST atteinte (bloqué à 50 Go)",
   "symptom": "",
-  "cause": "Quota limite du format Unicode atteint.",
-  "solution": "Augmenter la limite dans le Registre via les clés DWORD MaxLargeFileSize et WarnLargeFileSize dans HKCU\\Software\\Microsoft\\Office\\16.0\\Outlook\\PST.",
+  "cause": "Quota limite par défaut du format Unicode atteint.",
+  "solution": "Créer ou ajuster les valeurs DWORD MaxLargeFileSize (ex. 71680 pour 70 Go) et WarnLargeFileSize dans HKCU\\Software\\Microsoft\\Office\\16.0\\Outlook\\PST.",
   "advanced": true
  },
  {
@@ -3148,24 +3148,14 @@ export const PANNES: Panne[] = [
   "id": 314,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
-  "title": "Message bloqué : « Outlook utilise une version antérieure d'un fichier de données »",
+  "title": "Erreur « Outlook utilise une version antérieure d'un fichier de données »",
   "symptom": "",
-  "cause": "Conflit de version après une migration de compte POP vers IMAP/Exchange.",
-  "solution": "Créer un profil Outlook entièrement neuf via la console control mlcfg32.cpl.",
+  "cause": "Incohérence lors de la mise à niveau d'un ancien profil POP vers un protocole moderne.",
+  "solution": "Créer un profil de messagerie neuf et propre via la console control mlcfg32.cpl.",
   "advanced": false
  },
  {
   "id": 315,
-  "domain": "Windows et Office",
-  "category": "Suite Office : Outlook & Messagerie",
-  "title": "Outlook redemande le mot de passe en boucle sans valider l'accès",
-  "symptom": "",
-  "cause": "Jetons d'authentification moderne (ADAL/MSAL) corrompus dans le cache Windows.",
-  "solution": "Ouvrir le Gestionnaire d'identification Windows, aller dans Informations d'identification Windows et supprimer toutes les entrées préfixées par MicrosoftOffice16_Data et MS.Outlook.",
-  "advanced": false
- },
- {
-  "id": 316,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Courriers légitimes basculés automatiquement dans le dossier Spams",
@@ -3175,7 +3165,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 317,
+  "id": 316,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Liste de saisie semi-automatique des adresses corrompue",
@@ -3185,27 +3175,17 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 318,
+  "id": 317,
   "domain": "Windows et Office",
-  "category": "Suite Office : Outlook & Messagerie",
+  "category": "Microsoft Outlook & Messagerie",
   "title": "Aperçu des pièces jointes impossible dans le volet de lecture",
   "symptom": "",
-  "cause": "Gestionnaire d'aperçu d'Office (Previewer) désactivé ou corrompu dans le registre.",
-  "solution": "Dans Options d'Outlook > Centre de gestion de la confidentialité > Paramètres, cocher Activer l'aperçu des pièces jointes.",
+  "cause": "Contrôleur de prévisualisation (Previewer) désactivé ou clé de registre endommagée.",
+  "solution": "Dans Options d'Outlook > Centre de gestion de la confidentialité > Paramètres du Centre... > Gestion des pièces jointes > cocher Activer l'aperçu des pièces jointes.",
   "advanced": true
  },
  {
-  "id": 319,
-  "domain": "Windows et Office",
-  "category": "Suite Office : Outlook & Messagerie",
-  "title": "Taille maximale du fichier PST atteinte (bloqué à 50 Go)",
-  "symptom": "",
-  "cause": "Quota limite par défaut du format Unicode atteint.",
-  "solution": "Créer ou ajuster les valeurs DWORD MaxLargeFileSize (ex. 71680 pour 70 Go) et WarnLargeFileSize dans HKCU\\Software\\Microsoft\\Office\\16.0\\Outlook\\PST.",
-  "advanced": true
- },
- {
-  "id": 320,
+  "id": 318,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Règles de tri désactivées avec mention « Erreur d'exécution »",
@@ -3215,7 +3195,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 321,
+  "id": 319,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Signature électronique absente lors de la création d'un message",
@@ -3225,7 +3205,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 322,
+  "id": 320,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Décalage horaire systématique sur les réunions du calendrier",
@@ -3235,17 +3215,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 323,
-  "domain": "Windows et Office",
-  "category": "Suite Office : Outlook & Messagerie",
-  "title": "Erreur « Outlook utilise une version antérieure d'un fichier de données »",
-  "symptom": "",
-  "cause": "Incohérence lors de la mise à niveau d'un ancien profil POP vers un protocole moderne.",
-  "solution": "Créer un profil de messagerie neuf et propre via la console control mlcfg32.cpl.",
-  "advanced": false
- },
- {
-  "id": 324,
+  "id": 321,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Impossible de cliquer sur les liens Web dans les e-mails",
@@ -3255,7 +3225,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 325,
+  "id": 322,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Dossiers de messagerie IMAP introuvables ou invisibles",
@@ -3265,7 +3235,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 326,
+  "id": 323,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Outlook plante dès la tentative d'impression d'un e-mail",
@@ -3275,7 +3245,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 327,
+  "id": 324,
   "domain": "Windows et Office",
   "category": "Suite Office : Outlook & Messagerie",
   "title": "Mode « Travail hors connexion » impossible à désactiver",
@@ -3285,7 +3255,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 328,
+  "id": 325,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Word plante dès l'ouverture d'un document vierge",
@@ -3295,7 +3265,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 329,
+  "id": 326,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Excel bloqué sur « Traitement en cours... » lors de l'ouverture d'un classeur",
@@ -3305,7 +3275,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 330,
+  "id": 327,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Excel ouvre une page totalement grise et vide au double-clic sur un fichier",
@@ -3315,7 +3285,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 331,
+  "id": 328,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Document Word verrouillé : « Ce fichier est utilisé par un autre utilisateur »",
@@ -3325,17 +3295,17 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 332,
+  "id": 329,
   "domain": "Windows et Office",
-  "category": "Suite Office : Word, Excel & PowerPoint",
-  "title": "PowerPoint refuse d'insérer ou de lire une vidéo MP4",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "PowerPoint refuse d'insérer ou de lire une vidéo",
   "symptom": "",
-  "cause": "Codec multimédia DirectShow incompatible ou accélération graphique matérielle en échec.",
-  "solution": "Dans PowerPoint, aller dans Fichier > Options > Options avancées > cocher Désactiver l'accélération graphique matérielle.",
+  "cause": "Conflit de codec d'accélération matérielle.",
+  "solution": "Dans PowerPoint : Fichier > Options > Options avancées > section Affichage > cocher Désactiver l'accélération graphique matérielle.",
   "advanced": false
  },
  {
-  "id": 333,
+  "id": 330,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Erreur d'exécution VBA 1004 ou plantage des macros Excel",
@@ -3345,7 +3315,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 334,
+  "id": 331,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Message « Mémoire insuffisante pour afficher complètement la feuille » dans Excel",
@@ -3355,7 +3325,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 335,
+  "id": 332,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Caractères spéciaux et formules mathématiques transformés en carrés dans Word",
@@ -3365,17 +3335,17 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 336,
+  "id": 333,
   "domain": "Windows et Office",
-  "category": "Suite Office : Word, Excel & PowerPoint",
-  "title": "Plantage complet d'Office lors du copier-coller",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Plantage d'Office lors d'un copier-coller",
   "symptom": "",
-  "cause": "Conflit avec un utilitaire tiers de gestion de presse-papier ou d'overlay.",
-  "solution": "Vider le presse-papier Windows (Win + V > Effacer tout) et désactiver l'historique du presse-papier si le bug persiste.",
+  "cause": "Conflit avec l'historique du presse-papier système.",
+  "solution": "Réinitialiser le presse-papier (Win + V > Effacer tout) ou désactiver temporairement l'historique du presse-papier dans les réglages système.",
   "advanced": false
  },
  {
-  "id": 337,
+  "id": 334,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Word : correction automatique et dictionnaire soulignent tous les mots en rouge",
@@ -3385,17 +3355,17 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 338,
+  "id": 335,
   "domain": "Windows et Office",
-  "category": "Suite Office : Word, Excel & PowerPoint",
-  "title": "Document Word ouvert systématiquement en « Lecture seule »",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Document ouvert systématiquement en lecture seule",
   "symptom": "",
-  "cause": "Mode « Affichage protégé » activé pour les fichiers provenant d'Internet ou dossiers non approuvés.",
-  "solution": "Dans Word, ouvrir Centre de gestion de la confidentialité > Affichage protégé > décocher l'activation pour les fichiers issus d'Internet.",
+  "cause": "Paramètre d'Affichage protégé trop restrictif.",
+  "solution": "Dans le logiciel concerné : Centre de gestion de la confidentialité > Affichage protégé > désactiver la protection pour les fichiers issus d'Internet.",
   "advanced": false
  },
  {
-  "id": 339,
+  "id": 336,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "PowerPoint affiche des polices différentes lors du changement d'ordinateur",
@@ -3405,7 +3375,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 340,
+  "id": 337,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Formules Excel affichant le texte de la formule au lieu du résultat numérique",
@@ -3415,7 +3385,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 341,
+  "id": 338,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Crash immédiat d'Excel lors de la manipulation d'un Tableau Croisé Dynamique (TCD)",
@@ -3425,7 +3395,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 342,
+  "id": 339,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Word perd la mise en page lors de l'enregistrement en PDF",
@@ -3435,7 +3405,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 343,
+  "id": 340,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Message d'erreur « Composant ActiveX non sécurisé » à l'ouverture d'un fichier Office",
@@ -3445,7 +3415,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 344,
+  "id": 341,
   "domain": "Windows et Office",
   "category": "Suite Office : Word, Excel & PowerPoint",
   "title": "Tableaux Excel apparaissant décalés ou tronqués à l'impression physique",
@@ -3455,17 +3425,17 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 345,
+  "id": 342,
   "domain": "Windows et Office",
-  "category": "Suite Office : Licence, OneDrive & Teams",
-  "title": "Bandeau jaune : « Produit sans licence » ou « Activation nécessaire »",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Bandeau « Produit sans licence » ou « Activation nécessaire »",
   "symptom": "",
-  "cause": "Clé de licence en conflit ou service de gestion des licences Office arrêté.",
-  "solution": "Ouvrir l'invite admin dans C:\\Program Files\\Microsoft Office\\Office16, puis exécuter : cscript ospp.vbs /dstatus cscript ospp.vbs /unpkey:XXXXX cscript ospp.vbs /act",
+  "cause": "Conflit de clés résiduelles ou service de gestion des licences arrêté.",
+  "solution": "Ouvrir l'invite de commande administrateur dans le dossier Office : cscript \"C:\\Program Files\\Microsoft Office\\Office16\\OSPP.VBS\" /dstatus cscript \"C:\\Program Files\\Microsoft Office\\Office16\\OSPP.VBS\" /unpkey:XXXXX cscript \"C:\\Program Files\\Microsoft Office\\Office16\\OSPP.VBS\" /act",
   "advanced": false
  },
  {
-  "id": 346,
+  "id": 343,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Erreur de compte Office : « Des problèmes sont survenus avec votre compte »",
@@ -3475,7 +3445,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 347,
+  "id": 344,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "OneDrive bloqué sur « Traitement des modifications en cours... »",
@@ -3485,7 +3455,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 348,
+  "id": 345,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Conflit de synchronisation OneDrive : création de doublons avec le nom du PC",
@@ -3495,7 +3465,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 349,
+  "id": 346,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Microsoft Teams bloqué sur un écran blanc au lancement",
@@ -3505,7 +3475,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 350,
+  "id": 347,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Microphone ou caméra non détecté dans Teams mais fonctionnel sous Windows",
@@ -3515,7 +3485,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 351,
+  "id": 348,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Partage d'écran Teams affichant un écran noir aux autres participants",
@@ -3525,7 +3495,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 352,
+  "id": 349,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "OneDrive supprime les fichiers locaux lors du passage en « Fichiers à la demande »",
@@ -3535,7 +3505,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 353,
+  "id": 350,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Erreur d'installation Office 365 : code d'erreur 30088-4 ou 0-2031",
@@ -3545,7 +3515,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 354,
+  "id": 351,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Impossible d'ouvrir un document stocké sur SharePoint / OneDrive via l'application bureau",
@@ -3555,7 +3525,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 355,
+  "id": 352,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Mises à jour Office bloquées ou générant une erreur 30015-11",
@@ -3565,7 +3535,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 356,
+  "id": 353,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Teams se lance en double exemplaire au démarrage du PC (Classique et Nouveau)",
@@ -3575,7 +3545,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 357,
+  "id": 354,
   "domain": "Windows et Office",
   "category": "Suite Office : Licence, OneDrive & Teams",
   "title": "Perte de l'historique des versions sur un document Office partagé",
@@ -3585,7 +3555,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 358,
+  "id": 355,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Explorateur Windows (explorer.exe) plante au clic droit sur le bureau",
@@ -3595,7 +3565,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 359,
+  "id": 356,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Menu Démarrer et barre des tâches totalement figés ou inactifs",
@@ -3605,7 +3575,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 360,
+  "id": 357,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Boucle de « Préparation de la réparation automatique » au boot",
@@ -3615,7 +3585,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 361,
+  "id": 358,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Erreur d'écran bleu CRITICAL_PROCESS_DIED en cours de travail",
@@ -3625,7 +3595,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 362,
+  "id": 359,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Écran noir avec uniquement le pointeur de souris visible après connexion",
@@ -3635,7 +3605,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 363,
+  "id": 360,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Message d'erreur « Fichier ou répertoire endommagé et illisible »",
@@ -3645,7 +3615,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 364,
+  "id": 361,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Démarrage extrêmement lent : utilisation disque bloquée à 100 %",
@@ -3655,17 +3625,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 365,
-  "domain": "Windows et Office",
-  "category": "Système Windows : Démarrage, Fichiers & Shell",
-  "title": "Windows affiche « Vous avez été connecté avec un profil temporaire »",
-  "symptom": "",
-  "cause": "Échec de lecture du fichier NTUSER.DAT utilisateur, profil basculé sous extension .bak.",
-  "solution": "Ouvrir regedit, aller dans HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList, localiser le dossier avec .bak, retirer l'extension .bak et vérifier le chemin correct dans ProfileImagePath.",
-  "advanced": true
- },
- {
-  "id": 366,
+  "id": 362,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Impossible de supprimer un fichier : « Action impossible car le fichier est ouvert »",
@@ -3675,7 +3635,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 367,
+  "id": 363,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Icônes du bureau devenues blanches ou génériques",
@@ -3685,7 +3645,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 368,
+  "id": 364,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Fenêtre système bloquée en dehors de l'écran visible",
@@ -3695,7 +3655,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 369,
+  "id": 365,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Session utilisateur qui se verrouille automatiquement après quelques secondes",
@@ -3705,7 +3665,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 370,
+  "id": 366,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Association de fichiers corrompue : tous les fichiers .exe s'ouvrent avec le Bloc-notes",
@@ -3715,7 +3675,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 371,
+  "id": 367,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Historique des fichiers récents bloqué ou refusant de se mettre à jour",
@@ -3725,7 +3685,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 372,
+  "id": 368,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "L'outil de capture d'écran Windows (Win + Maj + S) ne s'ouvre plus",
@@ -3735,7 +3695,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 373,
+  "id": 369,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Corbeille corrompue : message d'erreur à chaque suppression",
@@ -3745,7 +3705,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 374,
+  "id": 370,
   "domain": "Windows et Office",
   "category": "Système Windows : Démarrage, Fichiers & Shell",
   "title": "Raccourcis clavier Windows (Win + E, Win + R) inopérants",
@@ -3755,7 +3715,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 375,
+  "id": 371,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Windows Update affiche l'erreur 0x80070002 ou 0x80070003",
@@ -3765,7 +3725,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 376,
+  "id": 372,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Erreur Windows Update 0x800f081f (Fichiers sources introuvables)",
@@ -3775,7 +3735,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 377,
+  "id": 373,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Mise à jour bloquée à un pourcentage fixe (ex. 20 % ou 100 %) pendant des heures",
@@ -3785,7 +3745,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 378,
+  "id": 374,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Installation en échec avec l'erreur 0x80240034",
@@ -3795,7 +3755,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 379,
+  "id": 375,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Mise à jour de sécurité refusant de s'installer : erreur 0x80070643",
@@ -3805,7 +3765,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 380,
+  "id": 376,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Windows Update installe un pilote matériel instable sans consentement",
@@ -3815,7 +3775,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 381,
+  "id": 377,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Redémarrages intempestifs répétés pour des mises à jour pendant les heures de travail",
@@ -3825,7 +3785,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 382,
+  "id": 378,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Erreur 0x80070422 lors de la recherche de mises à jour",
@@ -3835,17 +3795,17 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 383,
+  "id": 379,
   "domain": "Windows et Office",
-  "category": "Mises à Jour Windows Update & Composants",
-  "title": "Boucle infinie « Annulation des modifications » à chaque tentative de redémarrage",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Boucle infinie « Annulation des modifications » au redémarrage",
   "symptom": "",
-  "cause": "Échec de signature d'un composant de mise à jour au stade final.",
-  "solution": "Démarrer en WinRE, supprimer le fichier d'exécution en attente C:\\Windows\\WinSxS\\pending.xml puis relancer le système.",
+  "cause": "Fichier de transaction de mise à jour bloqué en attente.",
+  "solution": "Démarrer sur WinRE, ouvrir l'invite de commande et supprimer le fichier d'exécution : del /f /q C:\\Windows\\WinSxS\\pending.xml",
   "advanced": true
  },
  {
-  "id": 384,
+  "id": 380,
   "domain": "Windows et Office",
   "category": "Mises à Jour Windows Update & Composants",
   "title": "Échec de mise à jour des applications via le Microsoft Store (0x80073D02)",
@@ -3855,7 +3815,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 385,
+  "id": 381,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Icône réseau avec globe terrestre : « Connecté, pas d'accès Internet »",
@@ -3865,7 +3825,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 386,
+  "id": 382,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Résolution des noms de domaine impossible (Serveur DNS introuvable)",
@@ -3875,7 +3835,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 387,
+  "id": 383,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Partage de dossiers réseau Windows (SMB) inaccessible : erreur 0x80070035",
@@ -3885,7 +3845,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 388,
+  "id": 384,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Pare-feu Windows Defender bloque une application professionnelle légitime",
@@ -3895,7 +3855,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 389,
+  "id": 385,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Erreur d'isolation du noyau : « Pilote incompatible empêche l'activation »",
@@ -3905,7 +3865,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 390,
+  "id": 386,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Connexion Bureau à distance (RDP) refusée : erreur de chiffrement CredSSP",
@@ -3915,7 +3875,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 391,
+  "id": 387,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "BitLocker demande le code de déverrouillage de récupération à chaque démarrage",
@@ -3925,7 +3885,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 392,
+  "id": 388,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Erreur d'approbation de relation entre cette station de travail et le domaine principal",
@@ -3935,7 +3895,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 393,
+  "id": 389,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Windows Defender désactivé et impossible à réactiver (grisé)",
@@ -3945,7 +3905,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 394,
+  "id": 390,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Code PIN Windows Hello inaccessible : « Un problème est survenu »",
@@ -3955,7 +3915,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 395,
+  "id": 391,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Certificats Web révoqués ou dates système affichant « Connexion non privée »",
@@ -3965,7 +3925,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 396,
+  "id": 392,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Conflit de ports TCP locaux bloquant le démarrage des logiciels serveurs",
@@ -3975,7 +3935,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 397,
+  "id": 393,
   "domain": "Windows et Office",
   "category": "Réseau, Sécurité, Pare-feu & Authentification",
   "title": "Le VPN Windows natif ne parvient pas à établir la liaison (Erreur 809)",
@@ -3985,7 +3945,7 @@ export const PANNES: Panne[] = [
   "advanced": true
  },
  {
-  "id": 398,
+  "id": 394,
   "domain": "Windows et Office",
   "category": "Performances, Runtimes & Registre Applicatif",
   "title": "Erreur 0xc000007b au lancement d'un jeu ou logiciel de rendu",
@@ -3995,7 +3955,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 399,
+  "id": 395,
   "domain": "Windows et Office",
   "category": "Performances, Runtimes & Registre Applicatif",
   "title": "Message « Fichier DLL manquant » (ex. VCRUNTIME140.dll ou MSVCP140.dll)",
@@ -4005,7 +3965,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 400,
+  "id": 396,
   "domain": "Windows et Office",
   "category": "Performances, Runtimes & Registre Applicatif",
   "title": "Applications plantant avec des erreurs d'exception .NET Framework",
@@ -4015,7 +3975,7 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 401,
+  "id": 397,
   "domain": "Windows et Office",
   "category": "Performances, Runtimes & Registre Applicatif",
   "title": "Fuite de mémoire vive du processus d'hébergement svchost.exe",
@@ -4025,13 +3985,793 @@ export const PANNES: Panne[] = [
   "advanced": false
  },
  {
-  "id": 402,
+  "id": 398,
   "domain": "Windows et Office",
   "category": "Performances, Runtimes & Registre Applicatif",
   "title": "Consommation anormale du CPU par System Settings Broker ou RuntimeBroker.exe",
   "symptom": "",
   "cause": "Boucle de notification d'astuces Windows envoyée en arrière-plan.",
   "solution": "Aller dans Paramètres > Système > Notifications, et décocher Obtenir des conseils et des suggestions lors de l'utilisation de Windows.",
+  "advanced": false
+ },
+ {
+  "id": 399,
+  "domain": "Windows et Office",
+  "category": "Performances, Runtimes & Registre Applicatif",
+  "title": "Programmes qui se lancent avec un affichage flou sur écran haute résolution (HiDPI)",
+  "symptom": "",
+  "cause": "Mise à l'échelle DPI logicielle non prise en charge par les anciens programmes Win32.",
+  "solution": "Clic droit sur l'exécutable > Propriétés > Compatibilité > Modifier les paramètres PPP élevés > cocher Remplacer le comportement de mise à l'échelle PPP élevée.",
+  "advanced": false
+ },
+ {
+  "id": 400,
+  "domain": "Windows et Office",
+  "category": "Performances, Runtimes & Registre Applicatif",
+  "title": "Erreur « Mémoire virtuelle insuffisante » sans surcharge physique de la RAM",
+  "symptom": "",
+  "cause": "Fichier d'échange (pagefile.sys) configuré sur une taille fixe trop basse ou corrompu.",
+  "solution": "Régler la pagination sur Gérer automatiquement la taille du fichier d'échange pour tous les lecteurs dans les performances avancées du système.",
+  "advanced": false
+ },
+ {
+  "id": 401,
+  "domain": "Windows et Office",
+  "category": "Performances, Runtimes & Registre Applicatif",
+  "title": "Logiciel refusant de s'installer : « Une autre installation est déjà en cours »",
+  "symptom": "",
+  "cause": "Processus d'installation Microsoft Installer (msiexec.exe) resté orphelin en arrière-plan.",
+  "solution": "Ouvrir le Gestionnaire des tâches, tuer tous les processus nommés msiexec.exe, ou taper dans l'invite :",
+  "advanced": false
+ },
+ {
+  "id": 402,
+  "domain": "Windows et Office",
+  "category": "Performances, Runtimes & Registre Applicatif",
+  "title": "Impossibilité d'exécuter des scripts PowerShell : « L'exécution de scripts est désactivée »",
+  "symptom": "",
+  "cause": "Stratégie de sécurité d'exécution (ExecutionPolicy) réglée par défaut sur Restricted.",
+  "solution": "Ouvrir PowerShell en administrateur et modifier la stratégie :",
+  "advanced": false
+ },
+ {
+  "id": 403,
+  "domain": "Windows et Office",
+  "category": "Performances, Runtimes & Registre Applicatif",
+  "title": "Crash systématique des jeux ou logiciels 3D au retour bureau (Alt + Tab)",
+  "symptom": "",
+  "cause": "Conflit avec la planification de processeur graphique à accélération matérielle (HAGS).",
+  "solution": "Désactiver l'option Planification de GPU à accélération matérielle dans les Paramètres graphiques de Windows.",
+  "advanced": false
+ },
+ {
+  "id": 404,
+  "domain": "Windows et Office",
+  "category": "Performances, Runtimes & Registre Applicatif",
+  "title": "Logiciel impossible à désinstaller : paquet d'installation source manquant",
+  "symptom": "",
+  "cause": "Clé de désinstallation orpheline résiduelle dans le registre système.",
+  "solution": "Utiliser l'utilitaire officiel de résolution des problèmes d'installation et de désinstallation de programmes de Microsoft pour purger la clé.",
+  "advanced": true
+ },
+ {
+  "id": 405,
+  "domain": "Windows et Office",
+  "category": "Performances, Runtimes & Registre Applicatif",
+  "title": "Crash complet de la pile logicielle multimédia (DirectX / DirectSound)",
+  "symptom": "",
+  "cause": "Conflit entre les couches d'amélioration audio logicielles (Enhancements) et les API de rendu.",
+  "solution": "Ouvrir les propriétés du périphérique de lecture son, aller dans l'onglet Améliorations et cocher la case Désactiver toutes les améliorations sonores.",
+  "advanced": false
+ },
+ {
+  "id": 406,
+  "domain": "Windows et Office",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "Outlook redemande le mot de passe en boucle (Authentification moderne bloquée)",
+  "symptom": "",
+  "cause": "Jetons ADAL/MSAL ou identifiants mis en cache expirés ou corrompus.",
+  "solution": "Ouvrir le Gestionnaire d'identification, aller dans Informations d'identification Windows et supprimer toutes les lignes contenant MicrosoftOffice16_Data et MS.Outlook.",
+  "advanced": false
+ },
+ {
+  "id": 407,
+  "domain": "Windows et Office",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "E-mails bloqués dans la Boîte d'envoi",
+  "symptom": "",
+  "cause": "Pièce jointe dépassant la taille limite SMTP autorisée ou mode déconnecté actif.",
+  "solution": "Dans l'onglet Envoi/Réception, désactiver Travailler hors connexion, déplacer le message dans Brouillons et retirer la pièce jointe trop lourde.",
+  "advanced": false
+ },
+ {
+  "id": 408,
+  "domain": "Windows et Office",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "Courriers légitimes basculés d'office dans les spams",
+  "symptom": "",
+  "cause": "Filtre anti-spam local mal étalonné ou règle d'expéditeur bloqué activée par mégarde.",
+  "solution": "Clic droit sur le courriel > Courrier indésirable > Ne jamais bloquer l'expéditeur.",
+  "advanced": false
+ },
+ {
+  "id": 409,
+  "domain": "Windows et Office",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "Règles de messagerie désactivées avec mention « Erreur »",
+  "symptom": "",
+  "cause": "Règle pointant vers un dossier local introuvable ou dépassement de la limite Exchange de 256 Ko.",
+  "solution": "Ouvrir Gérer les règles et les alertes, supprimer les règles orphelines marquées d'une croix rouge.",
+  "advanced": false
+ },
+ {
+  "id": 410,
+  "domain": "Windows et Office",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "Signature absente lors de la rédaction d'un message",
+  "symptom": "",
+  "cause": "Perte de l'association de la signature par défaut au compte.",
+  "solution": "Aller dans Fichier > Options > Courrier > Signatures et réattribuer la signature aux nouveaux messages et réponses.",
+  "advanced": false
+ },
+ {
+  "id": 411,
+  "domain": "Windows et Office",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "Décalage horaire systématique des rendez-vous du calendrier",
+  "symptom": "",
+  "cause": "Fuseau horaire Outlook non synchronisé avec celui de Windows.",
+  "solution": "Aligner le fuseau dans Options > Calendrier > Fuseaux horaires sur l'heure système locale.",
+  "advanced": false
+ },
+ {
+  "id": 412,
+  "domain": "Windows et Office",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "Impossible d'ouvrir les liens hypertextes dans les e-mails",
+  "symptom": "",
+  "cause": "Association du protocole URL corrompue après la désinstallation d'un navigateur.",
+  "solution": "Exécuter en invite de commande : reg add \"HKCU\\Software\\Classes\\.html\" /ve /d \"htmlfile\" /f",
+  "advanced": true
+ },
+ {
+  "id": 413,
+  "domain": "Windows et Office",
+  "category": "Microsoft Outlook & Messagerie",
+  "title": "Crash lors de l'impression d'un e-mail depuis Outlook",
+  "symptom": "",
+  "cause": "Fichier de configuration d'impression corrompu.",
+  "solution": "Fermer Outlook et supprimer le fichier caché : del /f /q \"%APPDATA%\\Microsoft\\Outlook\\Outlprnt\"",
+  "advanced": false
+ },
+ {
+  "id": 414,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Word plante dès l'ouverture d'une page blanche",
+  "symptom": "",
+  "cause": "Modèle de base global corrompu.",
+  "solution": "Supprimer ou renommer le fichier Normal.dotm : del /f /q \"%APPDATA%\\Microsoft\\Templates\\Normal.dotm\"",
+  "advanced": false
+ },
+ {
+  "id": 415,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Excel ouvre une interface grise sans afficher le tableau",
+  "symptom": "",
+  "cause": "Option d'échange dynamique de données (DDE) bloquée.",
+  "solution": "Dans Excel : Fichier > Options > Options avancées > section Général > décocher Ignorer les autres applications qui utilisent l'échange dynamique de données (DDE).",
+  "advanced": false
+ },
+ {
+  "id": 416,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Erreur d'exécution VBA 1004 / Blocage des macros téléchargées",
+  "symptom": "",
+  "cause": "Blocage de sécurité de l'attribut « Mark of the Web ».",
+  "solution": "Clic droit sur le fichier .xlsm > Propriétés > cocher la case Débloquer en bas, puis cliquer sur Appliquer.",
+  "advanced": false
+ },
+ {
+  "id": 417,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Message « Mémoire insuffisante » dans Excel",
+  "symptom": "",
+  "cause": "Utilisation d'une version Office 32 bits limitée à 2 Go d'espace d'adressage virtuel.",
+  "solution": "Désinstaller la version 32 bits et installer Microsoft Office en version 64 bits native.",
+  "advanced": false
+ },
+ {
+  "id": 418,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Symboles et formules mathématiques changés en rectangles dans Word",
+  "symptom": "",
+  "cause": "Police vectorielle système Cambria Math manquante ou corrompue.",
+  "solution": "Réinstaller les polices système par défaut depuis le répertoire d'installation Windows (C:\\Windows\\Fonts).",
+  "advanced": false
+ },
+ {
+  "id": 419,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Dictionnaire Word soulignant tous les mots en rouge",
+  "symptom": "",
+  "cause": "Mauvaise langue de vérification globale forcée sur le document.",
+  "solution": "Faire Ctrl + A > onglet Révision > Langue > Définir la langue de vérification > sélectionner le français et décocher Détecter automatiquement la langue.",
+  "advanced": false
+ },
+ {
+  "id": 420,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Polices personnalisées modifiées lors du changement de PC dans PowerPoint",
+  "symptom": "",
+  "cause": "Polices non incorporées au conteneur du fichier.",
+  "solution": "Ouvrir Options > Enregistrement > cocher Incorporer les polices dans le fichier.",
+  "advanced": true
+ },
+ {
+  "id": 421,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Cellule Excel affichant le texte de la formule au lieu du résultat",
+  "symptom": "",
+  "cause": "Format de la cellule défini en texte ou mode d'affichage des formules actif.",
+  "solution": "Passer la cellule au format Standard, appuyer sur F2 puis Entrée, ou basculer avec le raccourci Ctrl + \".",
+  "advanced": false
+ },
+ {
+  "id": 422,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Crash lors de l'actualisation d'un Tableau Croisé Dynamique",
+  "symptom": "",
+  "cause": "Lignes vides ou références de colonnes corrompues dans la plage source.",
+  "solution": "Redéfinir la plage de données source dans les paramètres du tableau pour exclure les colonnes sans en-tête.",
+  "advanced": false
+ },
+ {
+  "id": 423,
+  "domain": "Windows et Office",
+  "category": "Microsoft Word, Excel & PowerPoint",
+  "title": "Décalage de mise en page lors de l'export en PDF depuis Word",
+  "symptom": "",
+  "cause": "Pilote d'impression virtuel Microsoft défaillant.",
+  "solution": "Désactiver puis réactiver le composant Microsoft Print to PDF dans les Fonctionnalités facultatives de Windows.",
+  "advanced": false
+ },
+ {
+  "id": 424,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "OneDrive crée des fichiers doublons avec le nom du PC",
+  "symptom": "",
+  "cause": "Conflit de synchronisation simultanée entre le cache local Office et le cloud.",
+  "solution": "Ouvrir les paramètres OneDrive > onglet Office > cocher Utiliser les applications Office pour synchroniser les fichiers Office ouverts.",
+  "advanced": false
+ },
+ {
+  "id": 425,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Microphone ou webcam non détecté dans Teams",
+  "symptom": "",
+  "cause": "Autorisation d'accès de l'application bloquée par la confidentialité Windows.",
+  "solution": "Ouvrir Paramètres > Confidentialité et sécurité > Microphone (et Caméra) > activer Autoriser les applications de bureau à accéder à votre microphone.",
+  "advanced": false
+ },
+ {
+  "id": 426,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Partage d'écran Teams affichant un écran noir",
+  "symptom": "",
+  "cause": "Conflit de basculement de carte graphique sur PC portable hybride.",
+  "solution": "Assigner l'application Teams au mode « Économie d'énergie » (GPU intégré) dans les Paramètres graphiques de Windows.",
+  "advanced": false
+ },
+ {
+  "id": 427,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Fichiers supprimés en local lors de l'activation des fichiers à la demande OneDrive",
+  "symptom": "",
+  "cause": "Bascule en mode dématérialisé mal interprétée.",
+  "solution": "Clic droit sur le dossier racine OneDrive > choisir Toujours conserver sur cet appareil.",
+  "advanced": false
+ },
+ {
+  "id": 428,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Erreur d'installation Office Click-to-Run 30088-4 ou 0-2031",
+  "symptom": "",
+  "cause": "Éléments résiduels bloquants d'une ancienne installation.",
+  "solution": "Exécuter l'outil officiel de nettoyage Microsoft SaRA (Assistant Support et Récupération) pour purger les traces Office avant réinstallation.",
+  "advanced": false
+ },
+ {
+  "id": 429,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Impossible d'ouvrir un document SharePoint dans l'application de bureau",
+  "symptom": "",
+  "cause": "Identifiants en conflit entre le compte Windows local et le tenant Microsoft 365.",
+  "solution": "Vider le cache du Centre de téléchargement Office via les options avancées de téléversement.",
+  "advanced": false
+ },
+ {
+  "id": 430,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Service Démarrer en un clic (C2R) arrêté : erreur 30015-11",
+  "symptom": "",
+  "cause": "Service ClickToRunSvc désactivé ou en échec.",
+  "solution": "Ouvrir services.msc, localiser le Service Démarrer en un clic de Microsoft Office, régler sur Automatique et démarrer le service.",
+  "advanced": false
+ },
+ {
+  "id": 431,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Teams se lance en double exemplaire (ancien et nouveau client)",
+  "symptom": "",
+  "cause": "Présence résiduelle du paquet Teams Machine-Wide Installer.",
+  "solution": "Désinstaller l'ancien paquet classique depuis la liste des applications installées.",
+  "advanced": false
+ },
+ {
+  "id": 432,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Historique des versions indisponible sur un fichier Office partagé",
+  "symptom": "",
+  "cause": "Fichier enregistré au format legacy binaire (.doc, .xls) incompatible.",
+  "solution": "Convertir le classeur ou document vers les extensions OpenXML modernes (.docx, .xlsx).",
+  "advanced": false
+ },
+ {
+  "id": 433,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Erreur d'enregistrement automatique indisponible dans Word/Excel",
+  "symptom": "",
+  "cause": "Document non hébergé directement sur la racine OneDrive ou SharePoint.",
+  "solution": "Enregistrer le fichier directement sur l'espace cloud rattaché au compte M365 actif.",
+  "advanced": true
+ },
+ {
+  "id": 434,
+  "domain": "Windows et Office",
+  "category": "Licences Office, OneDrive & Microsoft Teams",
+  "title": "Module complémentaire désactivé automatiquement par sécurité par Outlook",
+  "symptom": "",
+  "cause": "Temps de chargement du module supérieur à 1 seconde au démarrage.",
+  "solution": "Aller dans Fichier > Gérer les compléments COM lents et désactivés > cliquer sur Toujours activer ce complément.",
+  "advanced": false
+ },
+ {
+  "id": 435,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "BSOD DRIVER_IRQL_NOT_LESS_OR_EQUAL (ndis.sys) sous charge réseau",
+  "symptom": "",
+  "cause": "Pilote de carte réseau Ethernet ou Wi-Fi corrompu.",
+  "solution": "Désinstaller le périphérique depuis le Gestionnaire de périphériques et installer le pilote natif du fabricant de la puce.",
+  "advanced": false
+ },
+ {
+  "id": 436,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Gel complet de l'OS lors de l'insertion d'un périphérique USB",
+  "symptom": "",
+  "cause": "Filtre de classe USB corrompu bloquant la pile d'E/S.",
+  "solution": "Supprimer les valeurs UpperFilters et LowerFilters dans le registre :",
+  "advanced": true
+ },
+ {
+  "id": 437,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "BSOD INACCESSIBLE_BOOT_DEVICE suite à une mise à jour",
+  "symptom": "",
+  "cause": "Pilote de contrôleur AHCI/RAID non synchronisé avec le noyau.",
+  "solution": "Démarrer sur WinRE et purger le pilote problématique : dism /Image:C:\\ /Remove-Driver /Driver:oemX.inf",
+  "advanced": true
+ },
+ {
+  "id": 438,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Écran bleu provoqué par le pilote Bluetooth (bthport.sys)",
+  "symptom": "",
+  "cause": "Échec de gestion de veille de la pile Bluetooth.",
+  "solution": "Décocher l'option Autoriser l'ordinateur à éteindre ce périphérique pour économiser l'énergie dans les propriétés de la puce Bluetooth.",
+  "advanced": false
+ },
+ {
+  "id": 439,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "BSOD causé par un pilote de virtualisation tiers (vboxdrv.sys)",
+  "symptom": "",
+  "cause": "Conflit avec la fonctionnalité d'isolation du noyau de Windows.",
+  "solution": "Mettre à niveau le logiciel de virtualisation ou désactiver temporairement l'intégrité de la mémoire dans les réglages de sécurité.",
+  "advanced": false
+ },
+ {
+  "id": 440,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Extinction subite liée au pilote thermique Intel DPTF / AMD PPM",
+  "symptom": "",
+  "cause": "Fausses alertes thermiques transmises à Windows par une version de pilote obsolète.",
+  "solution": "Réinstaller le package de pilotes du chipset de la carte mère.",
+  "advanced": true
+ },
+ {
+  "id": 441,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Crash provoqué par un pilote de manette générique (xusb21.sys)",
+  "symptom": "",
+  "cause": "Interruption anormale lors de l'envoi du signal de vibration.",
+  "solution": "Attribuer manuellement le pilote officiel « Périphérique Xbox 360 pour Windows » dans le Gestionnaire de périphériques.",
+  "advanced": false
+ },
+ {
+  "id": 442,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Crash noyau provoqué par le sous-système d'impression (win32kfull.sys)",
+  "symptom": "",
+  "cause": "Pilote d'imprimante V3 obsolète accédant directement à l'espace noyau.",
+  "solution": "Supprimer le pilote via printmanagement.msc et installer un pilote conforme V4 / Type 4.",
+  "advanced": false
+ },
+ {
+  "id": 443,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Écran bleu causé par un adaptateur de tunnel VPN (wintun.sys)",
+  "symptom": "",
+  "cause": "Corruption de la table de routage virtuelle.",
+  "solution": "Réinitialiser la couche de transport réseau : netsh winsock reset netsh int ip reset",
+  "advanced": false
+ },
+ {
+  "id": 444,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Plantage du service d'authentification biométrique (WbioSrvc.exe)",
+  "symptom": "",
+  "cause": "Base de données biométrique Windows Hello corrompue.",
+  "solution": "Arrêter le service biométrique et vider le dossier : del /f /q C:\\Windows\\System32\\WinBioDatabase\\*",
+  "advanced": false
+ },
+ {
+  "id": 445,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Crash système à l'ouverture de la webcam (stream.sys)",
+  "symptom": "",
+  "cause": "Conflit d'accès mémoire entre plusieurs applications vidéo en arrière-plan.",
+  "solution": "Révoquer puis réautoriser l'accès aux caméras dans les Paramètres de confidentialité et sécurité.",
+  "advanced": false
+ },
+ {
+  "id": 446,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "BSOD provoqué par un outil d'overclocking logiciel au démarrage",
+  "symptom": "",
+  "cause": "Application d'un profil instable par un service noyau au boot.",
+  "solution": "Démarrer en mode sans échec et désactiver les services associés (ex. AMDRyzenMasterDriver ou XTUservice).",
+  "advanced": true
+ },
+ {
+  "id": 447,
+  "domain": "Windows et Office",
+  "category": "Pilotes, Affichage & Noyau Windows",
+  "title": "Crash lors du débranchement à chaud d'un disque externe (UASP)",
+  "symptom": "",
+  "cause": "Cache d'écriture non vidé avant la rupture de communication.",
+  "solution": "Dans le Gestionnaire de périphériques > clic droit sur le disque > Stratégies > choisir Suppression rapide.",
+  "advanced": false
+ },
+ {
+  "id": 448,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Corruption des fichiers maîtres du noyau (ntoskrnl.exe)",
+  "symptom": "",
+  "cause": "Erreurs d'écriture disque ou arrêt brutal.",
+  "solution": "Exécuter l'analyse et la réparation des fichiers système protégés : sfc /scannow",
+  "advanced": false
+ },
+ {
+  "id": 449,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Magasin de composants Windows corrompu (WinSxS)",
+  "symptom": "",
+  "cause": "Mises à jour partielles ou interrompues.",
+  "solution": "Réparer l'image système avec l'utilitaire DISM : DISM /Online /Cleanup-Image /RestoreHealth",
+  "advanced": true
+ },
+ {
+  "id": 450,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Fichier de mémoire virtuelle (pagefile.sys) corrompu",
+  "symptom": "",
+  "cause": "Écriture incomplète sur le disque lors d'un crash antérieur.",
+  "solution": "Désactiver temporairement le fichier d'échange dans les paramètres de performance système, redémarrer le PC, puis le réactiver en gestion automatique.",
+  "advanced": false
+ },
+ {
+  "id": 451,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Fichier d'hibernation (hiberfil.sys) défaillant",
+  "symptom": "",
+  "cause": "Image de reprise corrompue bloquant la sortie de veille.",
+  "solution": "Réinitialiser le fichier d'hibernation : powercfg /h off powercfg /h on",
+  "advanced": false
+ },
+ {
+  "id": 452,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Boucle de redémarrage causée par le Démarrage Rapide (Fast Startup)",
+  "symptom": "",
+  "cause": "Incohérence de l'état système entre le noyau mis en cache et l'état réel.",
+  "solution": "Désactiver le démarrage rapide dans le Panneau de configuration > Options d'alimentation > Choisir l'action des boutons d'alimentation.",
+  "advanced": false
+ },
+ {
+  "id": 453,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Données de configuration de démarrage (BCD) corrompues",
+  "symptom": "",
+  "cause": "Corruption du secteur de boot suite à une coupure ou une partition dégradée.",
+  "solution": "Démarrer sur WinRE et reconstruire le magasin BCD : bootrec /rebuildbcd",
+  "advanced": true
+ },
+ {
+  "id": 454,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Explorateur Windows (explorer.exe) plantant au clic droit",
+  "symptom": "",
+  "cause": "Extension de menu contextuel tierce défaillante.",
+  "solution": "Utiliser l'outil ShellExView, masquer les composants Microsoft, et désactiver successivement les extensions tierces pour isoler la responsable.",
+  "advanced": false
+ },
+ {
+  "id": 455,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Écran noir avec uniquement le curseur visible après l'ouverture de session",
+  "symptom": "",
+  "cause": "Le shell utilisateur n'est pas initialisé par la clé Winlogon.",
+  "solution": "Ouvrir le Gestionnaire des tâches (Ctrl + Maj + Échap), lancer regedit et vérifier que la clé HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Shell est définie strictement sur explorer.exe.",
+  "advanced": true
+ },
+ {
+  "id": 456,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Utilisation disque bloquée à 100 % causée par SysMain",
+  "symptom": "",
+  "cause": "Indexation prédictive SuperFetch en boucle sur les volumes de stockage.",
+  "solution": "Ouvrir services.msc, localiser le service SysMain, passer le démarrage sur Désactivé et arrêter le service.",
+  "advanced": false
+ },
+ {
+  "id": 457,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Session basculée sur un profil temporaire",
+  "symptom": "",
+  "cause": "Échec de lecture du fichier NTUSER.DAT, création d'une clé .bak dans le Registre.",
+  "solution": "Dans HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList, localiser l'entrée avec .bak, retirer le suffixe .bak et vérifier le chemin dans ProfileImagePath.",
+  "advanced": true
+ },
+ {
+  "id": 458,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Fichier impossible à supprimer : « Fichier ouvert dans un autre programme »",
+  "symptom": "",
+  "cause": "Handle système orphelin non libéré par un processus d'arrière-plan.",
+  "solution": "Lancer l'outil Process Explorer (Sysinternals), presser Ctrl + F, chercher le nom du fichier et fermer le handle bloquant.",
+  "advanced": false
+ },
+ {
+  "id": 459,
+  "domain": "Windows et Office",
+  "category": "Fichiers Système, Réparation & Démarrage Windows",
+  "title": "Corbeille corrompue provoquant une erreur de suppression",
+  "symptom": "",
+  "cause": "Répertoire masqué $Recycle.Bin endommagé sur le lecteur.",
+  "solution": "Réinitialiser la corbeille système : rd /s /q C:\\$Recycle.Bin",
+  "advanced": false
+ },
+ {
+  "id": 460,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Erreur de mise à jour 0x800f081f",
+  "symptom": "",
+  "cause": "Fichiers sources introuvables dans le magasin de composants.",
+  "solution": "Réparer le magasin en précisant une image saine comme source : DISM /Online /Cleanup-Image /RestoreHealth",
+  "advanced": true
+ },
+ {
+  "id": 461,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Échec de mise à jour de sécurité avec l'erreur 0x80070643",
+  "symptom": "",
+  "cause": "Espace insuffisant sur la partition de récupération WinRE pour appliquer le patch.",
+  "solution": "Étendre manuellement la taille de la partition WinRE d'au moins 500 Mo via diskpart.",
+  "advanced": true
+ },
+ {
+  "id": 462,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Windows Update forçant l'installation de pilotes non désirés",
+  "symptom": "",
+  "cause": "Inclusion automatique des pilotes activée par défaut.",
+  "solution": "Ouvrir gpedit.msc > Configuration ordinateur > Modèles d'administration > Composants Windows > Windows Update > activer Ne pas inclure les pilotes avec les mises à jour de Windows.",
+  "advanced": true
+ },
+ {
+  "id": 463,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Erreur 0x80070422 lors du lancement d'une mise à jour",
+  "symptom": "",
+  "cause": "Service Windows Update désactivé dans la console système.",
+  "solution": "Ouvrir services.msc, passer le service Windows Update en démarrage Manuel ou Automatique et démarrer le service.",
+  "advanced": false
+ },
+ {
+  "id": 464,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Échec de mise à jour du Microsoft Store (0x80073D02)",
+  "symptom": "",
+  "cause": "Cache temporaire du magasin Windows corrompu.",
+  "solution": "Réinitialiser le store en exécutant la commande :",
+  "advanced": false
+ },
+ {
+  "id": 465,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Arrêt impromptu du processus d'authentification (lsass.exe)",
+  "symptom": "",
+  "cause": "Injection de code malveillant ou régression liée à un correctif de sécurité.",
+  "solution": "Désinstaller la dernière mise à jour cumulative depuis WinRE via la commande : wusa /uninstall /kb:XXXXXXX",
+  "advanced": true
+ },
+ {
+  "id": 466,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Service Spouleur d'impression (spoolsv.exe) saturant le CPU",
+  "symptom": "",
+  "cause": "File d'attente d'impression bloquée sur un travail corrompu.",
+  "solution": "Vider le répertoire des spools : net stop spooler del /q /f /s \"%systemroot%\\System32\\Spool\\Printers\\*.*\" net start spooler",
+  "advanced": false
+ },
+ {
+  "id": 467,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Fuite de mémoire dans le Gestionnaire de fenêtres du bureau (dwm.exe)",
+  "symptom": "",
+  "cause": "Bug de gestion de mémoire avec la planification GPU accélérée (HAGS).",
+  "solution": "Désactiver l'option Planification de GPU à accélération matérielle dans les paramètres graphiques avancés de Windows.",
+  "advanced": false
+ },
+ {
+  "id": 468,
+  "domain": "Windows et Office",
+  "category": "Mises à Jour Windows Update & Services",
+  "title": "Crash répété du service de chiffrement Windows (CryptSvc)",
+  "symptom": "",
+  "cause": "Base de données de catalogue de signatures système corrompue.",
+  "solution": "Arrêter le service et renommer le dossier : net stop cryptsvc",
+  "advanced": false
+ },
+ {
+  "id": 469,
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Icône « Connecté, pas d'accès Internet » (NCSI)",
+  "symptom": "",
+  "cause": "Sonde réseau bloquée par un serveur DNS défaillant.",
+  "solution": "Réinitialiser les baux IP et le cache de résolution : ipconfig /release ipconfig /renew ipconfig /flushdns",
+  "advanced": false
+ },
+ {
+  "id": 470,
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Erreurs de certificats HTTPS sur les navigateurs Web",
+  "symptom": "",
+  "cause": "Horloge locale système désynchronisée de plus de 5 minutes par rapport au temps universel.",
+  "solution": "Forcer la synchronisation avec le serveur de temps officiel : w32tm /resync",
+  "advanced": false
+ },
+ {
+  "id": 471,
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Erreur d'application 0xc000007b au démarrage d'un logiciel",
+  "symptom": "",
+  "cause": "Mélange accidentel de bibliothèques DLL 32 bits et 64 bits dans les répertoires System32 et SysWOW64.",
+  "solution": "Réinstaller l'ensemble des bibliothèques officielles via le pack complet Visual C++ Redistributable All-in-One (x86 et x64).",
+  "advanced": false
+ },
+ {
+  "id": 472,
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Applications crashant avec des erreurs .NET Framework",
+  "symptom": "",
+  "cause": "Couche d'exécution .NET corrompue.",
+  "solution": "Exécuter l'outil officiel de réparation Microsoft .NET Framework Repair Tool.",
+  "advanced": false
+ },
+ {
+  "id": 473,
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Consommation anormale du CPU par RuntimeBroker.exe",
+  "symptom": "",
+  "cause": "Boucle d'envoi des astuces et suggestions Windows en arrière-plan.",
+  "solution": "Désactiver l'option dans Paramètres > Système > Notifications > décocher Obtenir des conseils et des suggestions lors de l'utilisation de Windows.",
+  "advanced": false
+ },
+ {
+  "id": 474,
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Blocage de l'exécution des scripts sous PowerShell",
+  "symptom": "",
+  "cause": "Stratégie d'exécution définie sur Restricted par défaut.",
+  "solution": "Autoriser les scripts signés localement :",
+  "advanced": false
+ },
+ {
+  "id": 475,
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Impossible d'installer une application : « Une autre installation est en cours »",
+  "symptom": "",
+  "cause": "Processus du moteur d'installation resté orphelin en tâche de fond.",
+  "solution": "Arrêter de force le processus bloquant :",
+  "advanced": false
+ },
+ {
+  "id": 476,
+  "domain": "Windows et Office",
+  "category": "Réseau, Sécurité, Runtimes & Environnement",
+  "title": "Crash complet de la pile logicielle audio sous charge applicative",
+  "symptom": "",
+  "cause": "Traitement audio logiciel tiers (Enhancements) incompatible créant une saturation de la mémoire tampon.",
+  "solution": "Ouvrir les propriétés du périphérique de lecture audio, onglet Améliorations, et cocher Désactiver toutes les améliorations sonores.",
   "advanced": false
  }
 ];

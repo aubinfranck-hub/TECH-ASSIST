@@ -3,8 +3,8 @@ import { PANNES } from '../assistant/pannesData.js';
 import { referenceFor, searchPannes } from '../assistant/pannes.js';
 
 describe('Base de pannes', () => {
-  it('contient plus de 380 fiches complètes (titre, solution) sans doublon de titre', () => {
-    expect(PANNES.length).toBeGreaterThan(380);
+  it('contient plus de 450 fiches complètes (titre, solution) sans doublon de titre', () => {
+    expect(PANNES.length).toBeGreaterThan(450);
     expect(PANNES.every((p) => p.title.length > 5 && p.solution.length > 5)).toBe(true);
     expect(new Set(PANNES.map((p) => p.title)).size).toBe(PANNES.length);
   });
