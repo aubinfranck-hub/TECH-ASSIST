@@ -79,7 +79,11 @@ export function ActiveSessionCard({ session }: { session: MySession }) {
           <span className="min-w-0 break-words">L'agent travaille : {session.agent_task}</span>
         </p>
       )}
-      <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} />
+      {session.platform === 'android' ? (
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">Téléphone : pas de prise en main à distance. Guidez le client par la discussion ou appelez-le.</p>
+      ) : (
+        <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} />
+      )}
     </li>
   );
 }

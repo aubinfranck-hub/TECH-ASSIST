@@ -226,7 +226,11 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
         {open && session.technician && !session.mine && <p className="text-sm text-amber-800">Cette demande est suivie par {session.technician}.</p>}
         {session.mine && open && (
           <div className="space-y-3">
-            <RemoteAccess sessionId={session.id} controlGranted={session.consentControl} />
+            {session.platform === 'android' ? (
+              <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">Téléphone : pas de prise en main à distance. Guidez le client par la discussion ou appelez-le (bouton ci-dessus).</p>
+            ) : (
+              <RemoteAccess sessionId={session.id} controlGranted={session.consentControl} />
+            )}
             {!confirmFinish ? (
               <button onClick={() => setConfirmFinish(true)} className="text-sm font-semibold text-slate-600 underline">
                 Terminer l'assistance

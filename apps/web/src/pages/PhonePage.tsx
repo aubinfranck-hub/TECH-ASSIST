@@ -197,6 +197,12 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
   }, [refresh]);
   useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [turns]);
 
+  const [relay, setRelay] = useState(false);
+  const [ended, setEnded] = useState(false);
+  const [upgrade, setUpgrade] = useState<{ priceFcfa: number } | null>(null);
+  const [upPay, setUpPay] = useState<Payment | null>(null);
+  const after = useRef(0);
+
   const covered = ent && (ent.freeOfferAvailable || ent.subscription || ent.companyCovered || ent.paidForfait);
   const [payment, setPayment] = useState<Payment | null>(null);
 
@@ -262,9 +268,121 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payment]);
 
+  /** « Parler à un technicien » : la demande rejoint la file ; offre IA seule = complément à payer d'abord. */
+  async function callTechnician() {
+    if (!saved.sessionId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await call<{ recorded: boolean; humanIncluded?: boolean; upgrade?: { priceFcfa: number } }>(
+        `/app/sessions/${saved.sessionId}/events`,
+        { type: 'escalated', skill: 'telephone', message: 'Le client demande un technicien' },
+        token,
+      );
+      if (r.humanIncluded === false) {
+        const price = r.upgrade?.priceFcfa ?? 1500;
+        setUpgrade({ priceFcfa: price });
+        setTurns((t) => [...t, { role: 'assistant', text: `Votre offre « Assistance IA » ne comprend pas de technicien. Vous pouvez en ajouter un pour ${price.toLocaleString('fr-FR')} FCFA.` }]);
+      } else {
+        setUpgrade(null);
+        setRelay(true);
+        setTurns((t) => [...t, { role: 'assistant', text: 'Un technicien a été prévenu sur son téléphone. Gardez cette page ouverte : sa réponse s’affichera ici et vous pouvez lui écrire ci-dessous.' }]);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Impossible de prévenir un technicien.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function orderUpgrade() {
+    if (!saved.sessionId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await call<{ order: { id: string }; payment: { amountFcfa: number; reference: string; instructions: string; url?: string | null; automatic?: boolean; methods?: string[] } }>(`/app/sessions/${saved.sessionId}/upgrade`, {}, token);
+      setUpPay({ orderId: r.order.id, reference: r.payment.reference, amount: r.payment.amountFcfa, instructions: r.payment.instructions, url: r.payment.url, automatic: r.payment.automatic, methods: r.payment.methods });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Impossible de créer la commande.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function payUpgradeWith(method: string) {
+    if (!upPay) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await call<{ url: string }>(`/app/orders/${upPay.orderId}/pay`, { method }, token);
+      setUpPay({ ...upPay, url: r.url });
+      window.open(r.url, '_blank', 'noopener');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Impossible de préparer le paiement.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Complément payé : le technicien est appelé tout seul.
+  useEffect(() => {
+    if (!upPay) return;
+    const timer = setInterval(async () => {
+      try {
+        const r = await call<{ order: { status: string } }>(`/app/orders/${upPay.orderId}`, null, token, 'GET');
+        if (r.order.status === 'paid') {
+          clearInterval(timer);
+          setUpPay(null);
+          setUpgrade(null);
+          void callTechnician();
+        }
+      } catch {
+        /* réseau instable : nouvel essai au prochain tour */
+      }
+    }, 8000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upPay]);
+
+  // Discussion avec le technicien : messages et état de la demande, toutes les 3 secondes.
+  useEffect(() => {
+    if (!relay || !saved.sessionId) return;
+    const timer = setInterval(async () => {
+      try {
+        const r = await call<{ state: { status: string; claimed: boolean }; messages: { id: number; sender: string; body: string; name: string | null }[] }>(
+          `/app/sessions/${saved.sessionId}/messages?after=${after.current}`,
+          null,
+          token,
+          'GET',
+        );
+        const fresh = r.messages.filter((m) => m.sender !== 'client');
+        for (const m of r.messages) after.current = Math.max(after.current, m.id);
+        if (fresh.length) setTurns((t) => [...t, ...fresh.map((m) => ({ role: 'assistant' as const, text: m.sender === 'technician' ? `${m.name ?? 'Technicien'} : ${m.body}` : m.body }))]);
+        if (['completed', 'cancelled', 'expired'].includes(r.state.status)) {
+          setEnded(true);
+          setRelay(false);
+          setTurns((t) => [...t, { role: 'assistant', text: 'L’assistance est terminée. Merci de votre confiance !' }]);
+        }
+      } catch {
+        /* réseau instable : nouvel essai au prochain tour */
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [relay, saved.sessionId, token]);
+
   async function send() {
     const message = text.trim();
     if (!message || busy || !saved.sessionId) return;
+    if (relay) {
+      setTurns((t) => [...t, { role: 'user', text: message }]);
+      setText('');
+      try {
+        await call(`/app/sessions/${saved.sessionId}/messages`, { body: message }, token);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Message non envoyé.');
+      }
+      return;
+    }
     const history = turns.slice(-10).map((t) => ({ role: t.role, text: t.text.slice(0, 1500) }));
     setTurns((t) => [...t, { role: 'user', text: message, photo: !!photo }]);
     setText('');
@@ -381,6 +499,35 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
         <div ref={bottom} />
       </div>
       {error && <p className="mb-2 text-sm font-medium text-brand-700">{error}</p>}
+      {upgrade && !upPay && (
+        <div className="mb-3 rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold">Ajouter un technicien : {upgrade.priceFcfa.toLocaleString('fr-FR')} FCFA</p>
+          <button className="ta-button-primary mt-3" disabled={busy} onClick={orderUpgrade}>Ajouter un technicien</button>
+        </div>
+      )}
+      {upPay && (
+        <div className="mb-3 rounded-xl border border-slate-200 bg-white p-4">
+          <p className="font-extrabold">{upPay.amount.toLocaleString('fr-FR')} FCFA à payer</p>
+          <p className="mt-1 text-sm text-slate-700">Référence : <strong>{upPay.reference}</strong></p>
+          {upPay.automatic && !upPay.url && upPay.methods?.length ? (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {upPay.methods.map((m) => (
+                <button key={m} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-bold hover:border-brand-600 disabled:opacity-60" disabled={busy} onClick={() => payUpgradeWith(m)}>
+                  {({ wave: 'Wave', orange: 'Orange Money', mtn: 'MTN Money', moov: 'Moov Money', djamo: 'Djamo' } as Record<string, string>)[m] ?? m}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-600">{upPay.url ? 'Après le paiement, revenez sur cette page : le technicien est appelé tout seul.' : upPay.instructions}</p>
+          )}
+        </div>
+      )}
+      {!relay && !ended && !upgrade && !upPay && (
+        <button type="button" className="mb-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold hover:border-brand-600 disabled:opacity-60" disabled={busy} onClick={callTechnician}>
+          Parler à un technicien
+        </button>
+      )}
+      {relay && <p className="mb-2 text-xs font-semibold text-green-700">● Un technicien a été prévenu : écrivez-lui ici.</p>}
       <p className="mb-2 text-xs text-slate-500">Ne donnez jamais de mot de passe, de code PIN ou de code reçu par SMS.</p>
       <form
         className="sticky bottom-0 flex items-end gap-2 bg-[#f6f7f9] pb-2"
@@ -393,8 +540,8 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
           {photo ? '✓' : '📷'}
           <input type="file" accept="image/*" className="sr-only" onChange={(e) => pick(e.target.files?.[0])} />
         </label>
-        <textarea className="ta-input min-h-11 flex-1 resize-none" rows={1} maxLength={1000} placeholder="Décrivez le problème…" value={text} onChange={(e) => setText(e.target.value)} />
-        <button className="ta-button-primary w-auto shrink-0" disabled={busy || !text.trim()}>Envoyer</button>
+        <textarea className="ta-input min-h-11 flex-1 resize-none" rows={1} maxLength={1000} placeholder={relay ? 'Écrivez au technicien…' : 'Décrivez le problème…'} value={text} onChange={(e) => setText(e.target.value)} />
+        <button className="ta-button-primary w-auto shrink-0" disabled={(busy && !relay) || ended || !text.trim()}>Envoyer</button>
       </form>
     </div>
   );
