@@ -22,7 +22,7 @@ interface Credentials {
 }
 
 /** Identifiants de la prise en main à distance, une fois le client d'accord. */
-export function RemoteAccess({ sessionId, controlGranted }: { sessionId: string; controlGranted: boolean }) {
+export function RemoteAccess({ sessionId, controlGranted, android = false }: { sessionId: string; controlGranted: boolean; android?: boolean }) {
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,7 +39,15 @@ export function RemoteAccess({ sessionId, controlGranted }: { sessionId: string;
     }
   }
 
-  if (!controlGranted) return <p className="text-sm text-amber-700">Prise en main à distance : le client ne l'a pas encore autorisée.</p>;
+  if (!controlGranted) {
+    return (
+      <p className="text-sm text-amber-700">
+        {android
+          ? "Prise en main du téléphone : le client n'a pas encore partagé son identifiant RustDesk. Guidez-le par la discussion (l'écran « Contrôle à distance » de son application)."
+          : "Prise en main à distance : le client ne l'a pas encore autorisée."}
+      </p>
+    );
+  }
   return (
     <div className="space-y-2">
       {!credentials && (
@@ -52,7 +60,7 @@ export function RemoteAccess({ sessionId, controlGranted }: { sessionId: string;
         <div className="space-y-1 rounded-lg bg-slate-50 p-3 font-mono text-xs">
           <p>ID RustDesk : {credentials.remotePeerId}</p>
           <p>Mot de passe : {credentials.remotePassword}</p>
-          <p className="font-sans text-slate-500">Saisissez ces identifiants dans votre propre client RustDesk pour vous connecter.</p>
+          <p className="font-sans text-slate-500">{android ? "Dans RustDesk, configurez d'abord le serveur Tech Assist (Réglages > Serveur ID/Relais), puis saisissez cet ID. Le client doit accepter la demande d'accès sur son écran." : 'Saisissez ces identifiants dans votre propre client RustDesk pour vous connecter.'}</p>
         </div>
       )}
     </div>
@@ -79,11 +87,7 @@ export function ActiveSessionCard({ session }: { session: MySession }) {
           <span className="min-w-0 break-words">L'agent travaille : {session.agent_task}</span>
         </p>
       )}
-      {session.platform === 'android' ? (
-        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">Téléphone : pas de prise en main à distance. Guidez le client par la discussion ou appelez-le.</p>
-      ) : (
-        <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} />
-      )}
+      <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} android={session.platform === 'android'} />
     </li>
   );
 }

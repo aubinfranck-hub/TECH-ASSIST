@@ -10,6 +10,7 @@ import { logAudit, type Db } from '../utils/audit.js';
 import { isDisposableEmail, normalizeEmail } from '../utils/email.js';
 import { freeLaunch, upgradeOffer } from '../utils/offers.js';
 import { expireOverdueSessions } from '../utils/sessionClock.js';
+import { encryptSecret } from '../utils/crypto.js';
 import { consumeEmailCode, emailField, emailVerificationEnabled } from './emailVerification.js';
 import {
   AssistantUnavailableError,
@@ -683,6 +684,61 @@ appRouter.post('/app/sessions/:id/events', limiter, requireAppInstall, validateB
     alertInBackground(req.params.id!, body.message);
   }
   res.status(201).json({ recorded: true });
+});
+
+/** Session téléphone appartenant à cette installation (via sa commande), encore ouverte. */
+async function ownedOpenAndroidSession(sessionId: string, installId: string) {
+  if (!UUID.test(sessionId)) return null;
+  const { rows } = await pool.query(
+    `SELECT s.id, s.order_id, s.human_included FROM sessions s JOIN orders o ON o.id = s.order_id
+     WHERE s.id = $1 AND o.app_install_id = $2 AND s.platform = 'android' AND s.status IN ('created','waiting_technician','active')`,
+    [sessionId, installId],
+  );
+  return rows[0] ?? null;
+}
+
+/** Réglages du serveur d'assistance à distance, à saisir une fois dans l'application RustDesk du téléphone. */
+appRouter.get('/app/sessions/:id/android-remote', limiter, requireAppInstall, async (req, res) => {
+  await expireOverdueSessions(pool);
+  const session = await ownedOpenAndroidSession(req.params.id!, req.appInstall!.id);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (session.human_included === false) return res.status(402).json({ error: 'human_not_included' });
+  const idServer = process.env.RUSTDESK_ID_SERVER;
+  const key = process.env.RUSTDESK_PUBLIC_KEY;
+  if (!idServer || !key) return res.status(503).json({ error: "Le contrôle à distance n'est pas encore disponible." });
+  res.json({ idServer, relayServer: process.env.RUSTDESK_RELAY_SERVER ?? idServer, key });
+});
+
+const androidRemoteSchema = z.object({
+  remotePeerId: z.string().trim().regex(/^\d{6,12}$/, "L'identifiant RustDesk comporte uniquement des chiffres"),
+  remotePassword: z.string().trim().min(4).max(64),
+});
+
+/**
+ * Le client donne l'identifiant et le mot de passe affichés par RustDesk sur son téléphone : c'est son accord
+ * explicite pour la prise en main. Le mot de passe est chiffré ; le technicien ne le voit qu'une fois assigné.
+ */
+appRouter.post('/app/sessions/:id/android-remote', limiter, requireAppInstall, validateBody(androidRemoteSchema), async (req, res) => {
+  await expireOverdueSessions(pool);
+  const session = await ownedOpenAndroidSession(req.params.id!, req.appInstall!.id);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (session.human_included === false) return res.status(402).json({ error: 'human_not_included' });
+  const body = req.body as z.infer<typeof androidRemoteSchema>;
+  await pool.query(
+    `UPDATE sessions SET remote_peer_id = $2, remote_password_encrypted = $3, remote_paired_at = now(),
+       consent_control_at = COALESCE(consent_control_at, now()), consent_screen_at = COALESCE(consent_screen_at, now())
+     WHERE id = $1`,
+    [session.id, body.remotePeerId, encryptSecret(body.remotePassword)],
+  );
+  await logAudit(pool, {
+    actorType: 'client',
+    actorId: req.appInstall!.email,
+    sessionId: session.id,
+    orderId: session.order_id,
+    action: 'session.android_remote_shared',
+    details: { remoteProvider: 'rustdesk', platform: 'android' },
+  });
+  res.status(201).json({ shared: true });
 });
 
 const chatSchema = z.object({

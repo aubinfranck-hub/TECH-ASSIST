@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AndroidRemoteGuide } from '../components/AndroidRemoteGuide.js';
 import { Link } from 'react-router-dom';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
@@ -241,6 +242,7 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
   useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [turns]);
 
   const [relay, setRelay] = useState(false);
+  const authedCall = useCallback(<T,>(path: string, body: unknown, method = 'POST') => call<T>(path, body, token, method), [token]);
   const [ended, setEnded] = useState(false);
   const [upgrade, setUpgrade] = useState<{ priceFcfa: number } | null>(null);
   const [upPay, setUpPay] = useState<Payment | null>(null);
@@ -570,6 +572,7 @@ function Assistant({ saved, onSession, onLogout }: { saved: Saved; onSession: (i
           Parler à un technicien
         </button>
       )}
+      {relay && saved.sessionId && <AndroidRemoteGuide sessionId={saved.sessionId} call={authedCall} />}
       {relay && <p className="mb-2 text-xs font-semibold text-green-700">● Un technicien a été prévenu : écrivez-lui ici.</p>}
       <p className="mb-2 text-xs text-slate-500">Ne donnez jamais de mot de passe, de code PIN ou de code reçu par SMS.</p>
       <form
