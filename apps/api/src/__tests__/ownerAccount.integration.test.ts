@@ -12,6 +12,13 @@ describe('Compte propriétaire défini par l\'environnement', () => {
   beforeEach(truncateAll);
   afterAll(() => pool.end());
 
+  it('neutralise les comptes d\'amorçage au mot de passe public et ne bute pas sur un téléphone déjà pris', async () => {
+    await pool.query(`INSERT INTO technicians (full_name, phone, username, password_hash, role) VALUES ('Admin', '+2250700000001', 'admin', '$2a$12$BOh8GU1qe8.UsPnY3WnQ9OPTnXaWrM50WJJZdKkwLK1P5BKpz8gKe', 'admin')`);
+    expect(await ensureOwnerAccount({ OWNER_USERNAME: 'franck', OWNER_PASSWORD: 'MotDePasse-123' })).toBe('created');
+    const hash = (await pool.query(`SELECT password_hash FROM technicians WHERE username = 'admin'`)).rows[0].password_hash;
+    expect(hash).not.toBe('$2a$12$BOh8GU1qe8.UsPnY3WnQ9OPTnXaWrM50WJJZdKkwLK1P5BKpz8gKe');
+  });
+
   it('crée le compte, permet la connexion, puis remet le mot de passe à jour', async () => {
     expect(await ensureOwnerAccount({})).toBe('skipped');
     expect(await ensureOwnerAccount({ OWNER_USERNAME: 'franck', OWNER_PASSWORD: 'court' })).toBe('skipped');
