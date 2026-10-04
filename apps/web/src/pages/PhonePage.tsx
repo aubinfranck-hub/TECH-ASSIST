@@ -90,6 +90,48 @@ async function shrink(file: File): Promise<string> {
   throw new Error('Photo trop lourde. Essayez une capture d’écran plus petite.');
 }
 
+/** La page s'installe sur l'écran d'accueil comme une application : son propre manifeste la fait s'ouvrir sur /telephone. */
+function useInstallable() {
+  const [prompt, setPrompt] = useState<{ prompt: () => Promise<void> } | null>(null);
+  const [installed, setInstalled] = useState(false);
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const previous = link?.getAttribute('href') ?? null;
+    link?.setAttribute('href', '/telephone.webmanifest');
+    if ('serviceWorker' in navigator) void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setPrompt(e as unknown as { prompt: () => Promise<void> });
+    };
+    const onInstalled = () => setInstalled(true);
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+      if (link && previous) link.setAttribute('href', previous);
+    };
+  }, []);
+  const standalone = typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true);
+  const ios = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return { canInstall: !!prompt && !installed && !standalone, install: () => prompt?.prompt(), iosHint: ios && !standalone && !installed };
+}
+
+function InstallBanner() {
+  const { canInstall, install, iosHint } = useInstallable();
+  if (canInstall) {
+    return (
+      <button type="button" onClick={() => void install()} className="mb-4 w-full rounded-xl border border-brand-600 bg-white px-4 py-3 text-sm font-bold text-brand-700">
+        📲 Installer l’application sur mon téléphone
+      </button>
+    );
+  }
+  if (iosHint) {
+    return <p className="mb-4 rounded-xl bg-slate-100 p-3 text-xs text-slate-700">Pour l’installer sur iPhone : touchez « Partager » puis « Sur l’écran d’accueil ».</p>;
+  }
+  return null;
+}
+
 export function PhonePage() {
   const [saved, setSaved] = useState<Saved>(load);
   const update = (patch: Partial<Saved>) => {
@@ -105,6 +147,7 @@ export function PhonePage() {
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mx-auto w-full max-w-lg px-4 py-8">
+      <InstallBanner />
       <h1 className="font-display text-3xl font-extrabold">{title}</h1>
       <div className="mt-6">{children}</div>
     </div>

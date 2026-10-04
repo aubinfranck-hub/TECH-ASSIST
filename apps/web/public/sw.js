@@ -2,6 +2,9 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+// Requis par Android pour proposer « Installer l'application » ; ne met rien en cache et laisse passer toutes les requêtes.
+self.addEventListener('fetch', () => {});
+
 self.addEventListener('push', (event) => {
   let data = {};
   try {

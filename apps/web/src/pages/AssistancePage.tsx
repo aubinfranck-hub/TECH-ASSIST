@@ -4,7 +4,7 @@ import { api, type PricingPlan } from '../lib/api.js';
 
 const DOWNLOADS = [
   { id: 'windows', label: 'Windows', url: import.meta.env.VITE_APP_WINDOWS_URL },
-  { id: 'android', label: 'Android', url: import.meta.env.VITE_APP_ANDROID_URL },
+  { id: 'android', label: 'Android et iPhone (sans téléchargement)', url: import.meta.env.VITE_APP_ANDROID_URL || '/telephone' },
 ] as const;
 
 const STEPS = [
