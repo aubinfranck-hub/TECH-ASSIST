@@ -119,7 +119,7 @@ describe('fournisseurs d’IA', () => {
   });
 
   it('ne laisse entrer aucune valeur libre dans le nom du modèle', () => {
-    expect(modelFor('gemini', { GEMINI_MODEL: 'x/../../evil?key=1' })).toBe('gemini-2.0-flash');
+    expect(modelFor('gemini', { GEMINI_MODEL: 'x/../../evil?key=1' })).toBe('gemini-2.5-flash');
     expect(modelFor('deepseek', { DEEPSEEK_MODEL: 'deepseek-reasoner' })).toBe('deepseek-reasoner');
     expect(modelFor('claude', {})).toBe('claude-sonnet-5-5');
   });

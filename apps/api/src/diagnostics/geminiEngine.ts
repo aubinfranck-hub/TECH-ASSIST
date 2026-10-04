@@ -1,6 +1,6 @@
 import type { DiagnosticAnswers, DiagnosticResult } from './types.js';
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 /**
  * TA[DECIDER] Le prompt impose ici un jugement honnête de la confiance,

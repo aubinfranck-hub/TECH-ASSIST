@@ -58,9 +58,9 @@ describe('buildContents', () => {
 describe('modelName', () => {
   it('prend le modèle configuré s’il est sobre, sinon le modèle par défaut', () => {
     expect(modelName({ GEMINI_MODEL: 'gemini-2.5-flash' })).toBe('gemini-2.5-flash');
-    expect(modelName({})).toBe('gemini-2.0-flash');
+    expect(modelName({})).toBe('gemini-2.5-flash');
     for (const bad of ['../x', 'a b', 'm?key=1', 'm/../../x', '', 'x'.repeat(80), 'm:generate']) {
-      expect(modelName({ GEMINI_MODEL: bad })).toBe('gemini-2.0-flash');
+      expect(modelName({ GEMINI_MODEL: bad })).toBe('gemini-2.5-flash');
     }
   });
 });
@@ -100,6 +100,19 @@ describe('askOfficeAssistant', () => {
     expect(body.systemInstruction.parts[0].text.startsWith(SYSTEM_PROMPT)).toBe(true); // les règles restent en tête ; seules des fiches internes peuvent suivre
     expect(body.systemInstruction.parts[0].text).not.toContain(attack);
     expect(body.contents).toEqual([{ role: 'user', parts: [{ text: attack }] }]);
+  });
+
+  it('si le modèle demandé a disparu (404), essaie le suivant au lieu de déclarer l\'assistant indisponible', async () => {
+    const urls: string[] = [];
+    const impl = (async (url: string) => {
+      urls.push(String(url));
+      return urls.length === 1 ? new Response('{}', { status: 404 }) : json(gemini('Voici.'));
+    }) as unknown as typeof fetch;
+    const out = await askOfficeAssistant('Comment faire ?', [], { env: { GEMINI_API_KEY: 'k', GEMINI_MODEL: 'gemini-2.0-flash' }, fetchImpl: impl });
+    expect(out.text).toBe('Voici.');
+    expect(urls[0]).toContain('/models/gemini-2.0-flash:');
+    expect(urls[1]).toContain('/models/gemini-2.5-flash:');
+    expect(out.model).toBe('gemini-2.5-flash');
   });
 
   it('le prompt système pose les limites attendues', () => {

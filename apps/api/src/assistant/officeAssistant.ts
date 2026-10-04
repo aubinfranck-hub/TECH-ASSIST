@@ -21,7 +21,10 @@ export const MAX_ANSWER_CHARS = 3000;
 import { lessonInstruction, type TrainingStep, type TrainingTrack } from './trainingCatalog.js';
 import { referenceFor } from './pannes.js';
 
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+/** gemini-2.0-flash a été arrêté par Google le 1er juin 2026 : tout appel renvoyait une erreur. */
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+/** Si le modèle demandé n'existe plus (404), on essaie ceux-ci à la suite. */
+const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash-lite'];
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 /** Levée pour toute indisponibilité (clé absente, erreur du fournisseur, délai, réponse vide ou bloquée). */
@@ -139,7 +142,7 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   try {
-    const response = await doFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    const send = (modelId: string) => doFetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`, {
       method: 'POST',
       // La clé voyage dans un en-tête, jamais dans l'adresse (les adresses finissent dans les journaux).
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -160,6 +163,14 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
         generationConfig: { temperature: 0.3, maxOutputTokens: options.lesson ? 1000 : 800 },
       }),
     });
+    let usedModel = model;
+    let response = await send(usedModel);
+    for (const next of FALLBACK_MODELS.filter((m) => m !== model)) {
+      if (response.status !== 404) break;
+      console.error(`[assistant] modèle ${usedModel} introuvable, essai de ${next}`);
+      usedModel = next;
+      response = await send(usedModel);
+    }
     if (!response.ok) throw new AssistantUnavailableError(`Le fournisseur d'IA a répondu ${response.status}`);
 
     const data = (await response.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
@@ -168,7 +179,7 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
       .join('')
       .trim();
     if (!text) throw new AssistantUnavailableError('Réponse vide ou bloquée');
-    return { text: text.length > MAX_ANSWER_CHARS ? `${text.slice(0, MAX_ANSWER_CHARS - 1)}…` : text, model };
+    return { text: text.length > MAX_ANSWER_CHARS ? `${text.slice(0, MAX_ANSWER_CHARS - 1)}…` : text, model: usedModel };
   } catch (err) {
     if (err instanceof AssistantUnavailableError) throw err;
     // Délai, réseau coupé, corps illisible : le détail reste dans les journaux, pas chez le client.

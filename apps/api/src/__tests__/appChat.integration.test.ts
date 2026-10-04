@@ -85,14 +85,14 @@ describe('Assistant Office / Outlook : route de chat de la session', () => {
       expect(rows[0].actor_id).toBe(r.email);
       expect(rows[0].details.question).toContain('signature');
       expect(rows[0].details.answer).toContain('Ouvrez Outlook');
-      expect(rows[0].details.model).toBe('gemini-2.0-flash');
+      expect(rows[0].details.model).toBe('gemini-2.5-flash');
     });
 
     it('utilise le modèle configuré', async () => {
-      process.env.GEMINI_MODEL = 'gemini-2.5-flash';
+      process.env.GEMINI_MODEL = 'gemini-3.8-flash';
       const { r, sessionId } = await startedSession();
       await chat(r, sessionId, { message: 'Comment faire un publipostage ?' });
-      expect(String(fetchMock.mock.calls[0]![0])).toContain('/models/gemini-2.5-flash:generateContent');
+      expect(String(fetchMock.mock.calls[0]![0])).toContain('/models/gemini-3.8-flash:generateContent');
     });
 
     it('l’historique est facultatif et tronque ce qui est journalisé', async () => {

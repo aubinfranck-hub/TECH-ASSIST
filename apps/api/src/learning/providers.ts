@@ -48,7 +48,7 @@ function safeModel(value: string | undefined, fallback: string): string {
 
 export function modelFor(provider: ProviderName, env: Env = process.env): string {
   if (provider === 'deepseek') return safeModel(env.DEEPSEEK_MODEL, 'deepseek-chat');
-  if (provider === 'gemini') return safeModel(env.LEARNING_GEMINI_MODEL ?? env.GEMINI_MODEL, 'gemini-2.0-flash');
+  if (provider === 'gemini') return safeModel(env.LEARNING_GEMINI_MODEL ?? env.GEMINI_MODEL, 'gemini-2.5-flash');
   return safeModel(env.ANTHROPIC_MODEL, 'claude-sonnet-5-5');
 }
 

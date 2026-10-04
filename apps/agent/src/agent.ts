@@ -108,7 +108,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
   const done: string[] = [];
   let consulted = false;
   /** Le problème persiste : l'IA essaie d'abord (une seule fois), puis seulement le technicien. */
-  const persistOrEscalate = async (reason: string, summary: string): Promise<Outcome> => {
+  const persistOrEscalate = async (reason: string, summary: string, friendly?: string): Promise<Outcome> => {
     if (ctx.consult && !consulted) {
       consulted = true;
       if (await ctx.consult({ skill: skill.title, summary, reason })) {
@@ -116,7 +116,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
         return { status: 'fixed', actionsDone: done };
       }
     }
-    return escalate(ctx, report, done, reason);
+    return escalate(ctx, report, done, reason, friendly);
   };
   const report = (event: Omit<AgentEvent, 'skill'>) =>
     safeReport(ctx.reporter, { ...event, skill: skill.id, message: truncate(event.message) });
@@ -128,7 +128,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
   } catch (err) {
     const reason = `Diagnostic impossible : ${err instanceof Error ? err.message : String(err)}`;
     trace.diagnosis = reason;
-    return escalate(ctx, report, done, reason, "Je n'arrive pas à analyser votre appareil.");
+    return persistOrEscalate(reason, reason, "Je n'arrive pas à analyser votre appareil.");
   }
 
   trace.diagnosis = diagnosis.summary;
@@ -138,7 +138,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
   for (const line of diagnosis.advice) ctx.ui.info(line);
 
   if (diagnosis.needsHuman) {
-    return escalate(ctx, report, done, diagnosis.summary);
+    return persistOrEscalate(diagnosis.summary, diagnosis.summary);
   }
 
   if (diagnosis.healthy) {
@@ -213,11 +213,9 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
       } else {
         trace.actions.push({ title: action.title, result: 'failed' });
         await report({ type: 'action_failed', action: action.id, message: result.message });
-        return escalate(
-          ctx,
-          report,
-          done,
+        return persistOrEscalate(
           `Échec de l'action « ${action.id} » : ${result.message}`,
+          `L'action « ${action.title} » a échoué : ${truncate(result.message, 200)}`,
           ctx.friendly
             ? `Je n'ai pas réussi à faire « ${action.title} ». ${truncate(cleanErrorMessage(result.message), 200)}`
             : `Je n'ai pas réussi : ${truncate(result.message, 200)}`,
@@ -237,7 +235,10 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
     try {
       after = ctx.quiet ? await skill.diagnose(ctx.runner) : await tracked(ctx.ui, VERIFY_TASK(skill.title), () => skill.diagnose(ctx.runner));
     } catch (err) {
-      return escalate(ctx, report, done, `Vérification impossible : ${err instanceof Error ? err.message : String(err)}`);
+      {
+      const why = `Vérification impossible : ${err instanceof Error ? err.message : String(err)}`;
+      return persistOrEscalate(why, why);
+    }
     }
     trace.test = `Relecture de Windows : ${after.summary}`;
     trace.metricsAfter = after.metrics;
@@ -250,7 +251,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
       if (ok) return { status: 'fixed', actionsDone: done };
       return persistOrEscalate('Corrections appliquées mais le problème persiste pour le client', after.summary);
     }
-    if (after.needsHuman) return escalate(ctx, report, done, after.summary);
+    if (after.needsHuman) return persistOrEscalate(after.summary, after.summary);
     // Un problème auparavant masqué peut apparaître une fois le premier réglé : on repropose.
     current = after;
   }
@@ -266,7 +267,7 @@ async function runCore(skill: Skill, ctx: AgentContext, trace: Trace): Promise<O
 
   const summary = after?.summary ?? current.summary;
   ctx.ui.info(`Il reste un souci : ${summary}`);
-  return escalate(ctx, report, done, `Problème persistant après correction : ${summary}`);
+  return persistOrEscalate(`Problème persistant après correction : ${summary}`, summary);
 }
 
 export function truncate(message: string | undefined, max = MAX_MESSAGE_LENGTH): string | undefined {

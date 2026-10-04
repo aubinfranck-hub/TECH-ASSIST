@@ -21,7 +21,7 @@ const firstName = (full: string | null | undefined) => (full ? full.trim().split
 
 // --- Permanence et alertes ---
 
-/** Base de pannes (≈480 fiches cause/solution) : recherche par mots pour le technicien, depuis son téléphone. */
+/** Base de pannes (≈500 fiches cause/solution) : recherche par mots pour le technicien, depuis son téléphone. */
 technicianConsoleRouter.get('/technician/pannes', (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 200) : '';
   const hits = searchPannes(q, 8, 2).map((h) => ({

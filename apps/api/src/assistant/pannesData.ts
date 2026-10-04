@@ -1,5 +1,5 @@
 /**
- * Base de pannes PC, Windows et Office (≈480 fiches : cause + solution d'atelier), issue du répertoire de Franck.
+ * Base de pannes PC, Windows et Office (≈500 fiches : cause + solution d'atelier), issue du répertoire de Franck.
  * `advanced` : la solution touche au matériel, au BIOS ou au registre — réservée à un technicien, jamais dictée à un client.
  */
 export interface Panne {
@@ -2472,7 +2472,7 @@ export const PANNES: Panne[] = [
   "symptom": "Gel complet de la barre des tâches et du menu Démarrer rendant Windows inerte.",
   "cause": "",
   "solution": "Exécuter en PowerShell administrateur : Get-AppXPackage -AllUsers | Foreach {Add-AppxPackage -DisableDevelopmentMode -Register \"$($_.InstallLocation)\\AppXManifest.xml\"}",
-  "advanced": false
+  "advanced": true
  },
  {
   "id": 247,
@@ -4773,5 +4773,265 @@ export const PANNES: Panne[] = [
   "cause": "Traitement audio logiciel tiers (Enhancements) incompatible créant une saturation de la mémoire tampon.",
   "solution": "Ouvrir les propriétés du périphérique de lecture audio, onglet Améliorations, et cocher Désactiver toutes les améliorations sonores.",
   "advanced": false
+ },
+ {
+  "id": 477,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Perte de confiance du domaine Active Directory (« La relation d'approbation entre cette station et le domaine a échoué »)",
+  "symptom": "",
+  "cause": "Désynchronisation du mot de passe machine stocké localement et dans l'annuaire AD (souvent après restauration d'un snapshot ou longue période hors tension).",
+  "solution": "En PowerShell administrateur, réinitialiser le canal sécurisé sans sortir la machine du domaine : powershell Test-ComputerSecureChannel -Repair -Credential (Get-Credential)",
+  "advanced": true
+ },
+ {
+  "id": 478,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Bail DHCP refusé ou attribution d'une adresse APIPA (169.254.x.x)",
+  "symptom": "",
+  "cause": "Service Client DHCP bloqué ou saturation de l'étendue (pool) DHCP du routeur/serveur.",
+  "solution": "Vider le cache de l'adaptateur et forcer la redemande de bail : cmd netsh winsock reset catalog netsh int ip reset ipconfig /renew",
+  "advanced": true
+ },
+ {
+  "id": 479,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Client VPN Windows qui coupe l'accès à tous les serveurs locaux après connexion",
+  "symptom": "",
+  "cause": "Option « Utiliser la passerelle par défaut pour le réseau distant » activée (Split Tunneling désactivé).",
+  "solution": "Dans les propriétés de la carte VPN > Gestion de réseau > Protocole IPv4 > Avancé, décocher Utiliser la passerelle par défaut pour le réseau distant.",
+  "advanced": true
+ },
+ {
+  "id": 480,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Erreur d'accès SMB 0x80004005 vers un NAS ou un partage Linux Samba",
+  "symptom": "",
+  "cause": "Stratégie Windows interdisant la signature non sécurisée ou exigeant SMBv3 avec chiffrement forcé.",
+  "solution": "Vérifier les règles via PowerShell et activer la signature invité si requise : powershell Set-SmbClientConfiguration -EnableInsecureGuestLogons $true -Force",
+  "advanced": true
+ },
+ {
+  "id": 481,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Conflit de résolution NetBIOS / WINS saturant la bande passante locale",
+  "symptom": "",
+  "cause": "Diffusion excessive (Broadcast) suite à un adaptateur multi-hébergé mal configuré.",
+  "solution": "Désactiver NetBIOS avec TCP/IP dans les paramètres avancés de la carte réseau ou forcer le mode P-Node (Peer-to-Peer).",
+  "advanced": true
+ },
+ {
+  "id": 482,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Erreur VPN L2TP/IPsec 789 : « La tentative de connexion a échoué car la couche de sécurité a rencontré une erreur »",
+  "symptom": "",
+  "cause": "Négociation IKE échouée en présence d'un serveur ou client situé derrière un routeur NAT.",
+  "solution": "Ajouter la clé DWORD AssumeUDPEncapsulationContextOnSendRule avec la valeur 2 dans : text HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent",
+  "advanced": true
+ },
+ {
+  "id": 483,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Déconnexion brutale du Wi-Fi dès que le câble Ethernet est branché (et inversement)",
+  "symptom": "",
+  "cause": "Fonctionnalité de priorisation agressive du pilote (ex. Intel Killer Network / LAN-WLAN Switching).",
+  "solution": "Désactiver l'option Switching LAN/WLAN dans le BIOS ou dans les propriétés avancées de la carte réseau sans fil.",
+  "advanced": true
+ },
+ {
+  "id": 484,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Erreur DNS NXDOMAIN persistante malgré la mise à jour des enregistrements serveurs",
+  "symptom": "",
+  "cause": "Cache négatif persistant dans le résolveur DNS local de Windows.",
+  "solution": "Réinitialiser le cache et le service résolveur : cmd ipconfig /flushdns net stop dnscache && net start dnscache",
+  "advanced": true
+ },
+ {
+  "id": 485,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Impossibilité de joindre un partage administratif (C$, ADMIN$) sur un poste hors domaine",
+  "symptom": "",
+  "cause": "Contrôle de compte d'utilisateur (UAC) restreignant les jetons d'administration distants via le réseau.",
+  "solution": "Créer la valeur DWORD LocalAccountTokenFilterPolicy réglée sur 1 dans : text HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+  "advanced": true
+ },
+ {
+  "id": 486,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Routage réseau asymétrique causé par des métriques d'interfaces identiques",
+  "symptom": "",
+  "cause": "Deux cartes actives (ex. Wi-Fi et 4G/Ethernet) avec la même métrique par défaut générant des paquets perdus.",
+  "solution": "Attribuer manuellement une métrique basse (ex. 10) à l'adaptateur prioritaire et haute (ex. 50) au secondaire via PowerShell : powershell Set-NetIPInterface -InterfaceIndex <ID> -InterfaceMetric 10",
+  "advanced": true
+ },
+ {
+  "id": 487,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Règles de stratégie de groupe (GPO) non appliquées (0x80070035 / Pas de contrôleur)",
+  "symptom": "",
+  "cause": "Délai d'attente réseau trop court au démarrage du système avant la détection du contrôleur de domaine.",
+  "solution": "Activer la stratégie locale : Toujours attendre le réseau au démarrage de l'ordinateur et à la connexion via gpedit.msc.",
+  "advanced": true
+ },
+ {
+  "id": 488,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Bloquage de connexion RDP avec le message « La révocation du certificat n'a pas pu être vérifiée »",
+  "symptom": "",
+  "cause": "Le serveur RDP présente un certificat interne dont les listes de révocation (CRL) sont inaccessibles au client.",
+  "solution": "Mettre à jour l'autorité de certification racine ou désactiver temporairement la vérification CRL dans le Registre client.",
+  "advanced": true
+ },
+ {
+  "id": 489,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Plage de ports TCP éphémères saturée (Erreur WSAENOBUFS 10055)",
+  "symptom": "",
+  "cause": "Logiciel d'arrière-plan ou bot réseau créant des milliers de connexions sans fermer les sockets (TIME_WAIT).",
+  "solution": "Réduire le délai TcpTimedWaitDelay à 30 secondes et augmenter la plage dynamique MaxUserPort dans : text HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters",
+  "advanced": true
+ },
+ {
+  "id": 490,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Service de pare-feu Windows Defender refusant de démarrer (Code d'erreur 13)",
+  "symptom": "",
+  "cause": "Droits d'accès supprimés sur le compte de service NT SERVICE\\MpsSvc dans la ruche du Registre.",
+  "solution": "Restaurer les autorisations par défaut sur HKLM\\SYSTEM\\CurrentControlSet\\Services\\MpsSvc en ligne de commande avec subinacl ou réinstaller le catalogue de règles.",
+  "advanced": true
+ },
+ {
+  "id": 491,
+  "domain": "Windows et Office",
+  "category": "Réseau d'Entreprise, VPN & Services d'Infrastructure",
+  "title": "Partage de connexion Internet (ICS) refusant de s'activer (Erreur 0x80004005)",
+  "symptom": "",
+  "cause": "Adresse IP statique forcée sur la carte secondaire en conflit avec la plage par défaut 192.168.137.1.",
+  "solution": "Repasser la carte secondaire en adressage DHCP automatique avant d'activer le partage ICS.",
+  "advanced": true
+ },
+ {
+  "id": 492,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "WSL2 (Windows Subsystem for Linux) refusant de démarrer : 0x80370102",
+  "symptom": "",
+  "cause": "Virtualisation matérielle désactivée dans le BIOS ou hyperviseur Hyper-V non lancé au boot.",
+  "solution": "Activer SVM/Intel VT-x dans le BIOS et forcer le lancement de l'hyperviseur : cmd bcdedit /set hypervisorlaunchtype auto",
+  "advanced": true
+ },
+ {
+  "id": 493,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "Hyper-V refusant de démarrer une machine virtuelle : « Espace de pagination insuffisant »",
+  "symptom": "",
+  "cause": "Conflit de réservation de mémoire dynamique avec une autre application de virtualisation ouverte.",
+  "solution": "Désactiver la mémoire dynamique sur la VM et lui allouer une mémoire vive statique disponible immédiatement.",
+  "advanced": true
+ },
+ {
+  "id": 494,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "Windows Sandbox (Bac à sable) plantant à l'ouverture : 0x80070003",
+  "symptom": "",
+  "cause": "Dossiers temporaires de l'utilisateur redirigés vers un lecteur réseau ou une partition chiffrée incompatible.",
+  "solution": "Rétablir les variables d'environnement TEMP et TMP sur le disque local natif (C:\\Users\\<Nom>\\AppData\\Local\\Temp).",
+  "advanced": true
+ },
+ {
+  "id": 495,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "Docker Desktop bloqué indéfiniment sur « Starting Docker Engine... »",
+  "symptom": "",
+  "cause": "Distribution Linux WSL2 docker-desktop-data corrompue suite à un arrêt brutal de Windows.",
+  "solution": "Arrêter complètement WSL via wsl --shutdown puis réinitialiser les distributions via les paramètres Docker.",
+  "advanced": true
+ },
+ {
+  "id": 496,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "VirtualBox ou VMware Workstation affichant un écran noir sous Windows 11",
+  "symptom": "",
+  "cause": "Conflit direct avec la sécurité basée sur la virtualisation (VBS) et Device Guard.",
+  "solution": "Désactiver l'isolation du noyau dans les paramètres Windows ou exécuter : powershell Disable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All",
+  "advanced": true
+ },
+ {
+  "id": 497,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "Disque dur virtuel VHDX non montable : « Le fichier est endommagé ou illisible »",
+  "symptom": "",
+  "cause": "Métadonnées du conteneur VHDX altérées par une coupure d'écriture.",
+  "solution": "Réparer le conteneur en PowerShell via la commande dédiée : powershell Repair-VHD -Path \"C:\\Chemin\\Vers\\Disque.vhdx\"",
+  "advanced": true
+ },
+ {
+  "id": 498,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "Échec de communication réseau dans WSL2 : impossible de faire un apt update",
+  "symptom": "",
+  "cause": "Fichier /etc/resolv.conf généré automatiquement avec une adresse de passerelle DNS non routable.",
+  "solution": "Créer le fichier /etc/wsl.conf avec la directive [network] et generateResolvConf = false, puis définir manuellement nameserver 1.1.1.1 dans /etc/resolv.conf.",
+  "advanced": true
+ },
+ {
+  "id": 499,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "Machine virtuelle Hyper-V perdant son adresse IP après chaque redémarrage",
+  "symptom": "",
+  "cause": "Commutateur virtuel configuré en mode « Interne » ou « Privé » au lieu du mode « Externe » bridgé sur la carte physique.",
+  "solution": "Ouvrir le Gestionnaire de commutateurs virtuels Hyper-V et recréer un commutateur en mode Externe lié à l'adaptateur principal.",
+  "advanced": true
+ },
+ {
+  "id": 500,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "Sous-système Windows pour Android (WSA) refusant de lancer les applications",
+  "symptom": "",
+  "cause": "Composant de plateforme de machine virtuelle désynchronisé après une mise à jour d'OS.",
+  "solution": "Réactiver la fonctionnalité via l'invite administrateur : cmd dism /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart",
+  "advanced": true
+ },
+ {
+  "id": 501,
+  "domain": "Windows et Office",
+  "category": "Virtualisation, Conteneurs & Sous-systèmes",
+  "title": "Vitesse d'E/S disque divisée par 10 sur un système invité virtualisé",
+  "symptom": "",
+  "cause": "Disque virtuel VHDX dynamique fragmenté ou hébergé sur une partition compressée NTFS.",
+  "solution": "Convertir le disque dynamique en disque de taille fixe (Fixed VHDX) et désactiver la compression NTFS sur le dossier hôte.",
+  "advanced": true
+ },
+ {
+  "id": 502,
+  "domain": "Windows et Office",
+  "category": "Sécurité Avancée, Chiffrement, TPM & Certificats",
+  "title": "Module TPM 2.0 non détecté dans Windows (tpm.msc : « Matériel introuvable »)",
+  "symptom": "",
+  "cause": "Micrologiciel TPM (fTPM/dTPM) désactivé ou planté dans un état de veille processeur basse consommation.",
+  "solution": "Éteindre le PC, débrancher le cordon secteur 60 secondes, entrer dans le BIOS et réactiver AMD CPU fTPM ou Intel PTT.",
+  "advanced": true
  }
 ];

@@ -33,4 +33,14 @@ describe("l'IA essaie avant le technicien", () => {
   it('sans IA disponible : passage de main direct comme avant', async () => {
     expect((await runSkill(quiet, ctx(new ScriptedUi({ heard: [false] })))).status).toBe('escalated');
   });
+  it('même quand le diagnostic exige un technicien ou qu\'une action échoue, l\'IA est consultée d\'abord', async () => {
+    const needs: Skill = { ...quiet, async diagnose() { return { summary: 'Réglage de sécurité.', problems: ['x'], actions: [], advice: [], healthy: false, needsHuman: true }; } };
+    let asked = 0;
+    const out = await runSkill(needs, ctx(new ScriptedUi({ heard: [true] }), async () => { asked++; return true; }));
+    expect(asked).toBe(1);
+    expect(out.status).toBe('fixed');
+    const out2 = await runSkill(needs, ctx(new ScriptedUi({ heard: [false] }), async () => { asked++; return false; }));
+    expect(asked).toBe(2);
+    expect(out2.status).toBe('escalated');
+  });
 });
