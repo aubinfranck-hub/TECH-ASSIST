@@ -116,6 +116,7 @@ sessionsRouter.post(
 const publicAssistanceSchema = z.object({
   clientPhone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide'),
   clientName: z.string().max(120).optional(),
+  problem: z.string().trim().max(1000).optional(),
   platform: z.enum(['web', 'windows', 'android']).default('web'),
   requestedMode: z.enum(['ia', 'humain']).default('ia'),
 });
