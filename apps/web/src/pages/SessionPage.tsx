@@ -45,11 +45,6 @@ export function SessionPage() {
   }, [code, refresh]);
 
   useEffect(() => {
-    if (!session) return;
-    void refreshMessages(session);
-  }, [session, refreshMessages]);
-
-  useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
@@ -64,7 +59,12 @@ export function SessionPage() {
     } catch {
       return [];
     }
-  }, [])
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    void refreshMessages(session);
+  }, [session, refreshMessages]);
 
   useEffect(() => {
     if (!session || session.mode !== 'ia' || initialAiStarted) return;
@@ -76,7 +76,9 @@ export function SessionPage() {
       .then((response) => { if (response.procedureId) setLastProcedureId(response.procedureId); return refreshMessages(session); })
       .catch((err) => setChatError(err instanceof ApiError ? err.message : "L'assistant IA est indisponible."))
       .finally(() => setChatLoading(false));
-  }, [session, messages, initialAiStarted]);;
+  }, [session, messages, initialAiStarted]);
+
+
 
   async function sendChat(message: string) {
     if (!session || session.mode !== 'ia' || !message.trim()) return;
