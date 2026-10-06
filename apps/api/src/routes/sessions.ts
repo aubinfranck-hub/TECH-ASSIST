@@ -111,6 +111,77 @@ sessionsRouter.post(
   },
 );
 
+const publicAssistanceSchema = z.object({
+  clientPhone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide'),
+  clientName: z.string().max(120).optional(),
+  platform: z.enum(['web', 'windows', 'android']).default('web'),
+  requestedMode: z.enum(['ia', 'humain']).default('ia'),
+});
+
+sessionsRouter.post('/assistance/start', validateBody(publicAssistanceSchema), async (req, res) => {
+  const { clientPhone, clientName, platform, requestedMode } = req.body as z.infer<typeof publicAssistanceSchema>;
+
+  const planResult = await pool.query(
+    `SELECT id, price_fcfa, duration_minutes, metadata
+     FROM pricing_plans
+     WHERE active = TRUE
+       AND COALESCE((metadata->>'subscription')::boolean, FALSE) = FALSE
+       AND duration_minutes IS NOT NULL
+       AND COALESCE((metadata->>'viewerSession')::boolean, FALSE) = FALSE
+     ORDER BY
+       CASE WHEN $1::text = 'humain' THEN CASE WHEN COALESCE((metadata->>'humanIncluded')::boolean, FALSE) THEN 0 ELSE 1 END
+            ELSE CASE WHEN COALESCE((metadata->>'aiIncluded')::boolean, TRUE) THEN 0 ELSE 1 END END,
+       price_fcfa ASC
+     LIMIT 1`,
+    [requestedMode],
+  );
+  const plan = planResult.rows[0];
+  if (!plan) return res.status(503).json({ error: 'Aucune formule d’assistance disponible' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const paidNow = freeLaunch();
+    const orderResult = await client.query(
+      `INSERT INTO orders (client_phone, client_name, plan_id, amount_fcfa, platform, status, paid_at)
+       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 = 'paid' THEN now() END)
+       RETURNING id, status, amount_fcfa, platform, created_at`,
+      [clientPhone, clientName ?? null, plan.id, paidNow ? 0 : plan.price_fcfa, platform, paidNow ? 'paid' : 'pending_payment'],
+    );
+    const order = orderResult.rows[0];
+
+    if (!paidNow) {
+      await client.query('COMMIT');
+      return res.status(402).json({ error: 'Paiement requis', order });
+    }
+
+    const sessionResult = await createSessionForOrder(order.id, platform, requestedMode, client);
+    if (!sessionResult.ok) {
+      await client.query('ROLLBACK');
+      return res.status(sessionResult.status).json({ error: sessionResult.error });
+    }
+
+    await logAudit(client, {
+      actorType: 'client',
+      actorId: clientPhone,
+      orderId: order.id,
+      sessionId: sessionResult.session.id,
+      action: 'assistance.web_started',
+      details: { platform, requestedMode, freeLaunch: true },
+    });
+
+    await client.query('COMMIT');
+    return res.status(201).json({ order, session: sessionResult.session, freeLaunch: true });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[assistance] démarrage web en échec', error);
+    return res.status(500).json({ error: 'Impossible de démarrer l’assistance' });
+  } finally {
+    client.release();
+  }
+});
+
 sessionsRouter.get('/sessions/:code', async (req, res) => {
   await expireOverdueSessions(pool);
   const { rows } = await pool.query(
