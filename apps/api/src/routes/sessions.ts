@@ -218,6 +218,7 @@ const publicSessionCodeSchema = z.object({
 const publicChatSchema = z.object({
   sessionCode: z.string().regex(/^\\d{9}$/),
   message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
+  initial: z.boolean().optional(),
 });
 
 async function publicSession(id: string, code: string) {
@@ -267,10 +268,12 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
     text: String(m.body).slice(0, MAX_TURN_CHARS),
   }));
 
-  await pool.query(
-    `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'client', $2)`,
-    [session.id, body.message],
-  );
+  if (!body.initial) {
+    await pool.query(
+      `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'client', $2)`,
+      [session.id, body.message],
+    );
+  }
 
   let procedureId: string | null = null;
   let memoryContext = '';
@@ -346,7 +349,7 @@ sessionsRouter.post('/sessions/:id/ai-feedback', publicChatLimiter, validateBody
     alertInBackground(session.id);
     return res.json({ status: 'technician' });
   }
-  const stored = await insertCandidate(pool, { procedure: learned.procedure, queryTokens: tokens, source: 'ai:web:' + learned.provider, exampleQuery: query, installId: null as unknown as string });
+  const stored = await insertCandidate(pool, { procedure: learned.procedure, queryTokens: tokens, source: 'ai:web:' + learned.provider, exampleQuery: query, installId: null });
   if (stored.kind === 'retired') {
     await pool.query('UPDATE sessions SET mode = \'humain\', status = \'waiting_technician\' WHERE id = $1', [session.id]);
     alertInBackground(session.id);
