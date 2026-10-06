@@ -11,6 +11,8 @@ import { HUMAN_MIN_MINUTES, expireOverdueSessions } from '../utils/sessionClock.
 import { progressView, STALE_PROGRESS_SECONDS } from '../utils/taskProgress.js';
 import { creditEarningSafely } from '../partners/earnings.js';
 import { closeViewerOrderIfUnpaid, settleViewerSession } from '../partners/viewer.js';
+import { AssistantUnavailableError, MAX_HISTORY_TURNS, MAX_MESSAGE_CHARS, MAX_TURN_CHARS, askOfficeAssistant } from '../assistant/officeAssistant.js';
+import rateLimit from 'express-rate-limit';
 
 export const sessionsRouter = Router();
 
@@ -119,7 +121,7 @@ const publicAssistanceSchema = z.object({
 });
 
 sessionsRouter.post('/assistance/start', validateBody(publicAssistanceSchema), async (req, res) => {
-  const { clientPhone, clientName, platform, requestedMode } = req.body as z.infer<typeof publicAssistanceSchema>;
+  const { clientPhone, clientName, problem, platform, requestedMode } = req.body as z.infer<typeof publicAssistanceSchema>;
 
   const planResult = await pool.query(
     `SELECT id, price_fcfa, duration_minutes, metadata
@@ -162,6 +164,21 @@ sessionsRouter.post('/assistance/start', validateBody(publicAssistanceSchema), a
       return res.status(sessionResult.status).json({ error: sessionResult.error });
     }
 
+    if (problem) {
+      await client.query(
+        `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'client', $2)`,
+        [sessionResult.session.id, problem],
+      );
+      await logAudit(client, {
+        actorType: 'client',
+        actorId: clientPhone,
+        orderId: order.id,
+        sessionId: sessionResult.session.id,
+        action: 'assistance.web_problem_recorded',
+        details: { problem: problem.slice(0, 300) },
+      });
+    }
+
     await logAudit(client, {
       actorType: 'client',
       actorId: clientPhone,
@@ -179,6 +196,100 @@ sessionsRouter.post('/assistance/start', validateBody(publicAssistanceSchema), a
     return res.status(500).json({ error: 'Impossible de démarrer l’assistance' });
   } finally {
     client.release();
+  }
+});
+
+const publicChatLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
+const publicSessionCodeSchema = z.object({
+  sessionCode: z.string().regex(/^\\d{9}$/),
+});
+
+const publicChatSchema = z.object({
+  sessionCode: z.string().regex(/^\\d{9}$/),
+  message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
+});
+
+async function publicSession(id: string, code: string) {
+  const { rows } = await pool.query(
+    `SELECT s.id, s.status, s.order_id, s.platform, s.mode, s.human_included
+     FROM sessions s WHERE s.id = $1 AND s.session_code = $2`,
+    [id, code],
+  );
+  return rows[0];
+}
+
+sessionsRouter.get('/sessions/:id/messages', async (req, res) => {
+  const parsed = publicSessionCodeSchema.safeParse({ sessionCode: req.query.sessionCode });
+  if (!parsed.success) return res.status(400).json({ error: 'Code de session invalide' });
+  const session = await publicSession(req.params.id, parsed.data.sessionCode);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+
+  const { rows } = await pool.query(
+    `SELECT m.id, m.sender, m.body, m.created_at
+     FROM session_messages m
+     WHERE m.session_id = $1
+     ORDER BY m.id ASC LIMIT 100`,
+    [session.id],
+  );
+  res.json({ messages: rows.map((m) => ({ id: Number(m.id), sender: m.sender, body: m.body, at: m.created_at })) });
+});
+
+sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(publicChatSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof publicChatSchema>;
+  const session = await publicSession(req.params.id, body.sessionCode);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (!['created', 'waiting_technician', 'active'].includes(session.status)) {
+    return res.status(409).json({ error: 'Cette assistance est terminée.' });
+  }
+  if (session.mode !== 'ia') {
+    return res.status(409).json({ error: 'Cette session est actuellement suivie par un technicien.' });
+  }
+
+  const stored = await pool.query(
+    `SELECT sender, body FROM session_messages
+     WHERE session_id = $1 AND sender IN ('client', 'assistant')
+     ORDER BY id DESC LIMIT $2`,
+    [session.id, MAX_HISTORY_TURNS * 2],
+  );
+  const history = stored.rows.reverse().map((m) => ({
+    role: m.sender === 'assistant' ? 'assistant' as const : 'user' as const,
+    text: String(m.body).slice(0, MAX_TURN_CHARS),
+  }));
+
+  await pool.query(
+    `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'client', $2)`,
+    [session.id, body.message],
+  );
+
+  try {
+    const answer = await askOfficeAssistant(body.message, history, {
+      platform: session.platform === 'android' ? 'android' : 'windows',
+    });
+    await pool.query(
+      `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'assistant', $2)`,
+      [session.id, answer.text],
+    );
+    await logAudit(pool, {
+      actorType: 'client',
+      actorId: 'public-session',
+      sessionId: session.id,
+      orderId: session.order_id,
+      action: 'agent.chat',
+      details: { question: body.message.slice(0, 300), answer: answer.text.slice(0, 500), model: answer.model, source: 'public_web' },
+    });
+    return res.json({ answer: answer.text, model: answer.model });
+  } catch (err) {
+    if (err instanceof AssistantUnavailableError) {
+      return res.status(503).json({ code: 'assistant_unavailable', error: "L'assistant IA n'est pas disponible pour le moment. Un technicien peut prendre le relais." });
+    }
+    throw err;
   }
 });
 
