@@ -10,7 +10,7 @@ const DOWNLOADS = [
 const STEPS = [
   {
     title: "Installez l'application",
-    text: "L'application Tech Assist reconnaît votre appareil. C'est elle, et non ce site, qui démarre l'assistance.",
+    text: "Depuis le site ou l’application, vous pouvez démarrer une demande.",
   },
   {
     title: 'Confirmez votre e-mail',
@@ -52,10 +52,11 @@ export function AssistancePage() {
   return (
     <div className="ta-container max-w-3xl py-14">
       <p className="ta-eyebrow mb-2">Assistance</p>
-      <h1 className="mb-3 text-2xl font-bold sm:text-3xl">L'assistance se fait dans l'application</h1>
+      <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-5"><p className="font-bold text-green-900">🎉 LANCEMENT TECH ASSIST — ASSISTANCE GRATUITE</p><p className="mt-1 text-sm text-green-800">Les tarifs habituels restent affichés mais barrés pendant le lancement.</p></div>
+      <Link to="/demander-aide" className="ta-button-primary mb-8 w-full justify-center py-3 sm:w-auto">🆘 DEMANDER DE L’AIDE — GRATUIT</Link>
+      <h1 className="mb-3 text-2xl font-bold sm:text-3xl">Une assistance, sur le web ou dans l’application</h1>
       <p className="mb-8 text-slate-600">
-        Votre première assistance est offerte. Ensuite, vous choisissez : 500 FCFA pour l’agent IA seul, ou 2 000 FCFA avec un
-        technicien qui prend le relais si besoin. Les entreprises choisissent un forfait mensuel selon leur nombre de postes.
+        Les demandes web et application utilisent la même API, la même file technicien et les mêmes sessions.
       </p>
 
       <section className="ta-card mb-8 p-6 sm:p-8">
@@ -111,10 +112,9 @@ export function AssistancePage() {
       </section>
 
       <section className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm leading-6 text-green-900">
-        <p className="font-bold">Une assistance offerte par personne</p>
+        <p className="font-bold">Tarifs habituels — lancement gratuit</p>
         <p className="mt-1">
-          Elle est rattachée à votre e-mail vérifié et à votre appareil : se réinscrire avec une autre adresse sur le même
-          appareil ne donne pas droit à une seconde assistance offerte. Le paiement se confirme avec un technicien (Mobile Money).
+          <s>500 FCFA</s> → <strong>GRATUIT actuellement</strong> · Assistance IA<br/><s>2 000 FCFA</s> → <strong>GRATUIT actuellement</strong> · IA + technicien<br/><s>{price.toLocaleString('fr-FR')} FCFA/mois</s> → <strong>GRATUIT actuellement</strong> · Entreprise
         </p>
       </section>
     </div>
