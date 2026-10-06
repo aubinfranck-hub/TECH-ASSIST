@@ -50,18 +50,6 @@ export function SessionPage() {
   }, [session, refreshMessages]);
 
   useEffect(() => {
-    if (!session || session.mode !== 'ia' || initialAiStarted) return;
-    const first = messages.find((m) => m.sender === 'client')?.body;
-    if (!first) return;
-    setInitialAiStarted(true);
-    setChatLoading(true);
-    void api.post<{ answer: string; model: string; procedureId?: string }>('/api/sessions/' + session.id + '/chat', { sessionCode: session.session_code, message: first, initial: true })
-      .then((response) => { if (response.procedureId) setLastProcedureId(response.procedureId); return refreshMessages(session); })
-      .catch((err) => setChatError(err instanceof ApiError ? err.message : "L'assistant IA est indisponible."))
-      .finally(() => setChatLoading(false));
-  }, [session, messages, initialAiStarted]);
-
-  useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
@@ -76,7 +64,19 @@ export function SessionPage() {
     } catch {
       return [];
     }
-  }, []);
+  }, [])
+
+  useEffect(() => {
+    if (!session || session.mode !== 'ia' || initialAiStarted) return;
+    const first = messages.find((m) => m.sender === 'client')?.body;
+    if (!first) return;
+    setInitialAiStarted(true);
+    setChatLoading(true);
+    void api.post<{ answer: string; model: string; procedureId?: string }>('/api/sessions/' + session.id + '/chat', { sessionCode: session.session_code, message: first, initial: true })
+      .then((response) => { if (response.procedureId) setLastProcedureId(response.procedureId); return refreshMessages(session); })
+      .catch((err) => setChatError(err instanceof ApiError ? err.message : "L'assistant IA est indisponible."))
+      .finally(() => setChatLoading(false));
+  }, [session, messages, initialAiStarted]);;
 
   async function sendChat(message: string) {
     if (!session || session.mode !== 'ia' || !message.trim()) return;
