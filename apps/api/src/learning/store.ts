@@ -95,7 +95,7 @@ export async function insertCandidate(
 }
 
 /** Note qu'une procédure a été servie à cette session (seule une procédure servie peut recevoir un résultat). */
-export async function markServed(db: Db, procedureId: string, sessionId: string, installId: string, queryTokens: string[]): Promise<void> {
+export async function markServed(db: Db, procedureId: string, sessionId: string, installId: string | null, queryTokens: string[]): Promise<void> {
   const res = await db.query(
     `INSERT INTO learned_procedure_runs (procedure_id, session_id, app_install_id, query_tokens)
      VALUES ($1, $2, $3, $4)
