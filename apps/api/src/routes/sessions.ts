@@ -12,6 +12,9 @@ import { progressView, STALE_PROGRESS_SECONDS } from '../utils/taskProgress.js';
 import { creditEarningSafely } from '../partners/earnings.js';
 import { closeViewerOrderIfUnpaid, settleViewerSession } from '../partners/viewer.js';
 import { AssistantUnavailableError, MAX_HISTORY_TURNS, MAX_MESSAGE_CHARS, MAX_TURN_CHARS, askOfficeAssistant } from '../assistant/officeAssistant.js';
+import { generateProcedure } from '../learning/orchestrator.js';
+import { tokenize } from '../learning/match.js';
+import { aiBudget, failedAlternatives, findForQuery, insertCandidate, markServed, recordCall, recordGap, recordOutcome } from '../learning/store.js';
 import rateLimit from 'express-rate-limit';
 
 export const sessionsRouter = Router();
@@ -269,9 +272,28 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
     [session.id, body.message],
   );
 
+  let procedureId: string | null = null;
+  let memoryContext = '';
+  const tokens = tokenize(body.message);
+  if (tokens.length >= 2) {
+    const hit = await findForQuery(pool, tokens);
+    if (hit) {
+      procedureId = hit.id;
+      await markServed(pool, hit.id, session.id, null, tokens);
+      memoryContext = [
+        'Solution apprise : ' + hit.procedure.title,
+        'Cause probable : ' + hit.procedure.summary,
+        hit.procedure.checks.length ? 'Vérifications : ' + hit.procedure.checks.map((c) => c.problem).join(' | ') : '',
+        hit.procedure.fixes.length ? 'Pistes de correction : ' + hit.procedure.fixes.map((f) => f.why).join(' | ') : '',
+        hit.procedure.advice.length ? 'Conseils : ' + hit.procedure.advice.join(' | ') : '',
+      ].filter(Boolean).join('\\n');
+    }
+  }
+
   try {
     const answer = await askOfficeAssistant(body.message, history, {
       platform: session.platform === 'android' ? 'android' : 'windows',
+      context: memoryContext,
     });
     await pool.query(
       `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'assistant', $2)`,
@@ -285,10 +307,63 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
       action: 'agent.chat',
       details: { question: body.message.slice(0, 300), answer: answer.text.slice(0, 500), model: answer.model, source: 'public_web' },
     });
-    return res.json({ answer: answer.text, model: answer.model });
+    return res.json({ answer: answer.text, model: answer.model, procedureId });
   } catch (err) {
     if (err instanceof AssistantUnavailableError) {
       return res.status(503).json({ code: 'assistant_unavailable', error: "L'assistant IA n'est pas disponible pour le moment. Un technicien peut prendre le relais." });
+    }
+    throw err;
+  }
+});
+
+const aiFeedbackSchema = z.object({ sessionCode: z.string().regex(/^\\d{9}$/), procedureId: z.string().uuid().optional(), result: z.enum(['resolved', 'not_resolved']), note: z.string().max(200).optional() });
+
+sessionsRouter.post('/sessions/:id/ai-feedback', publicChatLimiter, validateBody(aiFeedbackSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof aiFeedbackSchema>;
+  const session = await publicSession(req.params.id, body.sessionCode);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (!['created', 'waiting_technician', 'active'].includes(session.status)) return res.status(409).json({ error: 'Cette assistance est terminée.' });
+  if (body.procedureId) await recordOutcome(pool, { procedureId: body.procedureId, sessionId: session.id, result: body.result, note: body.note });
+  if (body.result === 'resolved') {
+    await pool.query('INSERT INTO session_messages (session_id, sender, body) VALUES ($1, \'system\', $2)', [session.id, '✓ Solution confirmée. TechAssist mémorise cette réussite pour les prochains cas similaires.']);
+    return res.json({ status: 'resolved' });
+  }
+  const recent = await pool.query('SELECT sender, body FROM session_messages WHERE session_id = $1 AND sender IN (\'client\',\'assistant\') ORDER BY id DESC LIMIT $2', [session.id, MAX_HISTORY_TURNS * 2]);
+  const history = recent.rows.reverse().map((m) => ({ role: m.sender === 'assistant' ? 'assistant' as const : 'user' as const, text: String(m.body).slice(0, MAX_TURN_CHARS) }));
+  const query = [...history].reverse().find((m) => m.role === 'user')?.text ?? '';
+  const tokens = tokenize(query);
+  const budget = await aiBudget(pool, { sessionId: session.id, installId: null });
+  if (!budget.ok) {
+    await pool.query('UPDATE sessions SET mode = \'humain\', status = \'waiting_technician\' WHERE id = $1', [session.id]);
+    alertInBackground(session.id);
+    return res.json({ status: 'technician' });
+  }
+  const learned = await generateProcedure({ query, avoid: await failedAlternatives(pool, tokens) }, { env: { ...process.env, LEARNING_PROVIDERS: 'gemini' }, onCall: (call) => recordCall(pool, { sessionId: session.id, installId: null }, call) });
+  if (learned.kind !== 'procedure') {
+    await pool.query('UPDATE sessions SET mode = \'humain\', status = \'waiting_technician\' WHERE id = $1', [session.id]);
+    if (tokens.length >= 2) await recordGap(pool, tokens, query, learned.kind === 'unsupported' ? learned.reason : learned.reason);
+    await pool.query('INSERT INTO session_messages (session_id, sender, body) VALUES ($1, \'system\', $2)', [session.id, 'Je n’ai pas une piste suffisamment fiable. Je transmets maintenant votre dossier à un technicien avec tout l’historique.']);
+    alertInBackground(session.id);
+    return res.json({ status: 'technician' });
+  }
+  const stored = await insertCandidate(pool, { procedure: learned.procedure, queryTokens: tokens, source: 'ai:web:' + learned.provider, exampleQuery: query, installId: null as unknown as string });
+  if (stored.kind === 'retired') {
+    await pool.query('UPDATE sessions SET mode = \'humain\', status = \'waiting_technician\' WHERE id = $1', [session.id]);
+    alertInBackground(session.id);
+    return res.json({ status: 'technician' });
+  }
+  await markServed(pool, stored.id, session.id, null, tokens);
+  const p = learned.procedure;
+  const context = ['Nouvelle piste : ' + p.title, 'Cause probable : ' + p.summary, p.checks.length ? 'Vérifications : ' + p.checks.map((c) => c.problem).join(' | ') : '', p.fixes.length ? 'Corrections possibles : ' + p.fixes.map((f) => f.why).join(' | ') : '', p.advice.length ? 'Conseils : ' + p.advice.join(' | ') : ''].filter(Boolean).join('\\n');
+  try {
+    const answer = await askOfficeAssistant('La première piste n’a pas résolu le problème. Propose la nouvelle piste et demande de confirmer le résultat.\\n\\n' + query, history, { platform: session.platform === 'android' ? 'android' : 'windows', context });
+    await pool.query('INSERT INTO session_messages (session_id, sender, body) VALUES ($1, \'assistant\', $2)', [session.id, answer.text]);
+    return res.json({ status: 'next_attempt', procedureId: stored.id, answer: answer.text });
+  } catch (err) {
+    if (err instanceof AssistantUnavailableError) {
+      await pool.query('UPDATE sessions SET mode = \'humain\', status = \'waiting_technician\' WHERE id = $1', [session.id]);
+      alertInBackground(session.id);
+      return res.json({ status: 'technician' });
     }
     throw err;
   }
