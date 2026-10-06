@@ -23,6 +23,8 @@ export function SessionPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [initialAiStarted, setInitialAiStarted] = useState(false);
+  const [lastProcedureId, setLastProcedureId] = useState<string | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
 
   const refresh = useCallback(async (sessionCode: string) => {
     try {
@@ -41,6 +43,14 @@ export function SessionPage() {
     const interval = setInterval(() => refresh(code), 3000);
     return () => clearInterval(interval);
   }, [code, refresh]);
+
+  useEffect(() => {
+    if (!session || session.mode !== 'ia' || initialAiStarted) return;
+    const first = messages.find((m) => m.sender === 'client')?.body;
+    if (!first) return;
+    setInitialAiStarted(true);
+    void sendChat(first);
+  }, [session, messages, initialAiStarted]);
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
@@ -64,10 +74,11 @@ export function SessionPage() {
     setChatLoading(true);
     setChatError(null);
     try {
-      await api.post<{ answer: string; model: string }>(`/api/sessions/${session.id}/chat`, {
+      const response = await api.post<{ answer: string; model: string; procedureId?: string }>(`/api/sessions/${session.id}/chat`, {
         sessionCode: session.session_code,
         message: message.trim(),
       });
+      if (response.procedureId) setLastProcedureId(response.procedureId);
       setChatMessage('');
       await refreshMessages(session);
     } catch (err) {
@@ -187,10 +198,17 @@ export function SessionPage() {
               </div>
             ))}
             {messages.filter((m) => m.sender === 'client' || m.sender === 'assistant').length === 0 && (
-              <p className="py-6 text-center text-sm text-slate-500">Analyse en cours…</p>
+              <p className="py-6 text-center text-sm text-slate-500">🤖 Analyse de votre demande par TechAssist IA…</p>
             )}
           </div>
           {chatError && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{chatError}</p>}
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-sm font-semibold text-slate-800">Cette piste a-t-elle résolu votre problème ?</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <button disabled={feedbackLoading} onClick={async () => { setFeedbackLoading(true); try { await api.post('/api/sessions/' + session.id + '/ai-feedback', { sessionCode: session.session_code, procedureId: lastProcedureId ?? undefined, result: 'resolved' }); await refreshMessages(session); } finally { setFeedbackLoading(false); } }} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">✓ Oui, c’est résolu</button>
+              <button disabled={feedbackLoading} onClick={async () => { setFeedbackLoading(true); try { const r = await api.post<{ status: string; procedureId?: string }>('/api/sessions/' + session.id + '/ai-feedback', { sessionCode: session.session_code, procedureId: lastProcedureId ?? undefined, result: 'not_resolved' }); if (r.procedureId) setLastProcedureId(r.procedureId); await refresh(code); await refreshMessages(session); } finally { setFeedbackLoading(false); } }} className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 disabled:opacity-50">✕ Non, j’ai toujours le problème</button>
+            </div>
+          </div>
           <form onSubmit={(e) => { e.preventDefault(); void sendChat(chatMessage); }} className="mt-4 flex gap-2">
             <input
               value={chatMessage}
