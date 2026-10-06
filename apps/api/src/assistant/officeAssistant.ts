@@ -22,9 +22,9 @@ import { lessonInstruction, type TrainingStep, type TrainingTrack } from './trai
 import { referenceFor } from './pannes.js';
 
 /** gemini-2.0-flash a été arrêté par Google le 1er juin 2026 : tout appel renvoyait une erreur. */
-const DEFAULT_MODEL = 'gemini-2.5-flash';
-/** Si le modèle demandé n'existe plus (404), on essaie ceux-ci à la suite. */
-const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash-lite'];
+const DEFAULT_MODEL = 'gemini-3.8-flash';
+/** Modèles Flash de secours. */
+const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 /** Levée pour toute indisponibilité (clé absente, erreur du fournisseur, délai, réponse vide ou bloquée). */
@@ -122,6 +122,7 @@ export interface AskOptions {
   env?: Record<string, string | undefined>;
   /** Mode formation : les consignes viennent du catalogue fermé. */
   lesson?: { track: TrainingTrack; level: 1 | 2 | 3 | 4; step: TrainingStep; index: number };
+  context?: string;
   image?: ChatImage;
   /** Téléphone : consignes de guidage seul. */
   platform?: 'windows' | 'android';
@@ -153,6 +154,8 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
             {
               text:
                 (options.platform === 'android' ? PHONE_SYSTEM_PROMPT : SYSTEM_PROMPT) +
+                '\n\nTu es le premier niveau IA de TechAssist. Tu analyses et guides ; tu ne prétends jamais avoir vérifié ou réparé un appareil sans outil réel. Si les informations sont insuffisantes ou si le problème persiste, recommande clairement le technicien.\n' +
+                (options.context ? `\\nCONTEXTE VALIDÉ DE LA MÉMOIRE TECHASSIST :\\n${options.context.slice(0, 5000)}\\nUtilise-le comme piste sans prétendre avoir exécuté ses actions.\\n` : '') +
                 (options.lesson ? lessonInstruction(options.lesson.track, options.lesson.level, options.lesson.step, options.lesson.index) : '') +
                 (options.image ? IMAGE_RULES : '') +
                 (options.platform !== 'android' && !options.lesson ? referenceFor(message) : ''),
