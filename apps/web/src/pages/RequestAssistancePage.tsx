@@ -23,10 +23,11 @@ export function RequestAssistancePage() {
       const result = await api.post<{ session: { session_code: string } }>('/api/assistance/start', {
         clientPhone: phone.trim(),
         clientName: name.trim() || undefined,
+        problem: problem.trim() || undefined,
         platform,
         requestedMode: mode,
       });
-      navigate(`/session?code=${encodeURIComponent(result.session.session_code)}${problem.trim() ? `&problem=${encodeURIComponent(problem.trim())}` : ''}`);
+      navigate(`/session?code=${encodeURIComponent(result.session.session_code)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Impossible de démarrer l’assistance.');
     } finally {
