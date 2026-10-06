@@ -210,7 +210,7 @@ export async function aiBudget(db: Db, who: { sessionId: string; installId: stri
   return { ok: true };
 }
 
-export async function recordCall(db: Db, who: { sessionId: string; installId: string }, call: { provider: string; model: string; ok: boolean; error?: string; durationMs: number }): Promise<void> {
+export async function recordCall(db: Db, who: { sessionId: string; installId: string | null }, call: { provider: string; model: string; ok: boolean; error?: string; durationMs: number }): Promise<void> {
   await db.query(
     `INSERT INTO learning_calls (session_id, app_install_id, provider, model, ok, error, duration_ms) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [who.sessionId, who.installId, call.provider, call.model || null, call.ok, call.error?.slice(0, 200) ?? null, call.durationMs],
