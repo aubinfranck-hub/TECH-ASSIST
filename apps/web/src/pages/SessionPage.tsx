@@ -18,6 +18,11 @@ export function SessionPage() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [messages, setMessages] = useState<{ id: number; sender: string; body: string; at: string }[]>([]);
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [initialAiStarted, setInitialAiStarted] = useState(false);
 
   const refresh = useCallback(async (sessionCode: string) => {
     try {
@@ -41,6 +46,37 @@ export function SessionPage() {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
+
+  const refreshMessages = useCallback(async (current: SessionInfo) => {
+    try {
+      const res = await api.get<{ messages: { id: number; sender: string; body: string; at: string }[] }>(
+        `/api/sessions/${current.id}/messages?sessionCode=${encodeURIComponent(current.session_code)}`,
+      );
+      setMessages(res.messages);
+      return res.messages;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  async function sendChat(message: string) {
+    if (!session || session.mode !== 'ia' || !message.trim()) return;
+    setChatLoading(true);
+    setChatError(null);
+    try {
+      await api.post<{ answer: string; model: string }>(`/api/sessions/${session.id}/chat`, {
+        sessionCode: session.session_code,
+        message: message.trim(),
+      });
+      setChatMessage('');
+      await refreshMessages(session);
+    } catch (err) {
+      setChatError(err instanceof ApiError ? err.message : "L'assistant IA est indisponible.");
+      await refreshMessages(session);
+    } finally {
+      setChatLoading(false);
+    }
+  }
 
   async function giveConsent(stage: 'screen' | 'control') {
     if (!session) return;
@@ -132,6 +168,41 @@ export function SessionPage() {
           {remaining < 5 * 60 * 1000 && (
             <p className="mt-1 text-sm text-amber-700">Moins de 5 minutes restantes.</p>
           )}
+        </div>
+      )}
+
+      {session.mode === 'ia' && (session.status === 'created' || session.status === 'active') && (
+        <div className="ta-card mt-6 p-5">
+          <div className="mb-4">
+            <p className="font-bold text-slate-900">🤖 Assistant IA TechAssist</p>
+            <p className="mt-1 text-sm text-slate-500">
+              J'analyse votre problème. Si je ne peux pas le résoudre, je passe la main à un technicien.
+            </p>
+          </div>
+          <div className="max-h-80 space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-3">
+            {messages.filter((m) => m.sender === 'client' || m.sender === 'assistant' || m.sender === 'system').map((m) => (
+              <div key={m.id} className={`rounded-xl p-3 text-sm ${m.sender === 'client' ? 'ml-8 bg-brand-50 text-brand-950' : 'mr-8 bg-white text-slate-700'}`}>
+                <p className="mb-1 text-xs font-semibold text-slate-400">{m.sender === 'client' ? 'Vous' : m.sender === 'assistant' ? 'TechAssist IA' : 'TechAssist'}</p>
+                <p className="whitespace-pre-wrap leading-6">{m.body}</p>
+              </div>
+            ))}
+            {messages.filter((m) => m.sender === 'client' || m.sender === 'assistant').length === 0 && (
+              <p className="py-6 text-center text-sm text-slate-500">Analyse en cours…</p>
+            )}
+          </div>
+          {chatError && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{chatError}</p>}
+          <form onSubmit={(e) => { e.preventDefault(); void sendChat(chatMessage); }} className="mt-4 flex gap-2">
+            <input
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              disabled={chatLoading}
+              placeholder="Décrivez ce qui se passe ou répondez à l'IA…"
+              className="ta-input flex-1"
+            />
+            <button disabled={chatLoading || !chatMessage.trim()} className="ta-button-primary px-5">
+              {chatLoading ? '…' : 'Envoyer'}
+            </button>
+          </form>
         </div>
       )}
 
