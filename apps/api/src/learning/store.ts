@@ -67,7 +67,7 @@ export type InsertOutcome =
 /** Enregistre une procédure composée par l'IA (« candidate »). Identique à une procédure connue : celle-ci est réutilisée et apprend la nouvelle formulation. */
 export async function insertCandidate(
   db: Db,
-  p: { procedure: Procedure; queryTokens: string[]; source: string; exampleQuery: string; installId: string },
+  p: { procedure: Procedure; queryTokens: string[]; source: string; exampleQuery: string; installId: string | null },
 ): Promise<InsertOutcome> {
   const hash = procedureHash(p.procedure);
   const tokens = [...new Set([...p.procedure.keywords.map(keyOf), ...p.queryTokens])].slice(0, 30);
@@ -192,7 +192,7 @@ export interface Budget {
 }
 
 /** Plafonds d'appels d'IA (coût) : par session, par poste et par jour, et pour toute la plateforme. */
-export async function aiBudget(db: Db, who: { sessionId: string; installId: string }, env: Env = process.env): Promise<Budget> {
+export async function aiBudget(db: Db, who: { sessionId: string; installId: string | null }, env: Env = process.env): Promise<Budget> {
   const perSession = intFrom(env.LEARNING_MAX_AI_PER_SESSION, 6);
   const perInstall = intFrom(env.LEARNING_MAX_AI_PER_INSTALL_DAY, 15);
   const perDay = intFrom(env.LEARNING_MAX_AI_PER_DAY, 600);
