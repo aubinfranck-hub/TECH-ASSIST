@@ -9,10 +9,17 @@
 <TextView android:id="@+id/code" android:textSize="18sp" android:textStyle="bold" android:layout_marginTop="20dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
 <TextView android:id="@+id/status" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <TextView android:id="@+id/assistant" android:textSize="16sp" android:layout_marginTop="16dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-<EditText android:id="@+id/reply" android:hint="Répondre à TechAssist ou au technicien" android:visibility="gone" android:layout_marginTop="12dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
-<Button android:id="@+id/send" android:text="ENVOYER" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <Button android:id="@+id/escalate" android:text="PASSER À UN TECHNICIEN" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <Button android:id="@+id/resolved" android:text="✓ OUI, C'EST RÉSOLU" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <Button android:id="@+id/notResolved" android:text="✕ NON, J'AI TOUJOURS LE PROBLÈME" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<LinearLayout android:id="@+id/remoteBox" android:orientation="vertical" android:visibility="gone" android:layout_marginTop="18dp" android:padding="16dp" android:background="#F1F5F9" android:layout_width="match_parent" android:layout_height="wrap_content">
+<TextView android:text="🔐 ASSISTANCE DISTANTE" android:textStyle="bold" android:textSize="18sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+<TextView android:text="Installez RustDesk, démarrez le partage d’écran, puis saisissez ici l’ID et le mot de passe affichés par RustDesk." android:layout_marginTop="6dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/remoteOpen" android:text="OUVRIR / INSTALLER RUSTDESK" android:layout_marginTop="10dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<EditText android:id="@+id/remotePeer" android:hint="ID RustDesk" android:inputType="number" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<EditText android:id="@+id/remotePassword" android:hint="Mot de passe RustDesk" android:inputType="textPassword" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/remoteShare" android:text="AUTORISER LE TECHNICIEN" android:layout_marginTop="10dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<TextView android:text="Vous devez encore accepter la connexion affichée par RustDesk. Vous pouvez arrêter l’assistance à tout moment." android:textSize="12sp" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+</LinearLayout>
 <Button android:id="@+id/stop" android:text="ARRÊTER LA SESSION" android:visibility="gone" android:layout_marginTop="16dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 </LinearLayout></ScrollView>
