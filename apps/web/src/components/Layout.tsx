@@ -22,8 +22,8 @@ export function Layout() {
           <Link to="/" aria-label="Tech Assist - Accueil" className="shrink-0"><Brand /></Link>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Navigation principale">
-            <Link to="/assistance" className={`ta-nav-link ${location.pathname === '/assistance' ? 'ta-nav-link-active' : ''}`}>Assistance</Link>
-            <Link to="/diagnostic" className={`ta-nav-link ${location.pathname === '/diagnostic' ? 'ta-nav-link-active' : ''}`}>Diagnostic</Link>
+            <Link to="/assistance" className={`ta-nav-link ${location.pathname === '/assistance' || location.pathname === '/demander-aide' ? 'ta-nav-link-active' : ''}`}>Comment ça marche</Link>
+            <Link to="/demander-aide" className="ta-nav-link">Demander de l’aide</Link>
             <Link to="/session" className={`ta-nav-link ${location.pathname === '/session' ? 'ta-nav-link-active' : ''}`}>Ma session</Link>
             <Link to="/entreprise" className={`ta-nav-link ${location.pathname === '/entreprise' ? 'ta-nav-link-active' : ''}`}>Entreprises</Link>
             <Link to="/partenaire" className={`ta-nav-link ${location.pathname === '/partenaire' ? 'ta-nav-link-active' : ''}`}>Partenaires</Link>
@@ -38,10 +38,9 @@ export function Layout() {
             <nav className="absolute right-0 top-12 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-soft" aria-label="Navigation mobile">
               <Link to="/" className="block rounded-xl px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50">Accueil</Link>
               <Link to="/assistance" className="block rounded-xl px-4 py-3 font-semibold text-brand-700 hover:bg-brand-50">Demander de l’aide</Link>
-              <Link to="/diagnostic" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Diagnostic</Link>
+              <Link to="/assistance" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Comment ça marche</Link>
               <Link to="/session" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Ma session</Link>
               <Link to="/entreprise" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Entreprises</Link>
-              <Link to="/telephone" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Assistant téléphone</Link>
               <Link to="/partenaire" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Techniciens partenaires</Link>
               <Link to="/technicien" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Espace technicien</Link>
             </nav>
@@ -67,7 +66,7 @@ export function Layout() {
             <p className="text-sm font-bold text-white">Services</p>
             <div className="mt-4 space-y-2.5 text-sm">
               <Link to="/assistance" className="block transition hover:text-white">Assistance</Link>
-              <Link to="/diagnostic" className="block transition hover:text-white">Diagnostic en ligne</Link>
+              <Link to="/assistance" className="block transition hover:text-white">Comment ça marche</Link>
               <Link to="/session" className="block transition hover:text-white">Suivre ma session</Link>
               <Link to="/entreprise" className="block transition hover:text-white">Espace entreprise</Link>
               <Link to="/partenaire" className="block transition hover:text-white">Techniciens partenaires</Link>
