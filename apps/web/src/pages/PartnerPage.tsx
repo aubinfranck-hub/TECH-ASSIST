@@ -88,7 +88,7 @@ export function PartnerPage() {
         <div className="ta-card w-full p-8">
           <p className="ta-eyebrow mb-2">Techniciens partenaires</p>
           <h1 className="mb-2 text-2xl font-bold">Dépannez vos clients à distance</h1>
-          <p className="mb-5 text-sm text-slate-600">Connectez-vous au poste de vos clients par Tech Assist : 3 minutes gratuites, puis 500 FCFA la session.</p>
+          <p className="mb-5 text-sm text-slate-600">Connectez-vous au poste de vos clients par Tech Assist. La tarification partenaire est affichée dans votre espace selon l’offre active.</p>
           <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-sm font-semibold">
             <button type="button" onClick={() => setTab('login')} className={`rounded-lg py-2 ${tab === 'login' ? 'bg-white shadow-sm' : 'text-slate-500'}`}>
               Se connecter
@@ -150,7 +150,7 @@ export function PartnerPage() {
         <section aria-label="Nouvelle session" className="ta-card space-y-3 p-5">
           <h2 className="font-semibold">Nouvelle session</h2>
           <p className="text-sm text-slate-600">
-            {Math.round((me.offer.freeSeconds ?? 180) / 60)} minutes gratuites à la connexion, puis {price !== null && price !== undefined ? `${price.toLocaleString('fr-FR')} FCFA` : 'un tarif fixe'} la session (une seule fois, quelle que soit sa durée).
+            Offre partenaire active : {Math.round((me.offer.freeSeconds ?? 180) / 60)} minutes incluses à la connexion, puis {price !== null && price !== undefined ? `${price.toLocaleString('fr-FR')} FCFA` : 'un tarif fixe'} la session.
           </p>
           <form onSubmit={openSession} className="flex flex-col gap-2 sm:flex-row">
             <input placeholder="Nom du client (facultatif)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} className="ta-input flex-1" />
