@@ -39,7 +39,7 @@ export function PricingCards({ plans, freeLaunch = false }: { plans: PricingPlan
       <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-5">
         <p className="font-bold text-green-900">{freeLaunch ? 'Lancement : toutes les assistances sont gratuites, technicien compris' : 'Première assistance offerte'}</p>
         <p className="mt-1 text-sm text-green-800">{freeLaunch ? 'Profitez-en pendant la durée du lancement : les tarifs ci-dessous s’appliqueront ensuite. ' : ''}Pour essayer, avec un technicien si besoin, sans paiement. Ensuite, vous payez uniquement l’assistance dont vous avez besoin.</p>
-        <Link to="/assistance" className="ta-button-primary mt-4">Installer l’application</Link>
+        <Link to="/assistance" className="ta-button-primary mt-4">Démarrer l’assistance</Link>
       </div>
 
       <h3 className="mb-3 text-lg font-extrabold text-slate-950">Particuliers · à l’usage</h3>
