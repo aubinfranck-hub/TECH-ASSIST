@@ -9,16 +9,16 @@ const DOWNLOADS = [
 
 const STEPS = [
   {
-    title: "Installez l'application",
-    text: "Depuis le site ou l’application, vous pouvez démarrer une demande.",
+    title: "Démarrez votre assistance",
+    text: "Vous pouvez commencer immédiatement depuis le navigateur. L’application est proposée lorsqu’elle apporte des fonctions supplémentaires.",
   },
   {
-    title: 'Confirmez votre e-mail',
-    text: 'Un code à 6 chiffres vous est envoyé. Votre e-mail identifie votre première assistance offerte et vos forfaits.',
+    title: 'Décrivez votre problème',
+    text: 'Décrivez simplement ce qui ne fonctionne pas. Le dossier est transmis à l’IA puis au technicien si nécessaire.',
   },
   {
     title: 'Demandez de l’aide',
-    text: "Choisissez l'agent IA ou un technicien. Rien n'est modifié sur votre appareil sans votre accord.",
+    text: "Choisissez l’agent IA ou l’option IA + technicien. Rien n'est modifié sur votre appareil sans votre accord.",
   },
 ];
 
@@ -35,7 +35,7 @@ const MODES = [
   },
 ];
 
-/** Le site est le miroir de l'application : il présente l'offre, l'assistance elle-même se fait dans l'application. */
+/** Le site permet de démarrer l'assistance directement ; l'application reste disponible pour les usages compatibles. */
 export function AssistancePage() {
   const [subscriptionPlan, setSubscriptionPlan] = useState<PricingPlan | null>(null);
 
@@ -60,7 +60,7 @@ export function AssistancePage() {
       </p>
 
       <section className="ta-card mb-8 p-6 sm:p-8">
-        <h2 className="mb-4 text-lg font-bold">Télécharger l'application</h2>
+        <h2 className="mb-4 text-lg font-bold">Commencer sur le Web</h2>
         {available.length > 0 ? (
           <div className="flex flex-wrap gap-3">
             {available.map((d) => (
@@ -71,14 +71,14 @@ export function AssistancePage() {
           </div>
         ) : (
           <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
-            L'application arrive bientôt. En attendant, le diagnostic en ligne reste disponible.
+            Vous pouvez démarrer maintenant depuis le navigateur, sans installation.
           </p>
         )}
         <Link to="/telephone" className="mt-4 mr-5 inline-block text-sm font-semibold text-brand-700 hover:underline">
           Sur téléphone : ouvrir l’assistant, sans installation
         </Link>
         <Link to="/diagnostic" className="mt-4 inline-block text-sm font-medium text-brand-700 hover:underline">
-          Faire d'abord un diagnostic en ligne
+          Demander de l’aide maintenant
         </Link>
       </section>
 
