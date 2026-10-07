@@ -133,11 +133,15 @@ export function SessionPage() {
           >
             <input
               required
+              inputMode="numeric"
+              pattern="[0-9]{9}"
+              maxLength={9}
               placeholder="Code à 9 chiffres"
               value={inputCode}
-              onChange={(e) => setInputCode(e.target.value)}
-              className="ta-input text-center text-lg tracking-widest"
+              onChange={(e) => setInputCode(e.target.value.replace(/\D/g, '').slice(0, 9))}
+              className="ta-input text-center text-lg tracking-[0.35em]"
             />
+            <p className="text-xs text-slate-500">Le code vous est communiqué lorsque votre demande crée une session. Si vous venez de lancer une assistance, vous avez déjà été redirigé automatiquement.</p>
             <button type="submit" className="ta-button-primary w-full">
               Rejoindre
             </button>
@@ -152,12 +156,22 @@ export function SessionPage() {
 
   const remaining = session.ends_at ? new Date(session.ends_at).getTime() - now : null;
   const codeRemaining = new Date(session.code_expires_at).getTime() - now;
+  const statusLabel: Record<string, string> = {
+    created: 'Demande reçue',
+    waiting_technician: 'En attente d’un technicien',
+    active: session.mode === 'ia' ? 'Analyse en cours' : 'Assistance en cours',
+    completed: 'Terminée',
+    cancelled: 'Arrêtée',
+  };
 
   return (
     <div className="ta-container max-w-xl py-14">
       <p className="ta-eyebrow mb-2">Ma session</p>
       <h1 className="mb-1 text-2xl font-bold sm:text-3xl">Session {session.session_code}</h1>
-      <p className="mb-6 text-slate-500">Statut : {session.status}</p>
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">{statusLabel[session.status] ?? session.status}</span>
+        <span className="text-sm text-slate-500">Code {session.session_code}</span>
+      </div>
 
       {session.requested_mode === 'ia' && session.mode === 'humain' && session.status !== 'completed' && (
         <p className="ta-card mb-4 border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -178,9 +192,16 @@ export function SessionPage() {
       )}
 
       {session.status === 'created' && session.mode !== 'ia' && (
-        <p className="ta-card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          En attente d'un technicien. Ce code expire dans {formatRemaining(codeRemaining)}.
-        </p>
+        <div className="ta-card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-bold">Votre demande est bien reçue.</p>
+          <p className="mt-1">Un technicien doit prendre le dossier en charge. Le code de session expire dans {formatRemaining(codeRemaining)}.</p>
+        </div>
+      )}
+      {session.status === 'waiting_technician' && (
+        <div className="ta-card border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-bold">Votre dossier est dans la file technicien.</p>
+          <p className="mt-1 text-sm leading-6">Le technicien reprendra les informations déjà fournies. Vous n’avez pas besoin de recommencer votre explication.</p>
+        </div>
       )}
 
       {session.status === 'active' && remaining !== null && (
@@ -282,9 +303,11 @@ export function SessionPage() {
       )}
 
       {session.status === 'completed' && (
-        <p className="ta-card p-4 text-slate-600">
-          Cette session est terminée. Merci d'avoir utilisé Tech Assist.
-        </p>
+        <div className="ta-card p-5 text-slate-700">
+          <p className="font-bold">Votre assistance est terminée.</p>
+          <p className="mt-1 text-sm leading-6">Merci d’avoir utilisé Tech Assist. Si le problème revient, vous pouvez ouvrir une nouvelle demande depuis le site.</p>
+          <a href="/demander-aide" className="mt-4 inline-flex font-bold text-brand-700 hover:underline">Ouvrir une nouvelle demande →</a>
+        </div>
       )}
     </div>
   );
