@@ -28,7 +28,7 @@ export function Layout() {
             <Link to="/entreprise" className={`ta-nav-link ${location.pathname === '/entreprise' ? 'ta-nav-link-active' : ''}`}>Entreprises</Link>
             <Link to="/partenaire" className={`ta-nav-link ${location.pathname === '/partenaire' ? 'ta-nav-link-active' : ''}`}>Partenaires</Link>
             <Link to="/technicien" className="ml-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">Espace technicien</Link>
-            <Link to="/assistance" className="ml-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-brand-700">Commencer maintenant</Link>
+            <Link to="/demander-aide" className="ml-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-brand-700">Demander de l’aide</Link>
           </nav>
 
           <details className="group relative md:hidden">
@@ -37,7 +37,7 @@ export function Layout() {
             </summary>
             <nav className="absolute right-0 top-12 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-soft" aria-label="Navigation mobile">
               <Link to="/" className="block rounded-xl px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50">Accueil</Link>
-              <Link to="/assistance" className="block rounded-xl px-4 py-3 font-semibold text-brand-700 hover:bg-brand-50">Demander de l’aide</Link>
+              <Link to="/demander-aide" className="block rounded-xl px-4 py-3 font-semibold text-brand-700 hover:bg-brand-50">Demander de l’aide</Link>
               <Link to="/assistance" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Comment ça marche</Link>
               <Link to="/session" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Ma session</Link>
               <Link to="/entreprise" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Entreprises</Link>
@@ -65,7 +65,7 @@ export function Layout() {
           <div>
             <p className="text-sm font-bold text-white">Services</p>
             <div className="mt-4 space-y-2.5 text-sm">
-              <Link to="/assistance" className="block transition hover:text-white">Assistance</Link>
+              <Link to="/demander-aide" className="block transition hover:text-white">Demander de l’aide</Link>
               <Link to="/assistance" className="block transition hover:text-white">Comment ça marche</Link>
               <Link to="/session" className="block transition hover:text-white">Suivre ma session</Link>
               <Link to="/entreprise" className="block transition hover:text-white">Espace entreprise</Link>
