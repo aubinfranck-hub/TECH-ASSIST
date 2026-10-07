@@ -37,7 +37,7 @@ export function Layout() {
             </summary>
             <nav className="absolute right-0 top-12 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-soft" aria-label="Navigation mobile">
               <Link to="/" className="block rounded-xl px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50">Accueil</Link>
-              <Link to="/assistance" className="block rounded-xl px-4 py-3 font-semibold text-brand-700 hover:bg-brand-50">Installer l’application</Link>
+              <Link to="/assistance" className="block rounded-xl px-4 py-3 font-semibold text-brand-700 hover:bg-brand-50">Demander de l’aide</Link>
               <Link to="/diagnostic" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Diagnostic</Link>
               <Link to="/session" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Ma session</Link>
               <Link to="/entreprise" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Entreprises</Link>
