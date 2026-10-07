@@ -305,7 +305,7 @@ export function CompanyPage() {
             <p className="mb-2">
               Pour ajouter un PC : installez le programme Tech Assist sur ce PC, puis dites-lui « rattacher ce PC à mon entreprise » et entrez le code
               ci-dessous. Le code est à usage unique et valable 48 heures. Seul l'état de santé du PC (disque, antivirus, mises à jour) est transmis :
-              aucun fichier, aucun document.
+              seules les informations techniques nécessaires au suivi du poste sont remontées ; aucun fichier personnel n’est demandé dans le cadre normal de ce rattachement.
             </p>
             <button type="button" onClick={createJoinCode} className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium hover:bg-brand-700">
               Générer un code de rattachement
