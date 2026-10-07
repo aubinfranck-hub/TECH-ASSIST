@@ -298,7 +298,7 @@ export function SessionPage() {
             <input
               value={chatMessage}
               onChange={(e) => setChatMessage(e.target.value)}
-              disabled={chatLoading || session.status === 'completed'}
+              disabled={chatLoading}
               placeholder="Écrire au technicien…"
               className="ta-input flex-1"
             />
