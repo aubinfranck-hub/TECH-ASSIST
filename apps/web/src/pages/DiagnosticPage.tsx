@@ -42,7 +42,7 @@ export function DiagnosticPage() {
       <p className="ta-eyebrow mb-2">Diagnostic</p>
       <h1 className="mb-2 text-2xl font-bold sm:text-3xl">Démarrer une assistance</h1>
       <p className="mb-8 text-slate-600">
-        Choisissez une formule, indiquez votre numéro, puis réglez par Mobile Money.
+        Pendant le lancement, aucune commande de paiement n’est nécessaire. Décrivez votre problème et démarrez directement l’assistance.
       </p>
 
       <form onSubmit={submit} className="ta-card space-y-4 p-6 sm:p-8">
