@@ -70,7 +70,7 @@ export function RequestAssistancePage() {
               <span className="mt-1 block text-xs text-slate-500"><s>500 FCFA</s> · GRATUIT actuellement</span>
             </button>
             <button type="button" onClick={() => setMode('hybride')}
-              className={`rounded-xl border p-4 text-left ${mode === 'humain' ? 'border-brand-600 bg-brand-50' : 'border-slate-200'}`}>
+              className={`rounded-xl border p-4 text-left ${mode === 'hybride' ? 'border-brand-600 bg-brand-50' : 'border-slate-200'}`}>
               <span className="font-bold">👨‍🔧 IA + technicien</span>
               <span className="mt-1 block text-xs text-slate-500"><s>2 000 FCFA</s> · GRATUIT actuellement</span>
             </button>
