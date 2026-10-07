@@ -102,7 +102,7 @@ export function HomePage() {
           ].map(([t, d]) => (
             <div key={t}><p className="font-extrabold">{t}</p><p className="mt-0.5 text-xs text-slate-400">{d}</p></div>
           ))}
-          <Link to="/assistance" className="ta-button col-span-2 bg-brand-600 text-white hover:bg-brand-500 lg:col-span-1">Commencer maintenant <span aria-hidden className="ml-2">→</span></Link>
+          <Link to="/demander-aide" className="ta-button col-span-2 bg-brand-600 text-white hover:bg-brand-500 lg:col-span-1">Demander de l’aide →</Link>
         </div>
       </section>
 
