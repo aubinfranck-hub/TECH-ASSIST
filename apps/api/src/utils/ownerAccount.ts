@@ -34,12 +34,8 @@ export async function ensureOwnerAccount(env: NodeJS.ProcessEnv = process.env): 
 
 async function ensureDemoTechnician(env: NodeJS.ProcessEnv): Promise<void> {
   if (env.DEMO_ACCESS_ENABLED !== 'true') return;
-  const username = env.DEMO_TECH_USERNAME?.trim();
-  const password = env.DEMO_TECH_PASSWORD;
-  if (!username || !password || username.length < 3 || password.length < 10) {
-    console.error('[demo] DEMO_TECH_USERNAME/DEMO_TECH_PASSWORD invalides : compte demo ignoré.');
-    return;
-  }
+  const username = env.DEMO_TECH_USERNAME?.trim() || 'demo-tech';
+  const password = env.DEMO_TECH_PASSWORD || 'DemoTA!2026#Tech';
   const hash = await bcrypt.hash(password, 12);
   await pool.query(
     `INSERT INTO technicians (full_name, phone, username, password_hash, role, is_active)
@@ -48,10 +44,27 @@ async function ensureDemoTechnician(env: NodeJS.ProcessEnv): Promise<void> {
        password_hash = EXCLUDED.password_hash,
        role = 'technician',
        is_active = TRUE`,
-    [env.DEMO_TECH_FULL_NAME?.trim() || 'Technicien Démo', env.DEMO_TECH_PHONE?.trim() || '+2250700000099', username, hash],
+    [env.DEMO_TECH_FULL_NAME?.trim() || 'Tech Assist — Technicien Démo', env.DEMO_TECH_PHONE?.trim() || '+2250700000099', username, hash],
+  );
+}
+
+async function ensureDemoAdmin(env: NodeJS.ProcessEnv): Promise<void> {
+  if (env.DEMO_ACCESS_ENABLED !== 'true') return;
+  const username = env.DEMO_ADMIN_USERNAME?.trim() || 'demo-admin';
+  const password = env.DEMO_ADMIN_PASSWORD || 'DemoTA!2026#Admin';
+  const hash = await bcrypt.hash(password, 12);
+  await pool.query(
+    `INSERT INTO technicians (full_name, phone, username, password_hash, role, is_active)
+     VALUES ($1, $2, $3, $4, 'admin', TRUE)
+     ON CONFLICT (username) DO UPDATE SET
+       password_hash = EXCLUDED.password_hash,
+       role = 'admin',
+       is_active = TRUE`,
+    [env.DEMO_ADMIN_FULL_NAME?.trim() || 'Tech Assist — Administrateur Démo', env.DEMO_ADMIN_PHONE?.trim() || '+2250700000098', username, hash],
   );
 }
 
 export async function ensureDemoAccess(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  await ensureDemoAdmin(env);
   await ensureDemoTechnician(env);
 }
