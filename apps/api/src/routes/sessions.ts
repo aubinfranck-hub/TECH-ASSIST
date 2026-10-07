@@ -418,7 +418,10 @@ sessionsRouter.post('/sessions/:id/escalate', validateBody(escalateSchema), asyn
     });
   }
   const { rows } = await pool.query(
-    `UPDATE sessions SET mode = 'humain'
+    `UPDATE sessions
+     SET mode = 'humain',
+         status = 'waiting_technician',
+         human_requested_at = COALESCE(human_requested_at, now())
      WHERE id = $1 AND status IN ('created', 'waiting_technician', 'active')
      RETURNING id, mode, status`,
     [req.params.id],
