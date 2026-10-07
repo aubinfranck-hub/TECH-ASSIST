@@ -6,16 +6,16 @@ import { VisitRequestForm } from '../components/VisitRequestForm.js';
 
 
 const STEPS = [
-  { n: '01', title: 'Vous lancez l’assistance', text: 'Téléchargez notre outil ou utilisez le diagnostic en ligne.' },
-  { n: '02', title: 'L’agent analyse, vous validez', text: 'Il vous explique chaque correction. Rien n’est modifié sans votre accord.' },
-  { n: '03', title: 'Votre problème est résolu', text: 'Il vérifie le résultat et passe la main à un technicien si nécessaire.' },
+  { n: '01', title: 'Vous lancez l’assistance', text: 'Lancez votre demande directement depuis le site ou l’application.' },
+  { n: '02', title: 'L’agent analyse, vous validez', text: 'L’assistant analyse votre problème, vous explique les étapes et demande votre accord lorsque l’intervention nécessite une action.' },
+  { n: '03', title: 'Votre dossier est résolu ou transmis', text: 'Vous confirmez le résultat. Si le problème persiste, un technicien reprend le dossier avec l’historique.' },
 ];
 
 const FAQ = [
   ['Le technicien peut-il voir mes fichiers personnels ?', 'Non, sauf nécessité explicite liée au problème signalé et avec votre accord. Les actions sont journalisées.'],
   ['Comment puis-je arrêter une session ?', 'Un bouton « Arrêter » permet de couper immédiatement l’assistance pendant la session.'],
   ['Et si mon problème est matériel ?', 'Une panne matérielle peut nécessiter une intervention sur place. Vous pouvez demander un déplacement.'],
-  ['Comment se fait le paiement ?', 'Par Mobile Money. Vous choisissez une offre : 500 FCFA pour l’agent IA seul, ou 2 000 FCFA avec un technicien qui prend le relais si besoin. Les entreprises choisissent un forfait mensuel selon le nombre de postes, avec l’IA et les techniciens toujours inclus.'],
+  ['Comment se fait le paiement ?', 'Par Mobile Money. Vous choisissez une offre : 500 FCFA pour l’agent IA seul, ou 2 000 FCFA avec un technicien qui peut reprendre le dossier si nécessaire. Les entreprises choisissent un forfait mensuel selon le nombre de postes, avec l’IA et les techniciens toujours inclus.'],
 ];
 
 export function HomePage() {
@@ -106,7 +106,7 @@ export function HomePage() {
       </section>
 
       <section className="ta-container ta-section" id="tarifs">
-        <div className="mx-auto max-w-2xl text-center"><p className="ta-eyebrow">Tarifs transparents</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Commencez sans engagement.</h2><p className="mt-3 text-slate-600">Votre première assistance est offerte. Ensuite, vous payez uniquement l’assistance dont vous avez besoin.</p></div>
+        <div className="mx-auto max-w-2xl text-center"><p className="ta-eyebrow">Tarifs transparents</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Commencez sans engagement.</h2><p className="mt-3 text-slate-600">Le lancement actuel rend les assistances gratuites. Les tarifs habituels restent affichés à titre indicatif.</p></div>
         <div className="mt-9"><PricingTable /></div>
       </section>
 
