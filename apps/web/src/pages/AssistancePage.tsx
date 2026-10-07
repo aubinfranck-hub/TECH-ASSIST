@@ -1,36 +1,70 @@
 import { Link } from 'react-router-dom';
+import { PageHero } from '../components/PageHero.js';
+
+const benefits = [
+  ['🤖', 'IA TechAssist', 'Une première analyse claire avant de faire intervenir un technicien.'],
+  ['🧑‍🔧', 'Technicien humain', 'Le dossier, l’historique et les échanges suivent le même parcours.'],
+  ['🔐', 'Assistance sécurisée', 'Vous gardez le contrôle et autorisez l’accès distant lorsque nécessaire.'],
+  ['📱', 'Android & Windows', 'Une expérience adaptée au téléphone et au PC.'],
+];
 
 export function AssistancePage() {
   return (
-    <div className="ta-container max-w-4xl py-12 sm:py-16">
-      <p className="ta-eyebrow">TechAssist</p>
-      <h1 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">L’assistance se fait dans l’application</h1>
-      <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-        Le site TechAssist est le portail. Le diagnostic et l’assistance réelle sont exécutés par les clients Android et Windows.
-      </p>
-      <section className="mt-8 grid gap-5 md:grid-cols-2">
-        <article className="ta-card p-7">
-          <p className="text-3xl">📱</p><h2 className="mt-3 text-2xl font-extrabold">APK Android</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">Diagnostic IA, session TechAssist, transmission du dossier au technicien et gestion de la session depuis le téléphone.</p>
-          <ul className="mt-4 space-y-2 text-sm"><li>✓ Diagnostic IA</li><li>✓ Historique partagé</li><li>✓ Escalade technicien</li><li>✓ Session contrôlée par le client</li></ul>
-        </article>
-        <article className="ta-card p-7">
-          <p className="text-3xl">💻</p><h2 className="mt-3 text-2xl font-extrabold">EXE Windows</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">Agent installé sur le PC pour les diagnostics et l’assistance distante lorsque le client l’autorise.</p>
-          <ul className="mt-4 space-y-2 text-sm"><li>✓ Diagnostic local</li><li>✓ Assistance technicien</li><li>✓ RustDesk lorsque nécessaire</li><li>✓ Consentement du client</li></ul>
-        </article>
-      </section>
-      <section className="mt-8 rounded-2xl border border-green-200 bg-green-50 p-6">
-        <p className="font-bold text-green-900">🎉 Lancement gratuit</p>
-        <p className="mt-1 text-sm text-green-800"><s>500 FCFA</s> Assistance IA · <s>2 000 FCFA</s> IA + technicien · gratuit actuellement.</p>
-      </section>
-      <section className="mt-8 ta-card p-7">
-        <h2 className="text-xl font-extrabold">Parcours réel</h2>
-        <div className="mt-5 grid gap-3 sm:grid-cols-5 text-center text-sm font-semibold">
-          <div className="rounded-xl bg-slate-50 p-4">1. Installer</div><div className="rounded-xl bg-slate-50 p-4">2. Diagnostiquer</div><div className="rounded-xl bg-slate-50 p-4">3. IA</div><div className="rounded-xl bg-slate-50 p-4">4. Technicien</div><div className="rounded-xl bg-slate-50 p-4">5. Résoudre</div>
+    <div>
+      <PageHero
+        eyebrow="COMMENT ÇA MARCHE"
+        title="Un support informatique pensé pour aller jusqu’à la résolution."
+        text="TechAssist combine portail web, applications natives, IA et techniciens. Vous expliquez une fois votre problème : le dossier suit son parcours jusqu’à la résolution."
+        image="/img/office.jpg"
+        imageAlt="Ordinateur portable utilisé pour une assistance informatique"
+        action={{ label: 'Demander de l’aide', to: '/demander-aide' }}
+        dark
+      />
+      <div className="ta-container py-12 sm:py-16">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {benefits.map(([icon, title, text]) => (
+            <article key={title} className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition hover:-translate-y-1 hover:border-brand-200 hover:shadow-lg">
+              <span className="text-3xl">{icon}</span>
+              <h2 className="mt-4 font-display text-xl font-black">{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
+            </article>
+          ))}
         </div>
-      </section>
-      <div className="mt-8"><Link to="/demander-aide" className="ta-button-primary">🆘 Accéder aux applications</Link></div>
+
+        <section className="mt-12 overflow-hidden rounded-[28px] bg-slate-950 text-white">
+          <div className="grid lg:grid-cols-2">
+            <div className="p-7 sm:p-10">
+              <p className="text-xs font-extrabold uppercase tracking-[.16em] text-brand-400">Le parcours</p>
+              <h2 className="mt-3 font-display text-3xl font-black">Du problème au technicien, sans repartir de zéro.</h2>
+              <div className="mt-7 space-y-5">
+                {[
+                  ['01', 'Décrire', 'Vous indiquez le problème et le contexte.'],
+                  ['02', 'Analyser', 'TechAssist cherche une piste et vous guide.'],
+                  ['03', 'Valider', 'Vous confirmez si la solution fonctionne.'],
+                  ['04', 'Transmettre', 'Si nécessaire, le technicien récupère le dossier complet.'],
+                ].map(([n, t, d]) => (
+                  <div key={n} className="flex gap-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-black">{n}</span>
+                    <div><h3 className="font-bold">{t}</h3><p className="mt-1 text-sm leading-5 text-slate-400">{d}</p></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <img src="/img/pc.jpg" alt="Technicien travaillant sur un ordinateur" className="h-64 w-full object-cover lg:h-full" loading="lazy" />
+          </div>
+        </section>
+
+        <section className="mt-10 grid gap-5 md:grid-cols-2">
+          <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
+            <img src="/img/reseau.jpg" alt="Réseau informatique" className="h-44 w-full object-cover" loading="lazy" />
+            <div className="p-6"><p className="text-xs font-bold uppercase tracking-wider text-brand-700">Pour les entreprises</p><h2 className="mt-2 text-2xl font-black">Suivre tout votre parc</h2><p className="mt-2 text-sm leading-6 text-slate-600">Postes, demandes, diagnostics et interventions depuis un espace dédié.</p><Link to="/entreprise" className="mt-4 inline-flex font-bold text-brand-700">Espace entreprise →</Link></div>
+          </article>
+          <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
+            <img src="/img/securite.jpg" alt="Sécurité informatique" className="h-44 w-full object-cover" loading="lazy" />
+            <div className="p-6"><p className="text-xs font-bold uppercase tracking-wider text-brand-700">À distance</p><h2 className="mt-2 text-2xl font-black">Vous gardez le contrôle</h2><p className="mt-2 text-sm leading-6 text-slate-600">Les outils distants sont utilisés uniquement lorsque l’intervention le nécessite et avec votre autorisation.</p><Link to="/demander-aide" className="mt-4 inline-flex font-bold text-brand-700">Commencer →</Link></div>
+          </article>
+        </section>
+      </div>
     </div>
   );
 }
