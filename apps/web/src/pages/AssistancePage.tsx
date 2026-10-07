@@ -26,12 +26,12 @@ const MODES = [
   {
     title: 'Agent IA',
     badge: 'Mode principal',
-    text: "L'agent regarde l'état de votre appareil (son, impression, Internet, mises à jour, Bluetooth, heure, ou tout autre service Windows), vous explique le problème, propose chaque correction et attend votre « oui ». Il vérifie ensuite que c'est réglé.",
+    text: "L’assistant analyse ce que vous décrivez, identifie une piste et vous guide étape par étape. Lorsque l’intervention nécessite une action sensible ou une prise en main, votre accord est demandé.",
   },
   {
     title: 'Technicien humain',
     badge: 'En option',
-    text: "Dépannage ou aide sur un logiciel avec un technicien. L'agent lui transmet ce qu'il a constaté et fait, s'il doit passer la main.",
+    text: "Avec l’option IA + technicien, l’IA commence l’analyse. Si le problème persiste ou nécessite une intervention humaine, le technicien reprend le même dossier avec l’historique.",
   },
 ];
 
