@@ -46,14 +46,14 @@ function Cgu() {
       </Section>
       <Section title="2. Commande et paiement">
         <p>
-          Toute session d'assistance à distance ou de diagnostic est payée avant son démarrage
-          (Mobile Money). Aucune session ne débute sans confirmation de paiement.
+          Pendant la période de lancement annoncée sur le site, les assistances sont proposées gratuitement
+          et aucun paiement n'est demandé pour démarrer une demande. Lorsque la facturation est activée,
+          les tarifs applicables et les modalités de paiement seront affichés avant toute prestation payante.
         </p>
         <p>
-          Si le problème signalé s'avère hors du périmètre du dépannage à distance (panne
-          matérielle, dommage physique), la session est close et une solution de remboursement, de
-          report ou d'intervention sur place est proposée — les règles précises de remboursement
-          restent à finaliser.
+          Si le problème nécessite une intervention sur place ou dépasse les capacités de l'assistance
+          à distance, Tech Assist peut proposer une intervention adaptée. Les conditions et tarifs
+          applicables sont communiqués avant toute prestation concernée.
         </p>
       </Section>
       <Section title="3. Déroulement d'une session">
@@ -63,7 +63,10 @@ function Cgu() {
           indique en permanence qu'une session est en cours, avec un bouton d'arrêt immédiat
           accessible à tout moment.
         </p>
-        <p>Chaque session a une durée maximale annoncée au moment de la commande.</p>
+        <p>
+          La durée et les modalités d'une session sont indiquées dans le parcours concerné.
+          Pendant le lancement gratuit, aucune commande payante n'est nécessaire pour démarrer.
+        </p>
       </Section>
       <Section title="4. Engagements du technicien">
         <p>
@@ -85,9 +88,8 @@ function Cgu() {
       <Section title="6. Responsabilité">
         <p>
           Tech Assist met en œuvre des moyens raisonnables pour assurer la qualité du service, sans
-          garantir la résolution de tout problème. La responsabilité de Tech Assist et de ses
-          techniciens partenaires ne saurait être engagée au-delà des limites prévues par la loi
-          applicable. [À préciser avec un juriste : plafond de responsabilité, garanties.]
+          garantir la résolution de tout problème. Les limites de responsabilité applicables seront
+          précisées dans la version définitive des présentes conditions après validation juridique.
         </p>
       </Section>
       <Section title="7. Droit applicable">
@@ -137,9 +139,9 @@ function Confidentialite() {
       </Section>
       <Section title="5. Vos droits">
         <p>
-          Conformément à la réglementation applicable, vous disposez d'un droit d'accès, de
-          rectification et de suppression de vos données. Pour l'exercer, contactez-nous [coordonnées
-          à compléter].
+          Conformément à la réglementation applicable, vous disposez des droits prévus par la loi
+          sur vos données personnelles. Les coordonnées et modalités pratiques d'exercice de ces
+          droits doivent être renseignées par l'éditeur avant la mise en production définitive.
         </p>
       </Section>
       <Section title="6. Sous-traitants et hébergement">
