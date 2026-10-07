@@ -13,6 +13,7 @@ import { PhonePage } from './pages/PhonePage.js';
 import { OrderPage } from './pages/OrderPage.js';
 import { SessionPage } from './pages/SessionPage.js';
 import { TechnicianPage } from './pages/TechnicianPage.js';
+import { NotFoundPage } from './pages/NotFoundPage.js';
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/cgu" element={<LegalPage doc="cgu" />} />
         <Route path="/confidentialite" element={<LegalPage doc="confidentialite" />} />
         <Route path="/mentions-legales" element={<LegalPage doc="mentions-legales" />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   );
