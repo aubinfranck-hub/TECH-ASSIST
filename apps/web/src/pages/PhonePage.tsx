@@ -1,32 +1,33 @@
 import { Link } from 'react-router-dom';
+import { PageHero } from '../components/PageHero.js';
 
 export function PhonePage() {
   return (
-    <div className="ta-container max-w-3xl py-12 sm:py-16">
-      <p className="ta-eyebrow">Application TechAssist</p>
-      <h1 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Assistance Android</h1>
-      <p className="mt-4 text-base leading-7 text-slate-600">
-        Pour une vraie assistance de l’appareil, utilisez l’application Android TechAssist.
-        Le site sert uniquement de portail.
-      </p>
-      <div className="ta-card mt-8 p-6">
-        <h2 className="font-extrabold">Dans l’application</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl bg-slate-50 p-4">🤖 Diagnostic IA</div>
-          <div className="rounded-xl bg-slate-50 p-4">🧠 Historique du dossier</div>
-          <div className="rounded-xl bg-slate-50 p-4">👨‍🔧 Passage au technicien</div>
-          <div className="rounded-xl bg-slate-50 p-4">🛑 Arrêt de session</div>
+    <div>
+      <PageHero
+        eyebrow="APPLICATION ANDROID"
+        title="Votre assistance dans votre poche."
+        text="L’APK TechAssist transforme votre téléphone en point d’entrée direct vers le diagnostic IA et le technicien."
+        image="/img/office.jpg"
+        imageAlt="Ordinateur et téléphone utilisés pour une assistance informatique"
+        action={{ label: 'Demander de l’aide', to: '/demander-aide' }}
+        dark
+      />
+      <div className="ta-container py-10 sm:py-14">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ['🤖','IA','Analyse et conseils guidés.'],
+            ['🧠','Historique','Le dossier reste disponible.'],
+            ['👨‍🔧','Technicien','Escalade sans répéter le problème.'],
+            ['🛑','Contrôle','Vous arrêtez la session quand vous voulez.'],
+          ].map(([i,t,d]) => <div key={t} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card"><span className="text-3xl">{i}</span><h2 className="mt-4 font-black">{t}</h2><p className="mt-1 text-sm leading-5 text-slate-600">{d}</p></div>)}
         </div>
-      </div>
-      <div className="mt-6 rounded-2xl border border-brand-200 bg-brand-50 p-6">
-        <p className="font-bold">APK Android</p>
-        <p className="mt-2 text-sm leading-6 text-slate-700">
-          Le client Android natif est maintenant dans le dépôt TechAssist et son build APK est automatisé par GitHub Actions.
-        </p>
-      </div>
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-        <Link to="/demander-aide" className="ta-button-primary justify-center">Voir les applications</Link>
-        <Link to="/" className="ta-button-secondary justify-center">Retour à l’accueil</Link>
+        <section className="mt-10 overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-card">
+          <div className="grid lg:grid-cols-2">
+            <img src="/img/securite.jpg" alt="Sécurité informatique" className="h-64 w-full object-cover lg:h-full" loading="lazy" />
+            <div className="p-7 sm:p-9"><p className="text-xs font-extrabold uppercase tracking-wider text-brand-700">APK Android</p><h2 className="mt-2 font-display text-3xl font-black">Une application native, pas une simple page web.</h2><p className="mt-4 text-sm leading-6 text-slate-600">Le client Android est intégré au projet TechAssist et son APK est construit automatiquement. Le site sert de portail et l’application porte l’assistance.</p><div className="mt-6 flex flex-wrap gap-3"><Link to="/demander-aide" className="ta-button-primary">Accéder au parcours →</Link><Link to="/" className="ta-button-secondary">Accueil</Link></div></div>
+          </div>
+        </section>
       </div>
     </div>
   );
