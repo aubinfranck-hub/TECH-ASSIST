@@ -247,6 +247,33 @@ sessionsRouter.get('/sessions/:id/messages', async (req, res) => {
   res.json({ messages: rows.map((m) => ({ id: Number(m.id), sender: m.sender, body: m.body, at: m.created_at })) });
 });
 
+const publicClientMessageSchema = z.object({
+  sessionCode: z.string().regex(/^\\d{9}$/),
+  message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
+});
+
+sessionsRouter.post('/sessions/:id/messages', publicChatLimiter, validateBody(publicClientMessageSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof publicClientMessageSchema>;
+  const session = await publicSession(req.params.id, body.sessionCode);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (!['created', 'waiting_technician', 'active'].includes(session.status)) return res.status(409).json({ error: 'Cette assistance est terminée.' });
+  if (session.mode !== 'humain') return res.status(409).json({ error: 'Cette session est encore suivie par l’assistant IA.' });
+
+  const { rows } = await pool.query(
+    `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'client', $2) RETURNING id, created_at`,
+    [session.id, body.message],
+  );
+  await logAudit(pool, {
+    actorType: 'client',
+    actorId: 'public-session',
+    sessionId: session.id,
+    orderId: session.order_id,
+    action: 'client.message',
+    details: { message: body.message.slice(0, 300) },
+  });
+  res.status(201).json({ id: Number(rows[0].id), at: rows[0].created_at });
+});
+
 sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(publicChatSchema), async (req, res) => {
   const body = req.body as z.infer<typeof publicChatSchema>;
   const session = await publicSession(req.params.id, body.sessionCode);
@@ -329,9 +356,26 @@ sessionsRouter.post('/sessions/:id/ai-feedback', publicChatLimiter, validateBody
   if (!['created', 'waiting_technician', 'active'].includes(session.status)) return res.status(409).json({ error: 'Cette assistance est terminée.' });
   if (body.procedureId) await recordOutcome(pool, { procedureId: body.procedureId, sessionId: session.id, result: body.result, note: body.note });
   if (body.result === 'resolved') {
-    await pool.query('INSERT INTO session_messages (session_id, sender, body) VALUES ($1, \'system\', $2)', [session.id, '✓ Solution confirmée. TechAssist mémorise cette réussite pour les prochains cas similaires.']);
+    await pool.query(
+      `UPDATE sessions
+       SET status = 'completed', stopped_at = now(), stopped_by = 'client', remote_password_encrypted = NULL
+       WHERE id = $1 AND status IN ('created', 'waiting_technician', 'active')`,
+      [session.id],
+    );
+    await pool.query(
+      `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'system', $2)`,
+      [session.id, '✓ Solution confirmée. TechAssist mémorise cette réussite pour les prochains cas similaires. Votre assistance est terminée.'],
+    );
+    await logAudit(pool, {
+      actorType: 'client',
+      actorId: 'public-session',
+      sessionId: session.id,
+      orderId: session.order_id,
+      action: 'session.resolved_by_client',
+    });
     return res.json({ status: 'resolved' });
   }
+
   const recent = await pool.query('SELECT sender, body FROM session_messages WHERE session_id = $1 AND sender IN (\'client\',\'assistant\') ORDER BY id DESC LIMIT $2', [session.id, MAX_HISTORY_TURNS * 2]);
   const history = recent.rows.reverse().map((m) => ({ role: m.sender === 'assistant' ? 'assistant' as const : 'user' as const, text: String(m.body).slice(0, MAX_TURN_CHARS) }));
   const query = [...history].reverse().find((m) => m.role === 'user')?.text ?? '';
