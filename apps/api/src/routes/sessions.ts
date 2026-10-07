@@ -231,7 +231,7 @@ async function publicSession(id: string, code: string) {
   return rows[0];
 }
 
-sessionsRouter.get('/sessions/:id/messages', async (req, res) => {
+sessionsRouter.get('/sessions/:id/messages', publicChatLimiter, async (req, res) => {
   const parsed = publicSessionCodeSchema.safeParse({ sessionCode: req.query.sessionCode });
   if (!parsed.success) return res.status(400).json({ error: 'Code de session invalide' });
   const session = await publicSession(req.params.id, parsed.data.sessionCode);
