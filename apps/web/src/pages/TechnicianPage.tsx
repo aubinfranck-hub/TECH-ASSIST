@@ -9,233 +9,36 @@ import { TechnicianRequest } from '../components/TechnicianRequest.js';
 import { TwoFactorSettings } from '../components/TwoFactorSettings.js';
 import { api, ApiError } from '../lib/api.js';
 
-interface QueueItem {
-  id: string;
-  session_code: string;
-  platform: string;
-  created_at: string;
-  human_requested_at: string | null;
-  duration_minutes: number;
-  client_phone: string;
-  client_name: string | null;
-  company_name?: string | null;
-  company_priority?: string | null;
-}
+interface QueueItem { id:string; session_code:string; platform:string; created_at:string; human_requested_at:string|null; duration_minutes:number; client_phone:string; client_name:string|null; company_name?:string|null; company_priority?:string|null; }
+interface TechOrder { id:string; client_phone:string; client_name:string|null; status:string; amount_fcfa:number; plan_name:string; created_at:string; }
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function ago(iso:string,now=Date.now()){const m=Math.max(0,Math.round((now-new Date(iso).getTime())/60000));if(m<1)return"à l'instant";if(m<60)return`il y a ${m} min`;const h=Math.floor(m/60);return h<24?`il y a ${h} h`:`il y a ${Math.floor(h/24)} j`;}
+function useTechnicianManifest(){useEffect(()=>{const l=document.querySelector<HTMLLinkElement>('link[rel="manifest"]');const p=l?.getAttribute('href')??null;l?.setAttribute('href','/technicien.webmanifest');return()=>{if(l&&p)l.setAttribute('href',p);};},[]);}
 
-interface TechOrder {
-  id: string;
-  client_phone: string;
-  client_name: string | null;
-  status: string;
-  amount_fcfa: number;
-  plan_name: string;
-  created_at: string;
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function ago(iso: string, now = Date.now()): string {
-  const minutes = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `il y a ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `il y a ${hours} h` : `il y a ${Math.floor(hours / 24)} j`;
-}
-
-/** La console est installable sur l'écran d'accueil du téléphone : son propre manifeste la fait s'ouvrir sur /technicien. */
-function useTechnicianManifest() {
-  useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    const previous = link?.getAttribute('href') ?? null;
-    link?.setAttribute('href', '/technicien.webmanifest');
-    return () => {
-      if (link && previous) link.setAttribute('href', previous);
-    };
-  }, []);
-}
-
-export function TechnicianPage() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('tech_assist_token'));
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [pendingOrders, setPendingOrders] = useState<TechOrder[]>([]);
-  const [mySessions, setMySessions] = useState<MySession[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [params, setParams] = useSearchParams();
-  const sessionParam = params.get('session');
-  const openId = sessionParam && UUID.test(sessionParam) ? sessionParam : null;
-  useTechnicianManifest();
-
-  const refresh = useCallback(async () => {
-    try {
-      const [queueRes, ordersRes, mySessionsRes] = await Promise.all([
-        api.get<{ queue: QueueItem[] }>('/api/technician/queue'),
-        api.get<{ orders: TechOrder[] }>('/api/orders/pending-payment').catch(() => ({ orders: [] })),
-        api.get<{ sessions: MySession[] }>('/api/technician/my-sessions'),
-      ]);
-      setQueue(queueRes.queue);
-      setPendingOrders(ordersRes.orders);
-      setMySessions(mySessionsRes.sessions);
-      setError(null);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        localStorage.removeItem('tech_assist_token');
-        setToken(null);
-      } else {
-        setError("Impossible de charger la file d'attente.");
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!token) return;
-    void refresh();
-    const interval = setInterval(() => void refresh(), 5000);
-    return () => clearInterval(interval);
-  }, [token, refresh]);
-
-  // Le nombre de demandes en attente apparaît dans l'onglet : on le voit même si la page est derrière une autre.
-  useEffect(() => {
-    const base = document.title;
-    if (token && queue.length > 0) document.title = `(${queue.length}) Demande de technicien · Tech Assist`;
-    return () => {
-      document.title = base;
-    };
-  }, [token, queue.length]);
-
-  function handleLoggedIn(newToken: string) {
-    localStorage.setItem('tech_assist_token', newToken);
-    setToken(newToken);
-  }
-
-  const logout = useCallback(() => {
-    localStorage.removeItem('tech_assist_token');
-    setToken(null);
-  }, []);
-
-  async function confirmPayment(orderId: string) {
-    await api.post(`/api/orders/${orderId}/confirm-payment`);
-    void refresh();
-  }
-
-  if (!token) {
-    return (
-      <div className="ta-container flex min-h-[70vh] max-w-md items-center py-14">
-        <div className="ta-card w-full p-8">
-          <p className="ta-eyebrow mb-2">Console technicien</p>
-          <h1 className="mb-6 text-2xl font-bold">Espace technicien</h1>
-          <TechnicianLoginForm onLoggedIn={handleLoggedIn} />
-        </div>
-      </div>
-    );
-  }
-
-  if (openId) {
-    return (
-      <div className="ta-container max-w-3xl py-6 sm:py-10">
-        <TechnicianRequest sessionId={openId} onBack={() => setParams({})} onUnauthorized={logout} onChanged={() => void refresh()} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="ta-container max-w-3xl space-y-8 py-6 sm:py-10">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Console technicien</h1>
-        <button onClick={logout} className="text-sm text-slate-500 hover:underline">
-          Déconnexion
-        </button>
-      </div>
-
-      <p className="rounded-2xl bg-slate-900 p-4 text-sm font-semibold text-white">
-        {queue.length > 0
-          ? `${queue.length} demande${queue.length > 1 ? 's' : ''} ${queue.length > 1 ? 'attendent' : 'attend'} un technicien`
-          : 'Aucune demande en attente'}
-        {mySessions.length > 0 && ` · ${mySessions.length} intervention${mySessions.length > 1 ? 's' : ''} en cours`}
-        {queue.some((q) => q.company_priority === 'urgent') && ' · 🔴 urgent'}
-      </p>
-
-      <TechnicianAlerts />
-
-      {error && <p className="text-red-600">{error}</p>}
-
-      <section aria-label="Demandes de technicien">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold">
-          Demandes de technicien
-          {queue.length > 0 && <span className="rounded-full bg-brand-600 px-2 py-0.5 text-xs font-bold text-white">{queue.length}</span>}
-        </h2>
-        {queue.length === 0 && <p className="text-sm text-slate-500">Aucune demande en attente. Vous serez prévenu dès qu'un client en fera une.</p>}
-        <ul className="space-y-2">
-          {[...queue].sort((a, b) => Number(b.company_priority === 'urgent') - Number(a.company_priority === 'urgent')).map((s) => (
-            <li key={s.id}>
-              <Link
-                to={`/technicien?session=${s.id}`}
-                className={`block rounded-2xl border bg-white p-4 transition hover:border-brand-200 ${s.company_priority === 'urgent' ? 'border-brand-500' : 'border-slate-200'}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 break-words font-semibold">
-                    {s.client_name ?? 'Client'}
-                    {s.company_name && <span className="font-normal text-slate-500"> · {s.company_name}</span>}
-                  </p>
-                  <span className="shrink-0 text-sm font-semibold text-brand-700">{ago(s.human_requested_at ?? s.created_at)}</span>
-                </div>
-                <p className="mt-0.5 text-sm text-slate-500">
-                  {s.platform === 'android' ? 'Android' : 'Windows'} · code {s.session_code}
-                  {s.company_priority === 'urgent' && <span className="ml-2 font-bold text-brand-700">Urgent</span>}
-                </p>
-                <span className="mt-3 flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-4 text-sm font-bold text-white">Ouvrir le dossier</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section aria-label="Mes interventions">
-        <h2 className="mb-3 font-semibold">Mes interventions en cours</h2>
-        {mySessions.length === 0 && <p className="text-sm text-slate-500">Aucune intervention en cours.</p>}
-        <ul className="space-y-2">
-          {mySessions.map((s) => (
-            <ActiveSessionCard key={s.id} session={s} />
-          ))}
-        </ul>
-      </section>
-
-      {pendingOrders.length > 0 && (
-        <section aria-label="Paiements à confirmer">
-          <h2 className="mb-3 font-semibold">Paiements en attente de confirmation</h2>
-          <ul className="space-y-2">
-            {pendingOrders.map((o) => (
-              <li key={o.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="min-w-0">
-                  <p className="font-medium">
-                    {o.plan_name} — {o.amount_fcfa.toLocaleString('fr-FR')} FCFA
-                  </p>
-                  <p className="truncate text-sm text-slate-500">
-                    {o.client_name ?? 'Client'} · {o.client_phone}
-                  </p>
-                </div>
-                <button onClick={() => void confirmPayment(o.id)} className="shrink-0 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-bold text-white hover:bg-brand-700">
-                  Paiement reçu
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section aria-label="Base de pannes">
-        <h2 className="mb-3 font-semibold">Base de pannes</h2>
-        <PannesSearch />
-      </section>
-
-      <section aria-label="Mes gains">
-        <h2 className="mb-3 font-semibold">Mes gains</h2>
-        <TechnicianEarningsCard />
-      </section>
-
-      <section aria-label="Sécurité du compte">
-        <h2 className="mb-3 font-semibold">Sécurité du compte</h2>
-        <TwoFactorSettings />
-      </section>
-    </div>
-  );
+export function TechnicianPage(){
+ const [token,setToken]=useState<string|null>(localStorage.getItem('tech_assist_token')); const [queue,setQueue]=useState<QueueItem[]>([]); const [pendingOrders,setPendingOrders]=useState<TechOrder[]>([]); const [mySessions,setMySessions]=useState<MySession[]>([]); const [error,setError]=useState<string|null>(null); const [params,setParams]=useSearchParams(); const openId=params.get('session'); useTechnicianManifest();
+ const refresh=useCallback(async()=>{try{const [q,o,s]=await Promise.all([api.get<{queue:QueueItem[]}>('/api/technician/queue'),api.get<{orders:TechOrder[]}>('/api/orders/pending-payment').catch(()=>({orders:[]})),api.get<{sessions:MySession[]}>('/api/technician/my-sessions')]);setQueue(q.queue);setPendingOrders(o.orders);setMySessions(s.sessions);setError(null);}catch(e){if(e instanceof ApiError&&e.status===401){localStorage.removeItem('tech_assist_token');setToken(null);}else setError("Impossible de charger la file d'attente.");}},[]);
+ useEffect(()=>{if(!token)return;void refresh();const i=setInterval(()=>void refresh(),5000);return()=>clearInterval(i);},[token,refresh]);
+ useEffect(()=>{const b=document.title;if(token&&queue.length)document.title=`(${queue.length}) Demande technicien · Tech Assist`;return()=>{document.title=b;};},[token,queue.length]);
+ function login(t:string){localStorage.setItem('tech_assist_token',t);setToken(t);} const logout=useCallback(()=>{localStorage.removeItem('tech_assist_token');setToken(null);},[]);
+ async function confirmPayment(id:string){await api.post(`/api/orders/${id}/confirm-payment`);void refresh();}
+ if(!token)return <div className="ta-container flex min-h-[78vh] max-w-lg items-center py-14"><div className="w-full overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl"><div className="bg-slate-950 p-8 text-white"><p className="text-xs font-bold uppercase tracking-[.2em] text-slate-400">TECH ASSIST OS</p><h1 className="mt-2 text-3xl font-black">Console technicien</h1><p className="mt-2 text-sm text-slate-300">Interventions, clients, sessions et sécurité depuis un seul espace.</p></div><div className="p-8"><TechnicianLoginForm onLoggedIn={login}/></div></div></div>;
+ if(openId&&UUID.test(openId))return <div className="ta-container max-w-5xl py-6 sm:py-10"><TechnicianRequest sessionId={openId} onBack={()=>setParams({})} onUnauthorized={logout} onChanged={()=>void refresh()}/></div>;
+ const urgent=queue.filter(q=>q.company_priority==='urgent').length, active=mySessions.length, total=queue.length+active;
+ return <div className="min-h-screen bg-slate-50">
+  <div className="border-b border-slate-200 bg-white"><div className="ta-container max-w-7xl py-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-[11px] font-black uppercase tracking-[.22em] text-brand-700">TECH ASSIST / OPERATIONS</p><h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950">Centre d'intervention</h1><p className="mt-1 text-sm text-slate-500">Pilotez vos demandes et reprenez chaque dossier avec son historique.</p></div><div className="flex gap-2"><Link to="/" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold">Voir le site</Link><button onClick={logout} className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">Déconnexion</button></div></div></div></div>
+  <main className="ta-container max-w-7xl space-y-6 py-6 sm:py-8">
+   {error&&<div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
+   <TechnicianAlerts/>
+   <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm"><span className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">Vue d'ensemble</span><span className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-500">File d'attente</span><span className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-500">Interventions</span><span className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-500">Base de pannes</span><span className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-500">Sécurité</span></nav>
+   <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><div className="rounded-2xl bg-slate-950 p-5 text-white shadow-lg"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">À traiter</p><p className="mt-2 text-4xl font-black">{queue.length}</p><p className="mt-1 text-xs text-slate-400">demandes en attente</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">En cours</p><p className="mt-2 text-4xl font-black">{active}</p><p className="mt-1 text-xs text-slate-500">interventions actives</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Urgent</p><p className="mt-2 text-4xl font-black text-red-600">{urgent}</p><p className="mt-1 text-xs text-slate-500">priorités entreprise</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Charge</p><p className="mt-2 text-4xl font-black">{total}</p><p className="mt-1 text-xs text-slate-500">dossiers visibles</p></div></section>
+   <div className="grid gap-6 xl:grid-cols-[1.45fr_.8fr]">
+    <section className="rounded-[1.5rem] border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-100 p-5"><div><h2 className="font-black text-slate-950">File d'intervention</h2><p className="text-sm text-slate-500">Les urgences passent en priorité.</p></div>{queue.length>0&&<span className="rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700">{queue.length} ouverte(s)</span>}</div><div className="divide-y divide-slate-100">{queue.length===0?<div className="p-8 text-center text-sm text-slate-500">Aucune demande en attente. La file se met à jour automatiquement.</div>:queue.sort((a,b)=>Number(b.company_priority==='urgent')-Number(a.company_priority==='urgent')).map(s=><Link key={s.id} to={`/technicien?session=${s.id}`} className="block p-5 transition hover:bg-slate-50"><div className="flex items-start justify-between gap-4"><div><div className="flex flex-wrap items-center gap-2"><p className="font-black">{s.client_name??'Client'}</p>{s.company_name&&<span className="text-sm text-slate-500">{s.company_name}</span>}{s.company_priority==='urgent'&&<span className="rounded-full bg-red-50 px-2 py-1 text-[11px] font-black text-red-700">URGENT</span>}</div><p className="mt-1 text-sm text-slate-500">{s.platform==='android'?'Android':'Windows'} · session {s.session_code} · {ago(s.human_requested_at??s.created_at)}</p></div><span className="rounded-xl bg-brand-600 px-3 py-2 text-xs font-black text-white">Ouvrir</span></div></Link>)}</div></section>
+    <div className="space-y-6"><section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"><h2 className="font-black">Mes interventions</h2><p className="mt-1 text-sm text-slate-500">Sessions que vous avez prises en charge.</p><div className="mt-4 space-y-3">{mySessions.length?mySessions.map(s=><ActiveSessionCard key={s.id} session={s}/>):<p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Aucune intervention active.</p>}</div></section>
+    {pendingOrders.length>0&&<section className="rounded-[1.5rem] border border-amber-200 bg-amber-50 p-5"><h2 className="font-black">Paiements à confirmer</h2><div className="mt-3 space-y-3">{pendingOrders.map(o=><div key={o.id} className="rounded-xl bg-white p-3"><p className="font-bold">{o.plan_name} · {o.amount_fcfa.toLocaleString('fr-FR')} FCFA</p><p className="text-xs text-slate-500">{o.client_name??'Client'} · {o.client_phone}</p><button onClick={()=>void confirmPayment(o.id)} className="mt-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-bold text-white">Confirmer</button></div>)}</div></section>}</div>
+   </div>
+   <section className="grid gap-6 lg:grid-cols-2"><div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4"><h2 className="font-black">Base de pannes</h2><p className="text-sm text-slate-500">Recherche technique et procédures apprises par Tech Assist.</p></div><PannesSearch/></div><div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"><h2 className="font-black">Performance & revenus</h2><p className="mb-4 text-sm text-slate-500">Suivi de votre activité.</p><TechnicianEarningsCard/></div></section>
+   <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4"><h2 className="font-black">Sécurité du compte</h2><p className="text-sm text-slate-500">Protégez l'accès aux sessions clients.</p></div><TwoFactorSettings/></section>
+  </main>
+ </div>;
 }
