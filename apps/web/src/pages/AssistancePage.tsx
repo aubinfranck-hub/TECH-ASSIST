@@ -2,40 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type PricingPlan } from '../lib/api.js';
 
-const DOWNLOADS = [
-  { id: 'windows', label: 'Windows', url: import.meta.env.VITE_APP_WINDOWS_URL },
-  { id: 'android', label: 'Android et iPhone (sans téléchargement)', url: import.meta.env.VITE_APP_ANDROID_URL || '/telephone' },
-] as const;
-
-const STEPS = [
-  {
-    title: "Démarrez votre assistance",
-    text: "Vous pouvez commencer immédiatement depuis le navigateur. L’application est proposée lorsqu’elle apporte des fonctions supplémentaires.",
-  },
-  {
-    title: 'Décrivez votre problème',
-    text: 'Décrivez simplement ce qui ne fonctionne pas. Le dossier est transmis à l’IA puis au technicien si nécessaire.',
-  },
-  {
-    title: 'Demandez de l’aide',
-    text: "Choisissez l’agent IA ou l’option IA + technicien. Rien n'est modifié sur votre appareil sans votre accord.",
-  },
-];
-
-const MODES = [
-  {
-    title: 'Agent IA',
-    badge: 'Mode principal',
-    text: "L’assistant analyse ce que vous décrivez, identifie une piste et vous guide étape par étape. Lorsque l’intervention nécessite une action sensible ou une prise en main, votre accord est demandé.",
-  },
-  {
-    title: 'Technicien humain',
-    badge: 'En option',
-    text: "Avec l’option IA + technicien, l’IA commence l’analyse. Si le problème persiste ou nécessite une intervention humaine, le technicien reprend le même dossier avec l’historique.",
-  },
-];
-
-/** Le site permet de démarrer l'assistance directement ; l'application reste disponible pour les usages compatibles. */
 export function AssistancePage() {
   const [subscriptionPlan, setSubscriptionPlan] = useState<PricingPlan | null>(null);
 
@@ -46,77 +12,105 @@ export function AssistancePage() {
       .catch(() => undefined);
   }, []);
 
-  const price = subscriptionPlan?.price_fcfa ?? 10000;
-  const available = DOWNLOADS.filter((d) => d.url);
+  const companyPrice = subscriptionPlan?.price_fcfa ?? 10000;
 
   return (
-    <div className="ta-container max-w-3xl py-14">
-      <p className="ta-eyebrow mb-2">Assistance</p>
-      <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-5"><p className="font-bold text-green-900">🎉 LANCEMENT TECH ASSIST — ASSISTANCE GRATUITE</p><p className="mt-1 text-sm text-green-800">Les tarifs habituels restent affichés mais barrés pendant le lancement.</p></div>
-      <Link to="/demander-aide" className="ta-button-primary mb-8 w-full justify-center py-3 sm:w-auto">🆘 DEMANDER DE L’AIDE — GRATUIT</Link>
-      <h1 className="mb-3 text-2xl font-bold sm:text-3xl">Une assistance, sur le web ou dans l’application</h1>
-      <p className="mb-8 text-slate-600">
-        Les demandes web et application utilisent la même API, la même file technicien et les mêmes sessions.
-      </p>
+    <div className="ta-container max-w-4xl py-12 sm:py-16">
+      <div className="max-w-2xl">
+        <p className="ta-eyebrow">Le parcours Tech Assist</p>
+        <h1 className="mt-2 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+          Un seul parcours, du problème jusqu’à sa résolution.
+        </h1>
+        <p className="mt-4 text-base leading-7 text-slate-600">
+          Vous décrivez votre problème. L’IA commence l’analyse. Si elle ne suffit pas,
+          un technicien reprend exactement le même dossier avec son historique.
+        </p>
+      </div>
 
-      <section className="ta-card mb-8 p-6 sm:p-8">
-        <h2 className="mb-4 text-lg font-bold">Commencer sur le Web</h2>
-        {available.length > 0 ? (
-          <div className="flex flex-wrap gap-3">
-            {available.map((d) => (
-              <a key={d.id} href={d.url} className="ta-button-primary w-auto px-6">
-                Pour {d.label}
-              </a>
-            ))}
-          </div>
-        ) : (
-          <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
-            Vous pouvez démarrer maintenant depuis le navigateur, sans installation.
-          </p>
-        )}
-        <Link to="/telephone" className="mt-4 mr-5 inline-block text-sm font-semibold text-brand-700 hover:underline">
-          Sur téléphone : ouvrir l’assistant, sans installation
-        </Link>
-        <Link to="/diagnostic" className="mt-4 inline-block text-sm font-medium text-brand-700 hover:underline">
-          Demander de l’aide maintenant
-        </Link>
-      </section>
+      <div className="mt-8 rounded-2xl border border-green-200 bg-green-50 p-5">
+        <p className="font-bold text-green-900">🎉 Lancement : assistance gratuite</p>
+        <p className="mt-1 text-sm leading-6 text-green-800">
+          Aucun paiement n’est demandé pendant le lancement. Les tarifs habituels sont affichés barrés à titre indicatif.
+        </p>
+      </div>
 
-      <section className="mb-8 grid gap-3 sm:grid-cols-2">
-        {MODES.map((m) => (
-          <article key={m.title} className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-bold text-slate-950">{m.title}</h2>
-              <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700">{m.badge}</span>
-            </div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{m.text}</p>
+      <section className="mt-8 grid gap-4 md:grid-cols-3">
+        {[
+          ['1', 'Demander', 'Décrivez votre problème et indiquez si vous utilisez un navigateur, un PC Windows ou un téléphone.'],
+          ['2', 'Analyser', 'L’IA pose des questions, propose des actions et attend votre confirmation.'],
+          ['3', 'Résoudre', 'Si nécessaire, votre dossier passe à un technicien qui reprend l’historique.'],
+        ].map(([n, title, text]) => (
+          <article key={n} className="ta-card p-6">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-600 text-sm font-black text-white">{n}</span>
+            <h2 className="mt-5 font-extrabold">{title}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
           </article>
         ))}
       </section>
 
-      <section className="mb-8">
-        <h2 className="mb-4 text-lg font-bold">Comment ça marche</h2>
-        <ol className="space-y-3">
-          {STEPS.map((step, index) => (
-            <li key={step.title} className="flex gap-4 rounded-2xl border border-slate-200 bg-white p-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">
-                {index + 1}
-              </span>
-              <div>
-                <p className="font-bold text-slate-950">{step.title}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{step.text}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-card sm:p-8">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-brand-700">ÉTAPE 1</p>
+            <h2 className="mt-1 text-2xl font-extrabold">Décrivez votre problème</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
+              C’est le vrai point de départ. Pas besoin de créer une commande ou de chercher un produit :
+              vous ouvrez directement un dossier d’assistance.
+            </p>
+          </div>
+          <Link to="/demander-aide" className="ta-button-primary shrink-0 justify-center">
+            🆘 Demander de l’aide — gratuit
+          </Link>
+        </div>
       </section>
 
-      <section className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm leading-6 text-green-900">
-        <p className="font-bold">Tarifs habituels — lancement gratuit</p>
-        <p className="mt-1">
-          <s>500 FCFA</s> → <strong>GRATUIT actuellement</strong> · Assistance IA<br/><s>2 000 FCFA</s> → <strong>GRATUIT actuellement</strong> · IA + technicien<br/><s>{price.toLocaleString('fr-FR')} FCFA/mois</s> → <strong>GRATUIT actuellement</strong> · Entreprise
-        </p>
+      <section className="mt-8 grid gap-4 md:grid-cols-2">
+        <article className="rounded-2xl border-2 border-brand-200 bg-brand-50 p-6">
+          <p className="text-sm font-bold text-brand-700">PARCOURS IA</p>
+          <h2 className="mt-1 text-xl font-extrabold">Agent IA</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-700">
+            L’IA analyse votre description, vous guide et vous demande si la solution fonctionne.
+            Si vous signalez que le problème persiste, le dossier peut être transmis à un technicien.
+          </p>
+          <p className="mt-4 text-sm font-bold"><s>500 FCFA</s> · GRATUIT actuellement</p>
+        </article>
+
+        <article className="rounded-2xl border-2 border-slate-200 bg-white p-6">
+          <p className="text-sm font-bold text-slate-600">PARCOURS HYBRIDE</p>
+          <h2 className="mt-1 text-xl font-extrabold">IA + technicien</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            L’IA commence le diagnostic. Si une intervention humaine est nécessaire, le technicien
+            reçoit le même dossier et son historique au lieu de vous faire recommencer.
+          </p>
+          <p className="mt-4 text-sm font-bold"><s>2 000 FCFA</s> · GRATUIT actuellement</p>
+        </article>
       </section>
+
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-6">
+        <h2 className="font-extrabold">Selon votre appareil</h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-white p-4"><p className="font-bold">🌐 Navigateur</p><p className="mt-1 text-xs leading-5 text-slate-500">Le parcours d’assistance fonctionne directement sur le site.</p></div>
+          <div className="rounded-xl bg-white p-4"><p className="font-bold">💻 PC Windows</p><p className="mt-1 text-xs leading-5 text-slate-500">L’application/agent Windows peut être utilisé lorsqu’une prise en main distante est nécessaire.</p></div>
+          <div className="rounded-xl bg-white p-4"><p className="font-bold">📱 Téléphone</p><p className="mt-1 text-xs leading-5 text-slate-500">Le site permet le diagnostic et le guidage. Le contrôle Android nécessite l’application native et les autorisations Android.</p></div>
+        </div>
+      </section>
+
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="font-extrabold">Et après le lancement ?</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Les tarifs habituels sont affichés ici pour que le modèle économique reste compréhensible.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3 text-sm">
+          <div><s>500 FCFA</s><p className="font-semibold">Assistance IA</p></div>
+          <div><s>2 000 FCFA</s><p className="font-semibold">IA + technicien</p></div>
+          <div><s>{companyPrice.toLocaleString('fr-FR')} FCFA/mois</s><p className="font-semibold">Entreprise</p></div>
+        </div>
+      </section>
+
+      <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <Link to="/demander-aide" className="ta-button-primary justify-center">🆘 Démarrer maintenant</Link>
+        <Link to="/entreprise" className="ta-button-secondary justify-center">Je suis une entreprise</Link>
+      </div>
     </div>
   );
 }
