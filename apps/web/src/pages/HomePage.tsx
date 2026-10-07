@@ -137,7 +137,7 @@ export function HomePage() {
 
       <section className="bg-brand-600">
         <div className="ta-container flex flex-col gap-6 py-12 text-white sm:flex-row sm:items-center sm:justify-between sm:py-14">
-          <div><h2 className="font-display text-2xl font-extrabold sm:text-3xl">Votre ordinateur vous bloque ?</h2><p className="mt-1 text-sm text-red-100">Commencez par un diagnostic ou installez Tech Assist.</p></div>
+          <div><h2 className="font-display text-2xl font-extrabold sm:text-3xl">Votre ordinateur vous bloque ?</h2><p className="mt-1 text-sm text-red-100">Commencez directement depuis le Web, sans installation.</p></div>
           <Link to="/assistance" className="ta-button shrink-0 bg-white text-brand-700 hover:bg-red-50">Commencer maintenant →</Link>
         </div>
       </section>
