@@ -15,7 +15,7 @@ const FAQ = [
   ['Le technicien peut-il voir mes fichiers personnels ?', 'Non, sauf nécessité explicite liée au problème signalé et avec votre accord. Les actions sont journalisées.'],
   ['Comment puis-je arrêter une session ?', 'Un bouton « Arrêter » permet de couper immédiatement l’assistance pendant la session.'],
   ['Et si mon problème est matériel ?', 'Une panne matérielle peut nécessiter une intervention sur place. Vous pouvez demander un déplacement.'],
-  ['Comment se fait le paiement ?', 'Par Mobile Money. Vous choisissez une offre : 500 FCFA pour l’agent IA seul, ou 2 000 FCFA avec un technicien qui peut reprendre le dossier si nécessaire. Les entreprises choisissent un forfait mensuel selon le nombre de postes, avec l’IA et les techniciens toujours inclus.'],
+  ['Comment se fait le paiement ?', 'Le lancement actuel est gratuit. Les tarifs habituels sont affichés à titre indicatif : 500 FCFA pour l’agent IA seul ou 2 000 FCFA avec un technicien. Les modalités de paiement seront proposées lorsque la facturation sera activée.'],
 ];
 
 export function HomePage() {
@@ -42,7 +42,7 @@ export function HomePage() {
             <ul className="mt-6 grid gap-4 sm:grid-cols-3">
               {[
                 ['Sécurisé', 'Connexions chiffrées'],
-                ['Rapide', 'Prise en main en quelques secondes'],
+                ['Rapide', 'Mise en relation en quelques minutes'],
                 ['Techniciens africains', 'Disponibles et qualifiés'],
               ].map(([t, d]) => (
                 <li key={t} className="text-sm"><p className="font-bold">{t}</p><p className="mt-0.5 text-xs text-slate-400">{d}</p></li>
@@ -94,10 +94,10 @@ export function HomePage() {
       <section className="bg-[#07101d] text-white">
         <div className="ta-container grid grid-cols-2 gap-x-4 gap-y-5 py-6 lg:grid-cols-[repeat(4,1fr)_auto] lg:items-center">
           {[
-            ['100%', 'Connexions sécurisées'],
+            ['Sécurisé', 'Connexions protégées'],
             ['Techniciens qualifiés', 'Disponibles en Afrique'],
             ['Assistance rapide', 'En quelques minutes'],
-            ['Support humain', 'Des vrais techniciens'],
+            ['Support humain', 'Un technicien reprend le dossier'],
           ].map(([t, d]) => (
             <div key={t}><p className="font-extrabold">{t}</p><p className="mt-0.5 text-xs text-slate-400">{d}</p></div>
           ))}
