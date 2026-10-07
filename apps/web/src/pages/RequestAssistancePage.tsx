@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 
 type Platform = 'web' | 'windows' | 'android';
-type Mode = 'ia' | 'humain';
+type Mode = 'ia' | 'hybride';
 
 export function RequestAssistancePage() {
   const navigate = useNavigate();
@@ -69,7 +69,7 @@ export function RequestAssistancePage() {
               <span className="font-bold">🤖 Agent IA</span>
               <span className="mt-1 block text-xs text-slate-500"><s>500 FCFA</s> · GRATUIT actuellement</span>
             </button>
-            <button type="button" onClick={() => setMode('humain')}
+            <button type="button" onClick={() => setMode('hybride')}
               className={`rounded-xl border p-4 text-left ${mode === 'humain' ? 'border-brand-600 bg-brand-50' : 'border-slate-200'}`}>
               <span className="font-bold">👨‍🔧 IA + technicien</span>
               <span className="mt-1 block text-xs text-slate-500"><s>2 000 FCFA</s> · GRATUIT actuellement</span>
