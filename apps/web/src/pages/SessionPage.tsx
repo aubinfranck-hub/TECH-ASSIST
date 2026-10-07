@@ -80,6 +80,24 @@ export function SessionPage() {
 
 
 
+  async function sendTechnicianMessage(message: string) {
+    if (!session || session.mode !== 'humain' || !message.trim()) return;
+    setChatLoading(true);
+    setChatError(null);
+    try {
+      await api.post(`/api/sessions/${session.id}/messages`, {
+        sessionCode: session.session_code,
+        message: message.trim(),
+      });
+      setChatMessage('');
+      await refreshMessages(session);
+    } catch (err) {
+      setChatError(err instanceof ApiError ? err.message : 'Impossible d’envoyer votre message.');
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
   async function sendChat(message: string) {
     if (!session || session.mode !== 'ia' || !message.trim()) return;
     setChatLoading(true);
@@ -183,7 +201,7 @@ export function SessionPage() {
         <div className="ta-card mb-4 border-brand-200 bg-brand-50 p-4 text-sm text-brand-900">
           <p className="font-bold">Votre agent IA vous assiste</p>
           <p className="mt-1 leading-6">
-            Il n'agit sur votre appareil qu'avec votre accord, et vous pouvez tout arrêter à tout moment.
+            Il vous guide étape par étape. Il ne prétend pas avoir réparé votre appareil et vous pouvez passer à un technicien à tout moment.
           </p>
           <button onClick={escalateToHuman} className="mt-3 font-semibold text-brand-700 underline">
             Passer à un technicien
@@ -247,6 +265,41 @@ export function SessionPage() {
               onChange={(e) => setChatMessage(e.target.value)}
               disabled={chatLoading}
               placeholder="Décrivez ce qui se passe ou répondez à l'IA…"
+              className="ta-input flex-1"
+            />
+            <button disabled={chatLoading || !chatMessage.trim()} className="ta-button-primary px-5">
+              {chatLoading ? '…' : 'Envoyer'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {session.mode === 'humain' && (session.status === 'waiting_technician' || session.status === 'active') && (
+        <div className="ta-card mt-6 p-5">
+          <div className="mb-4">
+            <p className="font-bold text-slate-900">💬 Échange avec le technicien</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {session.technician_id ? 'Le technicien voit l’historique de votre dossier et vos messages.' : 'Vous pouvez déjà ajouter une précision pendant l’attente.'}
+            </p>
+          </div>
+          <div className="max-h-72 space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-3">
+            {messages.filter((m) => m.sender === 'client' || m.sender === 'technician' || m.sender === 'system').map((m) => (
+              <div key={m.id} className={`rounded-xl p-3 text-sm ${m.sender === 'client' ? 'ml-8 bg-brand-50 text-brand-950' : 'mr-8 bg-white text-slate-700'}`}>
+                <p className="mb-1 text-xs font-semibold text-slate-400">{m.sender === 'client' ? 'Vous' : m.sender === 'technician' ? 'Technicien Tech Assist' : 'Tech Assist'}</p>
+                <p className="whitespace-pre-wrap leading-6">{m.body}</p>
+              </div>
+            ))}
+            {messages.filter((m) => m.sender === 'client' || m.sender === 'technician').length === 0 && (
+              <p className="py-6 text-center text-sm text-slate-500">Votre dossier est prêt. Le technicien pourra vous répondre ici.</p>
+            )}
+          </div>
+          {chatError && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{chatError}</p>}
+          <form onSubmit={(e) => { e.preventDefault(); void sendTechnicianMessage(chatMessage); }} className="mt-4 flex gap-2">
+            <input
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              disabled={chatLoading || session.status === 'completed'}
+              placeholder="Écrire au technicien…"
               className="ta-input flex-1"
             />
             <button disabled={chatLoading || !chatMessage.trim()} className="ta-button-primary px-5">
