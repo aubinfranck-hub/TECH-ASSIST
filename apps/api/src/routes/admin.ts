@@ -248,6 +248,19 @@ adminRouter.get('/pme-requests', async (_req, res) => {
   res.json({ requests: rows });
 });
 
+const pmeStatusSchema = z.object({ status: z.enum(['new','contacted','qualified','converted','closed','rejected']) });
+
+adminRouter.patch('/pme-requests/:id', validateBody(pmeStatusSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof pmeStatusSchema>;
+  const { rows } = await pool.query(
+    'UPDATE pme_requests SET status = $2 WHERE id = $1 RETURNING id, status',
+    [req.params.id, body.status],
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Prospect introuvable' });
+  await logAudit(pool, { actorType: 'admin', actorId: req.auth!.sub, action: 'crm.pme_request_status_updated', details: { requestId: req.params.id, status: body.status } });
+  res.json({ request: rows[0] });
+});
+
 adminRouter.get('/visit-requests', async (_req, res) => {
   const { rows } = await pool.query(
     `SELECT id, full_name, phone, address, zone, description, status, created_at FROM visit_requests ORDER BY created_at DESC`,
