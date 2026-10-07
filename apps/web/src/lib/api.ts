@@ -51,7 +51,7 @@ export const api = makeClient(TECHNICIAN_TOKEN_KEY);
 export const companyApi = makeClient(COMPANY_TOKEN_KEY);
 export { TECHNICIAN_TOKEN_KEY, COMPANY_TOKEN_KEY };
 
-export type AssistanceMode = 'ia' | 'humain';
+export type AssistanceMode = 'ia' | 'humain' | 'hybride';
 
 export interface PricingPlan {
   id: string;
@@ -98,6 +98,7 @@ export interface SessionInfo {
   ends_at?: string | null;
   consent_screen_at?: string | null;
   consent_control_at?: string | null;
+  technician_id?: string | null;
   remote_peer_id?: string | null;
   remote_paired_at?: string | null;
   mode?: AssistanceMode;
