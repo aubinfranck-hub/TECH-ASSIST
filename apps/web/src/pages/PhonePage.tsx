@@ -18,7 +18,7 @@ interface Entitlements {
 }
 
 const FORFAITS = [
-  { planId: 'diagnostic_express', label: 'Assistance IA', price: '500', text: 'L’agent IA analyse et répare votre téléphone avec vous, sans technicien humain.' },
+  { planId: 'diagnostic_express', label: 'Assistance IA', price: '500', text: 'L’agent IA analyse votre problème et vous guide ; un technicien peut reprendre si nécessaire.' },
   { planId: 'assistance_rapide', label: 'Assistance IA + technicien', price: '2 000', text: 'L’agent IA d’abord ; un technicien prend le relais si le problème le demande.' },
 ];
 interface Payment {
