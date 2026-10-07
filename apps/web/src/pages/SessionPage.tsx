@@ -169,7 +169,56 @@ export function SessionPage() {
     );
   }
 
-  if (error) return <p className="ta-container max-w-md py-14 text-red-600">{error}</p>;
+  if (error) {
+    return (
+      <div className="ta-container max-w-2xl py-12 sm:py-16">
+        <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-card">
+          <div className="bg-[#07101d] px-6 py-10 text-white sm:px-10">
+            <p className="text-xs font-extrabold uppercase tracking-[.16em] text-slate-400">Ma session</p>
+            <div className="mt-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-2xl">?</div>
+            <h1 className="mt-5 font-display text-3xl font-black sm:text-4xl">Cette session n’est plus disponible.</h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
+              Le code <strong className="text-white">{code}</strong> est peut-être expiré, déjà terminé ou incorrect.
+              Pas d’inquiétude : vous pouvez reprendre votre parcours depuis l’un des espaces TechAssist.
+            </p>
+          </div>
+          <div className="p-6 sm:p-8">
+            <p className="text-sm font-bold text-slate-500">Que souhaitez-vous faire ?</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <a href="/demander-aide" className="group rounded-2xl border border-brand-200 bg-brand-50 p-5 transition hover:border-brand-400 hover:shadow-md">
+                <span className="text-2xl">🆘</span>
+                <h2 className="mt-3 font-black text-slate-950">Demander de l’aide</h2>
+                <p className="mt-1 text-sm leading-5 text-slate-600">Créer une nouvelle demande d’assistance.</p>
+                <span className="mt-3 inline-block text-sm font-bold text-brand-700">Commencer →</span>
+              </a>
+              <a href="/assistance" className="group rounded-2xl border border-slate-200 p-5 transition hover:border-brand-200 hover:shadow-md">
+                <span className="text-2xl">💡</span>
+                <h2 className="mt-3 font-black text-slate-950">Comment ça marche ?</h2>
+                <p className="mt-1 text-sm leading-5 text-slate-600">Découvrir le parcours IA → technicien.</p>
+                <span className="mt-3 inline-block text-sm font-bold text-brand-700">Découvrir →</span>
+              </a>
+              <a href="/telephone" className="group rounded-2xl border border-slate-200 p-5 transition hover:border-brand-200 hover:shadow-md">
+                <span className="text-2xl">📱</span>
+                <h2 className="mt-3 font-black text-slate-950">Application Android</h2>
+                <p className="mt-1 text-sm leading-5 text-slate-600">Accéder à l’espace de l’application mobile.</p>
+                <span className="mt-3 inline-block text-sm font-bold text-brand-700">Voir Android →</span>
+              </a>
+              <a href="/entreprise" className="group rounded-2xl border border-slate-200 p-5 transition hover:border-brand-200 hover:shadow-md">
+                <span className="text-2xl">🏢</span>
+                <h2 className="mt-3 font-black text-slate-950">Espace entreprise</h2>
+                <p className="mt-1 text-sm leading-5 text-slate-600">Gérer les demandes et le parc informatique.</p>
+                <span className="mt-3 inline-block text-sm font-bold text-brand-700">Accéder →</span>
+              </a>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-200 pt-5">
+              <a href="/" className="ta-button-secondary">← Retour à l’accueil</a>
+              <a href="/technicien" className="inline-flex items-center rounded-xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Espace technicien</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!session) return <p className="ta-container max-w-md py-14 text-slate-500">Chargement…</p>;
 
   const remaining = session.ends_at ? new Date(session.ends_at).getTime() - now : null;
