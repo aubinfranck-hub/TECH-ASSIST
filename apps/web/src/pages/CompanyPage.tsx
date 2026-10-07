@@ -1,409 +1,46 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, COMPANY_TOKEN_KEY, companyApi } from '../lib/api.js';
 
-interface CompanyInfo {
-  id: string;
-  name: string;
-  subscription_status: string;
-  plan_name: string | null;
-  price_fcfa: number | null;
-  metadata: Record<string, unknown> | null;
-  assigned_technician_name: string | null;
-}
+interface CompanyInfo { id:string; name:string; subscription_status:string; plan_name:string|null; price_fcfa:number|null; metadata:Record<string,unknown>|null; assigned_technician_name:string|null; }
+interface HelpRequest { id:string; description:string; priority:string; status:string; created_at:string; session_code:string|null; session_status:string|null; }
+interface Device { id:string; device_name:string; platform:string; disk_free_percent:number|null; antivirus_ok:boolean|null; os_up_to_date:boolean|null; last_seen_at:string|null; }
+interface DiagnosticRow { id:string; kind:'diagnostic'|'repair'; device_name:string; status:'pending'|'done'|'declined'; worst:'critical'|'fixable'|'watch'|'ok'|'unknown'|null; summary:string|null; created_at:string; }
+interface CompanyUser { id:string; full_name:string; username:string; role:string; is_active:boolean; }
+interface Report { requestsThisMonth:number; resolvedThisMonth:number; avgResolutionSeconds:number|null; riskyDevices:Array<{device_name:string}>; }
+type Tab='overview'|'requests'|'fleet'|'team'|'reports';
+const tabs:Array<{id:Tab;label:string;icon:string}>= [{id:'overview',label:'Vue d’ensemble',icon:'⌂'},{id:'requests',label:'Demandes',icon:'↗'},{id:'fleet',label:'Parc informatique',icon:'▦'},{id:'team',label:'Équipe',icon:'◎'},{id:'reports',label:'Rapports',icon:'◴'}];
+const statusLabel:Record<string,string>={open:'Ouverte',resolved:'Résolue',closed:'Terminée',pending:'En attente',active:'Active',waiting_technician:'En attente technicien'};
+function deviceState(d:Device){return (d.disk_free_percent!=null&&d.disk_free_percent<10)||d.antivirus_ok===false||d.os_up_to_date===false?'warn':'ok';}
+function ago(iso:string){const m=Math.max(0,Math.round((Date.now()-new Date(iso).getTime())/60000));return m<1?'à l’instant':m<60?'il y a '+m+' min':m<1440?'il y a '+Math.floor(m/60)+' h':'il y a '+Math.floor(m/1440)+' j';}
 
-interface HelpRequest {
-  id: string;
-  description: string;
-  priority: string;
-  status: string;
-  created_at: string;
-  session_code: string | null;
-  session_status: string | null;
-}
+export function CompanyPage(){
+ const [token,setToken]=useState<string|null>(localStorage.getItem(COMPANY_TOKEN_KEY));
+ const [role,setRole]=useState<'admin'|'employee'|null>(null),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[loginError,setLoginError]=useState<string|null>(null);
+ const [company,setCompany]=useState<CompanyInfo|null>(null),[helpRequests,setHelpRequests]=useState<HelpRequest[]>([]),[devices,setDevices]=useState<Device[]>([]),[users,setUsers]=useState<CompanyUser[]>([]),[report,setReport]=useState<Report|null>(null),[diagnostics,setDiagnostics]=useState<DiagnosticRow[]>([]);
+ const [error,setError]=useState<string|null>(null),[tab,setTab]=useState<Tab>('overview'),[helpDescription,setHelpDescription]=useState(''),[helpPriority,setHelpPriority]=useState<'normal'|'urgent'>('normal'),[lastSessionCode,setLastSessionCode]=useState<string|null>(null),[joinCode,setJoinCode]=useState<{code:string;expiresAt:string}|null>(null),[busy,setBusy]=useState(false),[diagMessage,setDiagMessage]=useState<string|null>(null);
+ const refresh=useCallback(async()=>{try{const me=await companyApi.get<{company:CompanyInfo;role:'admin'|'employee'}>('/api/company/me');setCompany(me.company);setRole(me.role);const [rq,dv,dg]=await Promise.all([companyApi.get<{helpRequests:HelpRequest[]}>('/api/company/help-requests'),companyApi.get<{devices:Device[]}>('/api/company/devices'),companyApi.get<{diagnostics:DiagnosticRow[]}>('/api/company/diagnostics')]);setHelpRequests(rq.helpRequests);setDevices(dv.devices);setDiagnostics(dg.diagnostics);if(me.role==='admin'){const [u,rep]=await Promise.all([companyApi.get<{users:CompanyUser[]}>('/api/company/users'),companyApi.get<Report>('/api/company/report')]);setUsers(u.users);setReport(rep);}setError(null);}catch(e){if(e instanceof ApiError&&e.status===401){localStorage.removeItem(COMPANY_TOKEN_KEY);setToken(null);}else setError('Impossible de charger votre espace entreprise.');}},[]);
+ useEffect(()=>{if(token)void refresh();},[token,refresh]);
+ const stats=useMemo(()=>({open:helpRequests.filter(x=>!['resolved','closed'].includes(x.status)).length,urgent:helpRequests.filter(x=>x.priority==='urgent'&&!['resolved','closed'].includes(x.status)).length,warn:devices.filter(d=>deviceState(d)==='warn').length,online:devices.filter(d=>d.last_seen_at&&Date.now()-new Date(d.last_seen_at).getTime()<900000).length}),[helpRequests,devices]);
+ async function login(e:React.FormEvent){e.preventDefault();setLoginError(null);try{const res=await companyApi.post<{token:string}>('/api/auth/company/login',{username,password});localStorage.setItem(COMPANY_TOKEN_KEY,res.token);setToken(res.token);}catch(e){setLoginError(e instanceof ApiError?e.message:'Erreur de connexion.');}}
+ function logout(){localStorage.removeItem(COMPANY_TOKEN_KEY);setToken(null);}
+ async function askForHelp(e:React.FormEvent){e.preventDefault();setBusy(true);try{const res=await companyApi.post<{session:{session_code:string}}>('/api/company/help-requests',{description:helpDescription,priority:helpPriority});setLastSessionCode(res.session.session_code);setHelpDescription('');setTab('requests');await refresh();}catch(e){setError(e instanceof ApiError?e.message:'Erreur lors de la demande.');}finally{setBusy(false);}}
+ async function requestDiagnostic(deviceId:string,kind:'diagnostic'|'repair'='diagnostic'){try{await companyApi.post('/api/company/devices/'+deviceId+'/diagnostic',{kind});setDiagMessage(kind==='repair'?'Demande de réparation envoyée.':'Demande de diagnostic envoyée.');await refresh();}catch(e){setDiagMessage(e instanceof ApiError?e.message:'Impossible d’envoyer la demande.');}}
+ async function requestAll(kind:'diagnostic'|'repair'){try{const r=await companyApi.post<{created:number}>('/api/company/devices/requests/all',{kind});setDiagMessage(r.created+' demande(s) envoyée(s).');await refresh();}catch(e){setDiagMessage(e instanceof ApiError?e.message:'Impossible d’envoyer les demandes.');}}
+ async function createJoinCode(){try{setJoinCode(await companyApi.post<{code:string;expiresAt:string}>('/api/company/join-codes',{}));}catch{setError('Impossible de générer le code de rattachement.');}}
 
-interface Device {
-  id: string;
-  device_name: string;
-  platform: string;
-  disk_free_percent: number | null;
-  antivirus_ok: boolean | null;
-  os_up_to_date: boolean | null;
-  last_seen_at: string | null;
-}
+ if(!token)return <div className="min-h-[78vh] bg-slate-50 flex items-center"><div className="ta-container max-w-md w-full"><div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl"><div className="bg-slate-950 p-8 text-white"><p className="text-[11px] font-black uppercase tracking-[.24em] text-slate-400">TECH ASSIST / ENTERPRISE</p><h1 className="mt-3 text-3xl font-black">Votre IT, piloté depuis un seul espace.</h1><p className="mt-3 text-sm leading-6 text-slate-300">Support, parc informatique, équipe et reporting réunis dans votre console SaaS.</p></div><form onSubmit={login} className="space-y-4 p-8"><input required placeholder="Identifiant" value={username} onChange={e=>setUsername(e.target.value)} className="ta-input"/><input required type="password" placeholder="Mot de passe" value={password} onChange={e=>setPassword(e.target.value)} className="ta-input"/>{loginError&&<p className="text-sm font-semibold text-red-600">{loginError}</p>}<button className="ta-button-primary w-full" type="submit">Accéder à mon espace</button><Link to="/" className="block text-center text-sm text-slate-500 hover:underline">Retour au site</Link></form></div></div></div>;
 
-interface DiagnosticRow {
-  id: string;
-  kind: 'diagnostic' | 'repair';
-  device_name: string;
-  status: 'pending' | 'done' | 'declined';
-  worst: 'critical' | 'fixable' | 'watch' | 'ok' | 'unknown' | null;
-  summary: string | null;
-  created_at: string;
-}
-
-const STATUS_LABEL: Record<DiagnosticRow['status'], string> = { pending: 'En attente de l’utilisateur', done: 'Terminé', declined: 'Refusé par l’utilisateur' };
-
-interface CompanyUser {
-  id: string;
-  full_name: string;
-  username: string;
-  role: string;
-  is_active: boolean;
-}
-
-interface Report {
-  requestsThisMonth: number;
-  resolvedThisMonth: number;
-  avgResolutionSeconds: number | null;
-  riskyDevices: Array<{ device_name: string }>;
-}
-
-/** Un poste est « à surveiller » si l'espace disque est faible ou si l'antivirus / les mises à jour sont en défaut. */
-function deviceState(d: Device): 'ok' | 'warn' {
-  if ((d.disk_free_percent != null && d.disk_free_percent < 10) || d.antivirus_ok === false || d.os_up_to_date === false) return 'warn';
-  return 'ok';
-}
-
-function FleetSummary({ devices }: { devices: Device[] }) {
-  if (devices.length === 0) return null;
-  const warn = devices.filter((d) => deviceState(d) === 'warn').length;
-  return (
-    <p className="mb-3 text-sm">
-      <span className="font-semibold">{devices.length - warn}</span> poste(s) en bon état · <span className="font-semibold">{warn}</span> à surveiller
-    </p>
-  );
-}
-
-export function CompanyPage() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem(COMPANY_TOKEN_KEY));
-  const [role, setRole] = useState<'admin' | 'employee' | null>(null);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState<string | null>(null);
-
-  const [company, setCompany] = useState<CompanyInfo | null>(null);
-  const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([]);
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [users, setUsers] = useState<CompanyUser[]>([]);
-  const [report, setReport] = useState<Report | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const [helpDescription, setHelpDescription] = useState('');
-  const [helpPriority, setHelpPriority] = useState<'normal' | 'urgent'>('normal');
-  const [lastSessionCode, setLastSessionCode] = useState<string | null>(null);
-  const [joinCode, setJoinCode] = useState<{ code: string; expiresAt: string } | null>(null);
-  const [joinError, setJoinError] = useState<string | null>(null);
-  const [diagnostics, setDiagnostics] = useState<DiagnosticRow[]>([]);
-  const [diagMessage, setDiagMessage] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const me = await companyApi.get<{ company: CompanyInfo; role: 'admin' | 'employee' }>('/api/company/me');
-      setCompany(me.company);
-      setRole(me.role);
-
-      const [requestsRes, devicesRes] = await Promise.all([
-        companyApi.get<{ helpRequests: HelpRequest[] }>('/api/company/help-requests'),
-        companyApi.get<{ devices: Device[] }>('/api/company/devices'),
-      ]);
-      setHelpRequests(requestsRes.helpRequests);
-      setDevices(devicesRes.devices);
-      setDiagnostics((await companyApi.get<{ diagnostics: DiagnosticRow[] }>('/api/company/diagnostics')).diagnostics);
-
-      if (me.role === 'admin') {
-        const [usersRes, reportRes] = await Promise.all([
-          companyApi.get<{ users: CompanyUser[] }>('/api/company/users'),
-          companyApi.get<Report>('/api/company/report'),
-        ]);
-        setUsers(usersRes.users);
-        setReport(reportRes);
-      }
-      setError(null);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        localStorage.removeItem(COMPANY_TOKEN_KEY);
-        setToken(null);
-      } else {
-        setError('Impossible de charger votre espace entreprise.');
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (token) refresh();
-  }, [token, refresh]);
-
-  async function requestAll(kind: 'diagnostic' | 'repair') {
-    setDiagMessage(null);
-    try {
-      const r = await companyApi.post<{ created: number }>('/api/company/devices/requests/all', { kind });
-      setDiagMessage(r.created > 0 ? `${r.created} demande(s) envoyée(s). Chaque utilisateur accepte ou refuse sur son PC.` : 'Aucune nouvelle demande : tous les postes ont déjà une demande en attente, ou n’ont pas le programme.');
-      await refresh();
-    } catch (err) {
-      setDiagMessage(err instanceof ApiError ? err.message : 'Impossible d’envoyer les demandes.');
-    }
-  }
-
-  async function requestDiagnostic(deviceId: string, kind: 'diagnostic' | 'repair' = 'diagnostic') {
-    setDiagMessage(null);
-    try {
-      await companyApi.post(`/api/company/devices/${deviceId}/diagnostic`, { kind });
-      setDiagMessage('Demande envoyée. Elle démarre quand l’utilisateur ouvre Tech Assist sur ce PC et accepte.');
-      await refresh();
-    } catch (err) {
-      setDiagMessage(err instanceof ApiError ? err.message : 'Impossible d’envoyer la demande.');
-    }
-  }
-
-  async function createJoinCode() {
-    setJoinError(null);
-    try {
-      setJoinCode(await companyApi.post<{ code: string; expiresAt: string }>('/api/company/join-codes', {}));
-    } catch {
-      setJoinError('Impossible de générer le code. Réessayez.');
-    }
-  }
-
-  async function login(e: React.FormEvent) {
-    e.preventDefault();
-    setLoginError(null);
-    try {
-      const res = await companyApi.post<{ token: string }>('/api/auth/company/login', { username, password });
-      localStorage.setItem(COMPANY_TOKEN_KEY, res.token);
-      setToken(res.token);
-    } catch (err) {
-      setLoginError(err instanceof ApiError ? err.message : 'Erreur de connexion.');
-    }
-  }
-
-  function logout() {
-    localStorage.removeItem(COMPANY_TOKEN_KEY);
-    setToken(null);
-  }
-
-  async function askForHelp(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const res = await companyApi.post<{ session: { session_code: string } }>('/api/company/help-requests', {
-        description: helpDescription,
-        priority: helpPriority,
-      });
-      setLastSessionCode(res.session.session_code);
-      setHelpDescription('');
-      refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erreur lors de la demande.');
-    }
-  }
-
-  if (!token) {
-    return (
-      <div className="ta-container flex min-h-[70vh] max-w-md items-center py-14">
-        <div className="ta-card w-full p-8">
-          <p className="ta-eyebrow mb-2">Espace entreprise</p>
-          <h1 className="mb-6 text-2xl font-bold">Connexion</h1>
-          <form onSubmit={login} className="space-y-4">
-            <input
-              required
-              placeholder="Identifiant"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="ta-input"
-            />
-            <input
-              required
-              type="password"
-              placeholder="Mot de passe"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="ta-input"
-            />
-            {loginError && <p className="text-sm text-red-600">{loginError}</p>}
-            <button type="submit" className="ta-button-primary w-full">
-              Se connecter
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto max-w-4xl px-4 py-14 space-y-10">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{company?.name ?? 'Espace entreprise'}</h1>
-          {company && (
-            <p className="text-sm text-slate-500">
-              {company.plan_name} · statut {company.subscription_status}
-              {company.assigned_technician_name && ` · technicien attitré : ${company.assigned_technician_name}`}
-            </p>
-          )}
-        </div>
-        <button onClick={logout} className="text-sm text-slate-500 hover:underline">
-          Déconnexion
-        </button>
-      </div>
-
-      {error && <p className="text-red-600">{error}</p>}
-
-      <section className="rounded-lg border bg-white p-5">
-        <h2 className="font-semibold mb-3">Demander de l'aide</h2>
-        {lastSessionCode && (
-          <p className="mb-3 rounded bg-green-50 p-3 text-sm text-green-800">
-            Demande envoyée — code de session {lastSessionCode}.{' '}
-            <Link to={`/session?code=${lastSessionCode}`} className="underline">
-              Suivre la session
-            </Link>
-          </p>
-        )}
-        <form onSubmit={askForHelp} className="space-y-3">
-          <textarea
-            required
-            minLength={5}
-            placeholder="Décrivez le problème"
-            value={helpDescription}
-            onChange={(e) => setHelpDescription(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2"
-            rows={3}
-          />
-          <select
-            value={helpPriority}
-            onChange={(e) => setHelpPriority(e.target.value as 'normal' | 'urgent')}
-            className="rounded-lg border px-3 py-2"
-          >
-            <option value="normal">Priorité normale</option>
-            <option value="urgent">Urgent</option>
-          </select>
-          <button type="submit" className="block rounded-lg bg-brand-600 px-4 py-2 text-white hover:bg-brand-700">
-            Envoyer la demande
-          </button>
-        </form>
-      </section>
-
-      <section>
-        <h2 className="font-semibold mb-3">Historique des demandes</h2>
-        <ul className="space-y-2">
-          {helpRequests.map((r) => (
-            <li key={r.id} className="rounded-lg border bg-white p-3 text-sm">
-              <p className="font-medium">{r.description}</p>
-              <p className="text-slate-500">
-                {r.priority} · {r.status} {r.session_code && `· session ${r.session_code}`}
-              </p>
-            </li>
-          ))}
-          {helpRequests.length === 0 && <p className="text-sm text-slate-500">Aucune demande pour l'instant.</p>}
-        </ul>
-      </section>
-
-      <section>
-        <h2 className="font-semibold mb-3">Parc informatique</h2>
-        <FleetSummary devices={devices} />
-        {role === 'admin' ? (
-          <div className="rounded-lg border bg-white p-4 mb-3 text-sm">
-            <p className="mb-2">
-              Pour ajouter un PC : installez le programme Tech Assist sur ce PC, puis dites-lui « rattacher ce PC à mon entreprise » et entrez le code
-              ci-dessous. Le code est à usage unique et valable 48 heures. Seul l'état de santé du PC (disque, antivirus, mises à jour) est transmis :
-              seules les informations techniques nécessaires au suivi du poste sont remontées ; aucun fichier personnel n’est demandé dans le cadre normal de ce rattachement.
-            </p>
-            <button type="button" onClick={createJoinCode} className="rounded-md bg-brand-600 text-white px-4 py-2 font-medium hover:bg-brand-700">
-              Générer un code de rattachement
-            </button>
-            {joinCode && (
-              <p className="mt-3">
-                Code : <span className="font-mono text-lg font-bold tracking-wider">{joinCode.code}</span>
-                <span className="text-slate-500"> — valable jusqu'au {new Date(joinCode.expiresAt).toLocaleString('fr-FR')}. Notez-le : il ne sera plus affiché.</span>
-              </p>
-            )}
-            {joinError && <p className="mt-2 text-brand-700">{joinError}</p>}
-          </div>
-        ) : (
-          <p className="text-xs text-slate-500 mb-3">Seul l'administrateur de l'entreprise peut rattacher un nouveau PC.</p>
-        )}
-        <table className="w-full text-sm border rounded-lg overflow-hidden">
-          <thead className="bg-slate-100">
-            <tr>
-              <th className="text-left p-2">Poste</th>
-              <th className="text-left p-2">Disque libre</th>
-              <th className="text-left p-2">Antivirus</th>
-              <th className="text-left p-2">À jour</th>
-              <th className="text-left p-2">État</th>
-              {role === 'admin' && <th className="text-left p-2">Diagnostic</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {devices.map((d) => (
-              <tr key={d.id} className="border-t">
-                <td className="p-2">{d.device_name}</td>
-                <td className="p-2">{d.disk_free_percent != null ? `${d.disk_free_percent}%` : '—'}</td>
-                <td className="p-2">{d.antivirus_ok == null ? '—' : d.antivirus_ok ? 'Oui' : 'Non'}</td>
-                <td className="p-2">{d.os_up_to_date == null ? '—' : d.os_up_to_date ? 'Oui' : 'Non'}</td>
-                <td className="p-2">{deviceState(d) === 'ok' ? '🟢 OK' : '🟠 À surveiller'}</td>
-                {role === 'admin' && (
-                  <td className="p-2">
-                    <button type="button" onClick={() => requestDiagnostic(d.id)} className="font-semibold text-brand-700 underline">Diagnostiquer</button>
-                    <button type="button" onClick={() => requestDiagnostic(d.id, 'repair')} className="ml-3 font-semibold text-brand-700 underline">Réparer</button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {role === 'admin' && devices.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-3 text-sm">
-            <button type="button" onClick={() => requestAll('diagnostic')} className="ta-button-secondary w-auto">Diagnostiquer tous les postes</button>
-            <button type="button" onClick={() => requestAll('repair')} className="ta-button-secondary w-auto">Réparer tous les postes</button>
-          </div>
-        )}
-        {diagMessage && <p className="mt-3 text-sm text-slate-700">{diagMessage}</p>}
-        {diagnostics.length > 0 && (
-          <div className="mt-5">
-            <h3 className="font-semibold">Diagnostics demandés</h3>
-            <ul className="mt-2 space-y-3 text-sm">
-              {diagnostics.slice(0, 5).map((r) => (
-                <li key={r.id} className="rounded-lg border p-3">
-                  <p className="font-semibold">{r.device_name} <span className="font-normal text-slate-500">({r.kind === 'repair' ? 'réparation' : 'diagnostic'})</span> <span className="font-normal text-slate-500">· {STATUS_LABEL[r.status]} · {new Date(r.created_at).toLocaleDateString('fr-FR')}</span></p>
-                  {r.summary && <pre className="mt-2 whitespace-pre-wrap font-sans text-slate-700">{r.summary}</pre>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-
-      {role === 'admin' && report && (
-        <section className="rounded-lg border bg-white p-5">
-          <h2 className="font-semibold mb-3">Rapport du mois</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div>
-              <p className="text-slate-500">Demandes</p>
-              <p className="text-xl font-bold">{report.requestsThisMonth}</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Résolues</p>
-              <p className="text-xl font-bold">{report.resolvedThisMonth}</p>
-            </div>
-            <div>
-              <p className="text-slate-500">Postes à risque</p>
-              <p className="text-xl font-bold">{report.riskyDevices.length}</p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {role === 'admin' && (
-        <section>
-          <h2 className="font-semibold mb-3">Équipe</h2>
-          <ul className="space-y-1 text-sm">
-            {users.map((u) => (
-              <li key={u.id} className="rounded border bg-white p-2">
-                {u.full_name} · {u.username} · {u.role}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
-  );
+ return <div className="min-h-screen bg-slate-50">
+  <header className="border-b border-slate-200 bg-white"><div className="ta-container max-w-7xl py-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-[11px] font-black uppercase tracking-[.24em] text-brand-700">TECH ASSIST / ENTERPRISE</p><div className="mt-1 flex flex-wrap items-center gap-3"><h1 className="text-2xl font-black tracking-tight text-slate-950">{company?.name??'Espace entreprise'}</h1><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{company?.subscription_status??'—'}</span></div><p className="mt-1 text-sm text-slate-500">{company?.plan_name??'Formule'} {company?.assigned_technician_name?'· Technicien : '+company.assigned_technician_name:''}</p></div><div className="flex gap-2"><button onClick={()=>void refresh()} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold hover:bg-slate-50">Actualiser</button><button onClick={logout} className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">Déconnexion</button></div></div></div></header>
+  <main className="ta-container max-w-7xl py-6 sm:py-8">{error&&<div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
+   <nav className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">{tabs.filter(x=>x.id!=='team'||role==='admin').map(t=><button key={t.id} onClick={()=>setTab(t.id)} className={'shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold '+(tab===t.id?'bg-slate-950 text-white':'text-slate-500 hover:bg-slate-50')}>{t.icon} {t.label}</button>)}</nav>
+   {tab==='overview'&&<div className="space-y-6"><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl bg-slate-950 p-5 text-white"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Demandes ouvertes</p><p className="mt-2 text-4xl font-black">{stats.open}</p><p className="mt-1 text-xs text-slate-400">{stats.urgent} urgente(s)</p></div><div className="rounded-2xl border bg-white p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Parc</p><p className="mt-2 text-4xl font-black">{devices.length}</p><p className="mt-1 text-xs text-slate-500">{stats.warn} à surveiller</p></div><div className="rounded-2xl border bg-white p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Postes récents</p><p className="mt-2 text-4xl font-black">{stats.online}</p><p className="mt-1 text-xs text-slate-500">vus dans les 15 dernières minutes</p></div><div className="rounded-2xl border bg-white p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Résolution</p><p className="mt-2 text-4xl font-black">{report?.resolvedThisMonth??'—'}</p><p className="mt-1 text-xs text-slate-500">ce mois</p></div></section>
+    <div className="grid gap-6 xl:grid-cols-[1.2fr_.8fr]"><section className="rounded-[1.5rem] border bg-white p-6 shadow-sm"><div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-black">Besoin d’aide ?</h2><p className="text-sm text-slate-500">L’IA analyse d’abord, puis un technicien reprend si nécessaire.</p></div><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">SERVICE ACTIF</span></div><form onSubmit={askForHelp} className="mt-5 space-y-3"><textarea required minLength={5} rows={4} value={helpDescription} onChange={e=>setHelpDescription(e.target.value)} placeholder="Ex. Outlook ne démarre plus sur le poste de comptabilité…" className="ta-input w-full resize-none"/><div className="flex flex-col gap-3 sm:flex-row"><select value={helpPriority} onChange={e=>setHelpPriority(e.target.value as 'normal'|'urgent')} className="ta-input sm:max-w-xs"><option value="normal">Priorité normale</option><option value="urgent">Priorité urgente</option></select><button disabled={busy} className="ta-button-primary disabled:opacity-60" type="submit">{busy?'Envoi…':'Demander de l’aide'}</button></div></form>{lastSessionCode&&<div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-800">Session <b>{lastSessionCode}</b> créée. <Link className="font-bold underline" to={'/session?code='+lastSessionCode}>Suivre l’intervention</Link></div>}</section><section className="rounded-[1.5rem] border bg-white p-6 shadow-sm"><h2 className="text-lg font-black">État de votre IT</h2><div className="mt-5 space-y-4"><div className="flex justify-between"><span className="text-sm text-slate-500">Postes à surveiller</span><b>{stats.warn}</b></div><div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-brand-600" style={{width:(devices.length?Math.max(4,100-(stats.warn/devices.length)*100):4)+'%'}}/></div><div className="flex justify-between text-sm"><span className="text-slate-500">Technicien attitré</span><b>{company?.assigned_technician_name??'À définir'}</b></div><div className="flex justify-between text-sm"><span className="text-slate-500">Formule</span><b>{company?.plan_name??'—'}</b></div></div></section></div></div>}
+   {tab==='requests'&&<section className="rounded-[1.5rem] border bg-white shadow-sm"><div className="border-b p-6"><h2 className="text-lg font-black">Demandes d’assistance</h2><p className="text-sm text-slate-500">Historique et accès aux sessions.</p></div><div className="divide-y">{helpRequests.length?helpRequests.map(r=><div key={r.id} className="p-5 hover:bg-slate-50"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className={'rounded-full px-2.5 py-1 text-xs font-bold '+(r.priority==='urgent'?'bg-red-50 text-red-700':'bg-slate-100 text-slate-600')}>{r.priority==='urgent'?'URGENT':'NORMAL'}</span><span className="text-xs font-bold text-slate-400">{statusLabel[r.status]??r.status}</span></div><p className="mt-2 font-bold text-slate-900">{r.description}</p><p className="mt-1 text-xs text-slate-500">{ago(r.created_at)} {r.session_code?'· session '+r.session_code:''}</p></div>{r.session_code&&<Link to={'/session?code='+r.session_code} className="rounded-xl bg-brand-600 px-4 py-2 text-center text-xs font-black text-white">Ouvrir</Link>}</div></div>):<div className="p-10 text-center text-sm text-slate-500">Aucune demande pour le moment.</div>}</div></section>}
+   {tab==='fleet'&&<div className="space-y-6"><section className="rounded-[1.5rem] border bg-white p-6 shadow-sm"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><h2 className="text-lg font-black">Parc informatique</h2><p className="text-sm text-slate-500">Santé technique remontée par les postes rattachés.</p></div>{role==='admin'&&<button onClick={()=>void createJoinCode()} className="ta-button-primary">+ Rattacher un poste</button>}</div>{joinCode&&<div className="mt-4 rounded-2xl bg-slate-950 p-5 text-white"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">CODE DE RATTACHEMENT · 48 H</p><p className="mt-2 font-mono text-3xl font-black tracking-[.2em]">{joinCode.code}</p><p className="mt-2 text-xs text-slate-400">Valable jusqu’au {new Date(joinCode.expiresAt).toLocaleString('fr-FR')}. Le code n’est affiché qu’une fois.</p></div>}<div className="mt-6 grid gap-4 sm:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><b>{devices.length}</b><p className="text-xs text-slate-500">postes rattachés</p></div><div className="rounded-2xl bg-slate-50 p-4"><b>{stats.warn}</b><p className="text-xs text-slate-500">à surveiller</p></div><div className="rounded-2xl bg-slate-50 p-4"><b>{stats.online}</b><p className="text-xs text-slate-500">vus récemment</p></div></div></section><section className="overflow-hidden rounded-[1.5rem] border bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500"><tr><th className="p-4">Poste</th><th className="p-4">Disque</th><th className="p-4">Antivirus</th><th className="p-4">OS</th><th className="p-4">Dernière vue</th><th className="p-4">Actions</th></tr></thead><tbody>{devices.map(d=><tr key={d.id} className="border-t"><td className="p-4 font-bold">{d.device_name}<span className="ml-2 text-xs font-normal text-slate-400">{d.platform}</span></td><td className="p-4">{d.disk_free_percent==null?'—':d.disk_free_percent+'%'}</td><td className="p-4">{d.antivirus_ok==null?'—':d.antivirus_ok?'✓':'✕'}</td><td className="p-4">{d.os_up_to_date==null?'—':d.os_up_to_date?'✓':'✕'}</td><td className="p-4 text-slate-500">{d.last_seen_at?ago(d.last_seen_at):'Jamais'}</td><td className="p-4">{role==='admin'&&<><button onClick={()=>void requestDiagnostic(d.id)} className="font-bold text-brand-700">Diagnostiquer</button><button onClick={()=>void requestDiagnostic(d.id,'repair')} className="ml-3 font-bold text-slate-700">Réparer</button></>}</td></tr>)}</tbody></table></div>{role==='admin'&&devices.length>0&&<div className="border-t p-4 flex flex-wrap gap-3"><button onClick={()=>void requestAll('diagnostic')} className="ta-button-secondary w-auto">Diagnostiquer tous</button><button onClick={()=>void requestAll('repair')} className="ta-button-secondary w-auto">Réparer tous</button></div>}</section>{diagMessage&&<p className="rounded-xl bg-slate-100 p-4 text-sm font-semibold">{diagMessage}</p>}<section className="rounded-[1.5rem] border bg-white p-6"><h2 className="font-black">Demandes de diagnostic</h2><div className="mt-4 space-y-3">{diagnostics.length?diagnostics.slice(0,10).map(d=><div key={d.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{d.device_name}</b><span className="text-xs text-slate-500">{d.kind==='repair'?'Réparation':'Diagnostic'} · {statusLabel[d.status]??d.status}</span></div>{d.summary&&<p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{d.summary}</p>}</div>):<p className="text-sm text-slate-500">Aucune demande de diagnostic.</p>}</div></section></div>}
+   {tab==='team'&&role==='admin'&&<section className="rounded-[1.5rem] border bg-white shadow-sm"><div className="border-b p-6"><h2 className="text-lg font-black">Équipe & accès</h2><p className="text-sm text-slate-500">Comptes utilisateurs de votre entreprise.</p></div><div className="divide-y">{users.map(u=><div key={u.id} className="flex items-center justify-between gap-4 p-5"><div><p className="font-bold">{u.full_name}</p><p className="text-sm text-slate-500">{u.username} · {u.role}</p></div><span className={'rounded-full px-3 py-1 text-xs font-bold '+(u.is_active?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-500')}>{u.is_active?'Actif':'Inactif'}</span></div>)}{users.length===0&&<p className="p-6 text-sm text-slate-500">Aucun utilisateur.</p>}</div></section>}
+   {tab==='reports'&&<div className="grid gap-6 lg:grid-cols-2"><section className="rounded-[1.5rem] border bg-white p-6 shadow-sm"><h2 className="text-lg font-black">Performance mensuelle</h2>{report?<div className="mt-5 grid grid-cols-2 gap-4">{[['Demandes',report.requestsThisMonth],['Résolues',report.resolvedThisMonth],['Postes à risque',report.riskyDevices.length],['Temps moyen',report.avgResolutionSeconds?Math.round(report.avgResolutionSeconds/60)+' min':'—']].map(([l,v])=><div key={String(l)} className="rounded-2xl bg-slate-50 p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">{l}</p><p className="mt-2 text-2xl font-black">{v}</p></div>)}</div>:<p className="mt-4 text-sm text-slate-500">Rapport réservé à l’administrateur.</p>}</section><section className="rounded-[1.5rem] border bg-white p-6 shadow-sm"><h2 className="text-lg font-black">Postes à risque</h2><div className="mt-4 space-y-2">{report?.riskyDevices.length?report.riskyDevices.map(d=><div key={d.device_name} className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">⚠ {d.device_name}</div>):<p className="text-sm text-slate-500">Aucun poste signalé.</p>}</div></section></div>}
+  </main>
+ </div>;
 }
