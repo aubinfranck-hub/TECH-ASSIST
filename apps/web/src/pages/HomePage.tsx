@@ -49,8 +49,8 @@ export function HomePage() {
               ))}
             </ul>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Link to="/assistance" className="ta-button bg-brand-600 text-white hover:bg-brand-500 sm:px-7">Démarrer une assistance <span aria-hidden className="ml-2">→</span></Link>
-              <Link to="/diagnostic" className="ta-button border border-white/30 text-white hover:bg-white/10 sm:px-7">Lancer un diagnostic</Link>
+              <Link to="/demander-aide" className="ta-button bg-brand-600 text-white hover:bg-brand-500 sm:px-7">🆘 Demander de l’aide — gratuit <span aria-hidden className="ml-2">→</span></Link>
+              <Link to="/assistance" className="ta-button border border-white/30 text-white hover:bg-white/10 sm:px-7">Voir comment ça marche</Link>
             </div>
           </div>
         </div>
@@ -77,17 +77,18 @@ export function HomePage() {
 
       <section className="ta-container ta-section">
         <h2 className="font-display text-3xl font-extrabold">Comment ça marche ?</h2>
-        <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr_1fr_1.1fr] lg:items-stretch">
+        <div className="mt-8 grid gap-6 md:grid-cols-3">
           {STEPS.map((step, i) => (
-            <div key={step.title} className="flex gap-4">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-600 font-display text-lg font-extrabold text-white">{i + 1}</span>
-              <div><h3 className="font-extrabold">{step.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{step.text}</p></div>
+            <div key={step.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-600 font-display text-lg font-extrabold text-white">{i + 1}</span>
+              <h3 className="mt-5 font-extrabold">{step.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{step.text}</p>
             </div>
           ))}
-          <Link to="/entreprise" className="flex items-center gap-4 rounded-xl border border-red-100 bg-red-50 p-5 hover:bg-red-100">
-            <div className="flex-1"><p className="font-extrabold text-brand-700">Pour les entreprises (PME)</p><p className="mt-1 text-sm leading-5 text-slate-600">Support IT pour vos équipes, maintenance, déploiement et gestion de parc informatique.</p></div>
-            <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-brand-600">›</span>
-          </Link>
+        </div>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
+          <div><p className="font-extrabold text-slate-950">Vous êtes une entreprise ?</p><p className="mt-1 text-sm leading-6 text-slate-600">Un espace séparé permet de suivre les demandes, les postes et les interventions de votre équipe.</p></div>
+          <Link to="/entreprise" className="mt-4 inline-flex shrink-0 font-bold text-brand-700 sm:mt-0">Découvrir l’espace entreprise →</Link>
         </div>
       </section>
 
@@ -137,8 +138,8 @@ export function HomePage() {
 
       <section className="bg-brand-600">
         <div className="ta-container flex flex-col gap-6 py-12 text-white sm:flex-row sm:items-center sm:justify-between sm:py-14">
-          <div><h2 className="font-display text-2xl font-extrabold sm:text-3xl">Votre ordinateur vous bloque ?</h2><p className="mt-1 text-sm text-red-100">Commencez directement depuis le Web, sans installation.</p></div>
-          <Link to="/assistance" className="ta-button shrink-0 bg-white text-brand-700 hover:bg-red-50">Commencer maintenant →</Link>
+          <div><h2 className="font-display text-2xl font-extrabold sm:text-3xl">Un problème informatique ?</h2><p className="mt-1 text-sm text-red-100">Décrivez-le. Tech Assist commence l’analyse et fait intervenir un technicien si nécessaire.</p></div>
+          <Link to="/demander-aide" className="ta-button shrink-0 bg-white text-brand-700 hover:bg-red-50">🆘 Demander de l’aide →</Link>
         </div>
       </section>
     </div>
