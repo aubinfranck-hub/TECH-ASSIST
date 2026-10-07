@@ -31,3 +31,27 @@ export async function ensureOwnerAccount(env: NodeJS.ProcessEnv = process.env): 
   );
   return 'created';
 }
+
+async function ensureDemoTechnician(env: NodeJS.ProcessEnv): Promise<void> {
+  if (env.DEMO_ACCESS_ENABLED !== 'true') return;
+  const username = env.DEMO_TECH_USERNAME?.trim();
+  const password = env.DEMO_TECH_PASSWORD;
+  if (!username || !password || username.length < 3 || password.length < 10) {
+    console.error('[demo] DEMO_TECH_USERNAME/DEMO_TECH_PASSWORD invalides : compte demo ignoré.');
+    return;
+  }
+  const hash = await bcrypt.hash(password, 12);
+  await pool.query(
+    `INSERT INTO technicians (full_name, phone, username, password_hash, role, is_active)
+     VALUES ($1, $2, $3, $4, 'technician', TRUE)
+     ON CONFLICT (username) DO UPDATE SET
+       password_hash = EXCLUDED.password_hash,
+       role = 'technician',
+       is_active = TRUE`,
+    [env.DEMO_TECH_FULL_NAME?.trim() || 'Technicien Démo', env.DEMO_TECH_PHONE?.trim() || '+2250700000099', username, hash],
+  );
+}
+
+export async function ensureDemoAccess(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  await ensureDemoTechnician(env);
+}
