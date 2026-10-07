@@ -23,7 +23,7 @@ const createSessionSchema = z.object({
   platform: z.enum(['web', 'windows', 'android']),
 });
 
-export type SessionMode = 'ia' | 'humain';
+export type SessionMode = 'ia' | 'humain' | 'hybride';
 
 export type CreateSessionResult =
   | { ok: true; session: { id: string; session_code: string; status: string; code_expires_at: Date; duration_minutes: number; mode: SessionMode; human_included: boolean } }
@@ -45,7 +45,7 @@ export async function createSessionForOrder(
 ): Promise<CreateSessionResult> {
   // L'agent IA n'est appliqué que s'il est réellement activé (AI_AGENT_ENABLED) ;
   // sinon la demande est servie par un technicien (file d'attente classique).
-  const mode: SessionMode = requestedMode === 'ia' && process.env.AI_AGENT_ENABLED === 'true' ? 'ia' : 'humain';
+  const mode: SessionMode = (requestedMode === 'ia' || requestedMode === 'hybride') && process.env.AI_AGENT_ENABLED === 'true' ? 'ia' : 'humain';
   const orderResult = await db.query(
     `SELECT o.id, o.status, p.duration_minutes, p.metadata
      FROM orders o JOIN pricing_plans p ON p.id = o.plan_id
@@ -64,8 +64,8 @@ export async function createSessionForOrder(
   // Offre « IA seule » : jamais de technicien sans complément payé. Si l'assistance devait être servie par un humain
   // (technicien demandé, ou agent IA désactivé), elle est refusée ici et la commande payée reste utilisable.
   const humanIncluded = humanIncludedFor(order.metadata);
-  if (mode === 'humain' && !humanIncluded) {
-    return requestedMode === 'humain'
+  if ((mode === 'humain' || requestedMode === 'hybride') && !humanIncluded) {
+    return requestedMode === 'humain' || requestedMode === 'hybride'
       ? { ok: false, status: 402, code: 'human_not_included', error: "Votre offre « Assistance IA » ne comprend pas de technicien. Passez à « IA + technicien » pour qu'il prenne le relais." }
       : { ok: false, status: 503, code: 'ai_unavailable', error: "L'agent IA n'est pas disponible pour le moment. Votre forfait n'est pas consommé : réessayez dans un instant." };
   }
@@ -121,7 +121,7 @@ const publicAssistanceSchema = z.object({
   clientName: z.string().max(120).optional(),
   problem: z.string().trim().max(1000).optional(),
   platform: z.enum(['web', 'windows', 'android']).default('web'),
-  requestedMode: z.enum(['ia', 'humain']).default('ia'),
+  requestedMode: z.enum(['ia', 'humain', 'hybride']).default('ia'),
 });
 
 sessionsRouter.post('/assistance/start', validateBody(publicAssistanceSchema), async (req, res) => {
@@ -135,8 +135,9 @@ sessionsRouter.post('/assistance/start', validateBody(publicAssistanceSchema), a
        AND duration_minutes IS NOT NULL
        AND COALESCE((metadata->>'viewerSession')::boolean, FALSE) = FALSE
      ORDER BY
-       CASE WHEN $1::text = 'humain' THEN CASE WHEN COALESCE((metadata->>'humanIncluded')::boolean, FALSE) THEN 0 ELSE 1 END
+       CASE WHEN $1::text IN ('humain','hybride') THEN CASE WHEN COALESCE((metadata->>'humanIncluded')::boolean, FALSE) THEN 0 ELSE 1 END
             ELSE CASE WHEN COALESCE((metadata->>'aiIncluded')::boolean, TRUE) THEN 0 ELSE 1 END END,
+       CASE WHEN $1::text = 'hybride' THEN CASE WHEN COALESCE((metadata->>'aiIncluded')::boolean, TRUE) THEN 0 ELSE 1 END ELSE 0 END,
        price_fcfa ASC
      LIMIT 1`,
     [requestedMode],
