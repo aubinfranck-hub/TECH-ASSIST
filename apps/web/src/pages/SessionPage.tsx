@@ -235,7 +235,7 @@ export function SessionPage() {
         </div>
       )}
 
-      {(session.status === 'created' || session.status === 'active') && (
+      {session.status === 'active' && session.mode === 'humain' && Boolean(session.technician_id) && (
         <div className="mt-6">
           <RemotePairingPanel
             sessionId={session.id}
@@ -246,7 +246,7 @@ export function SessionPage() {
         </div>
       )}
 
-      {session.status === 'active' && (
+      {session.status === 'active' && session.mode === 'humain' && Boolean(session.technician_id) && (
         <div className="mt-6 space-y-3">
           {!session.consent_screen_at && (
             <button
