@@ -1,108 +1,41 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { api, ApiError, type Order, type PricingPlan } from '../lib/api.js';
+import { Link } from 'react-router-dom';
 
 export function DiagnosticPage() {
-  const navigate = useNavigate();
-  const [plans, setPlans] = useState<PricingPlan[]>([]);
-  const [planId, setPlanId] = useState('diagnostic_express');
-  const [phone, setPhone] = useState('');
-  const [name, setName] = useState('');
-  const [platform, setPlatform] = useState<'windows' | 'android'>('windows');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    api
-      .get<{ plans: PricingPlan[] }>('/api/pricing')
-      .then((res) => setPlans(res.plans.filter((p) => p.segment === 'particulier')));
-  }, []);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      const { order } = await api.post<{ order: Order }>('/api/orders', {
-        clientPhone: phone,
-        clientName: name || undefined,
-        planId,
-        platform,
-      });
-      navigate(`/commande/${order.id}`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erreur lors de la commande.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
-    <div className="ta-container max-w-xl py-14">
-      <p className="ta-eyebrow mb-2">Diagnostic</p>
-      <h1 className="mb-2 text-2xl font-bold sm:text-3xl">Démarrer une assistance</h1>
-      <p className="mb-8 text-slate-600">
-        Pendant le lancement, aucune commande de paiement n’est nécessaire. Décrivez votre problème et démarrez directement l’assistance.
-      </p>
+    <div className="ta-container max-w-3xl py-14">
+      <div className="mb-8">
+        <p className="ta-eyebrow mb-2">Diagnostic Tech Assist</p>
+        <h1 className="text-3xl font-extrabold sm:text-4xl">Décrivez votre problème, nous commençons l’analyse.</h1>
+        <p className="mt-4 max-w-2xl text-slate-600 leading-7">
+          Le diagnostic démarre directement sur le Web. L’assistant IA analyse votre demande et vous guide.
+          Si le problème persiste, vous pouvez demander la reprise du dossier par un technicien.
+        </p>
+      </div>
 
-      <form onSubmit={submit} className="ta-card space-y-4 p-6 sm:p-8">
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Formule</label>
-          <select
-            value={planId}
-            onChange={(e) => setPlanId(e.target.value)}
-            className="ta-input"
-          >
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} — {p.price_fcfa.toLocaleString('fr-FR')} FCFA
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="mb-8 rounded-2xl border border-green-200 bg-green-50 p-5">
+        <p className="font-bold text-green-900">🎉 Lancement Tech Assist — gratuit actuellement</p>
+        <p className="mt-1 text-sm leading-6 text-green-800">
+          Aucun paiement n’est demandé pendant le lancement. Les tarifs habituels restent affichés sur le site à titre indicatif.
+        </p>
+      </div>
 
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Appareil concerné</label>
-          <select
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value as 'windows' | 'android')}
-            className="ta-input"
-          >
-            <option value="windows">Ordinateur Windows</option>
-            <option value="android">Téléphone / tablette Android</option>
-          </select>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {[
+          ['01', 'Décrivez', 'Expliquez simplement ce qui ne fonctionne pas.'],
+          ['02', 'Analysez', 'L’IA recherche une piste et vous accompagne étape par étape.'],
+          ['03', 'Escaladez', 'Si nécessaire, un technicien reprend le dossier avec l’historique.'],
+        ].map(([n, title, text]) => (
+          <article key={n} className="ta-card p-5">
+            <span className="text-sm font-black text-brand-600">{n}</span>
+            <h2 className="mt-2 font-bold">{title}</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{text}</p>
+          </article>
+        ))}
+      </div>
 
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Votre numéro de téléphone</label>
-          <input
-            required
-            placeholder="+225 07 00 00 00 00"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="ta-input"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Votre nom (optionnel)</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="ta-input"
-          />
-        </div>
-
-        {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="ta-button-primary w-full disabled:opacity-50"
-        >
-          {loading ? 'Création de la commande…' : 'Continuer vers le paiement'}
-        </button>
-      </form>
+      <Link to="/demander-aide" className="ta-button-primary mt-8 w-full justify-center py-3 sm:w-auto">
+        🆘 DÉMARRER LE DIAGNOSTIC — GRATUIT
+      </Link>
     </div>
   );
 }
