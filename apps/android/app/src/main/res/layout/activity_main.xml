@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
+<LinearLayout android:orientation="vertical" android:padding="24dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+<TextView android:text="TechAssist" android:textSize="30sp" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+<TextView android:text="Assistance informatique depuis votre téléphone" android:layout_marginTop="8dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+<EditText android:id="@+id/phone" android:hint="Téléphone (+225...)" android:inputType="phone" android:layout_marginTop="24dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<EditText android:id="@+id/problem" android:hint="Décrivez votre problème" android:gravity="top" android:minLines="4" android:inputType="textMultiLine" android:layout_marginTop="12dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/start" android:text="DÉMARRER L'ASSISTANCE" android:layout_marginTop="16dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<TextView android:id="@+id/code" android:textSize="18sp" android:textStyle="bold" android:layout_marginTop="20dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+<TextView android:id="@+id/status" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<TextView android:id="@+id/assistant" android:textSize="16sp" android:layout_marginTop="16dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<EditText android:id="@+id/reply" android:hint="Répondre à TechAssist ou au technicien" android:visibility="gone" android:layout_marginTop="12dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/send" android:text="ENVOYER" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/escalate" android:text="PASSER À UN TECHNICIEN" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/resolved" android:text="✓ OUI, C'EST RÉSOLU" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/notResolved" android:text="✕ NON, J'AI TOUJOURS LE PROBLÈME" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/stop" android:text="ARRÊTER LA SESSION" android:visibility="gone" android:layout_marginTop="16dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+</LinearLayout></ScrollView>
