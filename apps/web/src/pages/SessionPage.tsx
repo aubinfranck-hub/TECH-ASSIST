@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { RemotePairingPanel } from '../components/RemotePairingPanel.js';
+import { MicButton, ScreenShotButton, SpeakButton, speak, stopSpeaking, useTtsAvailable, type CapturedImage } from '../components/VoiceTools.js';
 import { api, ApiError, type SessionInfo } from '../lib/api.js';
 
 function formatRemaining(ms: number): string {
@@ -25,6 +26,12 @@ export function SessionPage() {
   const [initialAiStarted, setInitialAiStarted] = useState(false);
   const [lastProcedureId, setLastProcedureId] = useState<string | null>(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const ttsAvailable = useTtsAvailable();
+  const [autoRead, setAutoRead] = useState(() => {
+    try { return localStorage.getItem('ta_autoread') === '1'; } catch { return false; }
+  });
+  const [pendingImage, setPendingImage] = useState<CapturedImage | null>(null);
+  const lastSpokenId = useRef<number | null>(null);
 
   const refresh = useCallback(async (sessionCode: string) => {
     try {
@@ -98,6 +105,29 @@ export function SessionPage() {
     }
   }
 
+  // Lecture automatique : seules les NOUVELLES réponses de l'IA sont lues (pas l'historique à l'ouverture de la page).
+  useEffect(() => {
+    const assistant = messages.filter((m) => m.sender === 'assistant');
+    const lastId = assistant.length ? assistant[assistant.length - 1]!.id : null;
+    if (lastSpokenId.current === null) {
+      lastSpokenId.current = lastId ?? 0;
+      return;
+    }
+    if (lastId !== null && lastId > lastSpokenId.current) {
+      lastSpokenId.current = lastId;
+      if (autoRead && session) void speak(session.id, session.session_code, assistant[assistant.length - 1]!.body).catch(() => undefined);
+    }
+  }, [messages, autoRead, session]);
+
+  useEffect(() => () => stopSpeaking(), []);
+
+  function toggleAutoRead() {
+    const next = !autoRead;
+    setAutoRead(next);
+    if (!next) stopSpeaking();
+    try { localStorage.setItem('ta_autoread', next ? '1' : '0'); } catch { /* préférence facultative */ }
+  }
+
   async function sendChat(message: string) {
     if (!session || session.mode !== 'ia' || !message.trim()) return;
     setChatLoading(true);
@@ -106,7 +136,9 @@ export function SessionPage() {
       const response = await api.post<{ answer: string; model: string; procedureId?: string }>(`/api/sessions/${session.id}/chat`, {
         sessionCode: session.session_code,
         message: message.trim(),
+        ...(pendingImage ? { image: pendingImage } : {}),
       });
+      setPendingImage(null);
       if (response.procedureId) setLastProcedureId(response.procedureId);
       setChatMessage('');
       await refreshMessages(session);
@@ -293,6 +325,7 @@ export function SessionPage() {
               <div key={m.id} className={`rounded-xl p-3 text-sm ${m.sender === 'client' ? 'ml-8 bg-brand-50 text-brand-950' : 'mr-8 bg-white text-slate-700'}`}>
                 <p className="mb-1 text-xs font-semibold text-slate-400">{m.sender === 'client' ? 'Vous' : m.sender === 'assistant' ? 'TechAssist IA' : 'TechAssist'}</p>
                 <p className="whitespace-pre-wrap leading-6">{m.body}</p>
+                {m.sender === 'assistant' && ttsAvailable && <SpeakButton sessionId={session.id} sessionCode={session.session_code} text={m.body} />}
               </div>
             ))}
             {messages.filter((m) => m.sender === 'client' || m.sender === 'assistant').length === 0 && (
@@ -319,6 +352,21 @@ export function SessionPage() {
               {chatLoading ? '…' : 'Envoyer'}
             </button>
           </form>
+          <div className="mt-3 flex flex-wrap items-start gap-2">
+            <MicButton disabled={chatLoading} onText={(t) => void sendChat(t)} />
+            <ScreenShotButton disabled={chatLoading} onCapture={setPendingImage} />
+            {ttsAvailable && (
+              <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                <input type="checkbox" checked={autoRead} onChange={toggleAutoRead} /> 🔊 Lire les réponses
+              </label>
+            )}
+          </div>
+          {pendingImage && (
+            <p className="mt-2 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900">
+              📷 Capture de votre écran jointe à votre prochain message (elle n’est pas conservée).
+              <button type="button" onClick={() => setPendingImage(null)} className="font-bold underline">Retirer</button>
+            </p>
+          )}
         </div>
       )}
 

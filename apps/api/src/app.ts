@@ -19,6 +19,7 @@ import { ordersRouter } from './routes/orders.js';
 import { paymentsRouter } from './routes/payments.js';
 import { pricingRouter } from './routes/pricing.js';
 import { remoteRouter } from './routes/remote.js';
+import { ttsRouter } from './routes/tts.js';
 import { partnerRouter } from './routes/partner.js';
 import { adminPartnersRouter } from './routes/adminPartners.js';
 import { sessionsRouter } from './routes/sessions.js';
@@ -48,6 +49,7 @@ export function createApp() {
   );
   // Seule la route de chat accepte une capture d'écran jointe (réduite par l'agent, 800 000 caractères au plus en base64).
   app.use('/api/app/sessions/:id/chat', express.json({ limit: '1mb' }));
+  app.use('/api/sessions/:id/chat', express.json({ limit: '1mb' }));
   // Corps brut conservé : la signature du prestataire de paiement se vérifie sur les octets exacts reçus.
   app.use(express.json({ limit: '200kb', verify: (req, _res, buf) => { (req as unknown as { rawBody?: Buffer }).rawBody = buf; } }));
 
@@ -99,6 +101,7 @@ export function createApp() {
   app.use('/api', sessionsRouter);
   app.use('/api', technicianConsoleRouter);
   app.use('/api', remoteRouter);
+  app.use('/api', ttsRouter);
   app.use('/api/auth', technicianAuthRouter);
   app.use('/api/auth', companyAuthRouter);
   app.use('/api', leadsRouter);

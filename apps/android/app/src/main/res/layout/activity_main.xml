@@ -9,6 +9,7 @@
 <TextView android:id="@+id/code" android:textSize="18sp" android:textStyle="bold" android:layout_marginTop="20dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
 <TextView android:id="@+id/status" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <TextView android:id="@+id/assistant" android:textSize="16sp" android:layout_marginTop="16dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/speak" android:text="🔊 ÉCOUTER LA RÉPONSE" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <Button android:id="@+id/escalate" android:text="PASSER À UN TECHNICIEN" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <Button android:id="@+id/resolved" android:text="✓ OUI, C'EST RÉSOLU" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <Button android:id="@+id/notResolved" android:text="✕ NON, J'AI TOUJOURS LE PROBLÈME" android:visibility="gone" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>

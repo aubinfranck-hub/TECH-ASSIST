@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RUSTDESK_WINDOWS, buildPrepareScript, checkSettings, encodeServerConfig, parsePeerId, shareScreen, type Remote } from '../remoteAccess.js';
+import { RUSTDESK_WINDOWS, buildPrepareScript, buildRevokeScript, revokeShare, checkSettings, encodeServerConfig, parsePeerId, shareScreen, type Remote } from '../remoteAccess.js';
 import type { CommandRunner } from '../types.js';
 
 const KEY = 'A'.repeat(43) + '=';
@@ -114,5 +114,18 @@ describe('Partage d’écran avec le technicien', () => {
   it('lit l’identifiant dans la sortie du script', () => {
     expect(parsePeerId('bruit\nTECHASSIST_ID=987654321\n')).toBe('987654321');
     expect(parsePeerId('rien')).toBeNull();
+  });
+
+  it('fin d’assistance : mot de passe changé, RustDesk et son service arrêtés', async () => {
+    const script = buildRevokeScript('Zz9Yy8Xx7W');
+    expect(script).toContain("--password 'Zz9Yy8Xx7W'");
+    expect(script).toContain("Stop-Service -Name 'RustDesk'");
+    expect(script).toContain("'RustDesk\\rustdesk.exe'");
+    expect(() => buildRevokeScript("x'; calc")).toThrow();
+    const scripts: string[] = [];
+    const ok = await revokeShare({ runPowerShell: async (s) => (scripts.push(s), { stdout: 'TECHASSIST_REVOKED\n', stderr: '', exitCode: 0 }) }, () => 'Zz9Yy8Xx7W');
+    expect(ok).toBe(true);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(await revokeShare({ runPowerShell: async () => { throw new Error('boom'); } })).toBe(false); // jamais d'exception
   });
 });

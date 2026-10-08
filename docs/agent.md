@@ -219,3 +219,13 @@ Quand la demande du client ne correspond à aucune compétence connue, l'agent i
 3. Le résultat remonte (`/knowledge/:id/outcome` : réglé / non réglé / refusé / non vérifié / refusée par l'agent) et fait évoluer la confiance de la procédure.
 
 Sans réseau ni IA : aucun changement de comportement. Les clés d'IA n'existent que sur le serveur. Le catalogue est identique côté agent et côté API (le test `learning.test.ts` de l'API compare les deux fichiers : toute modification se fait dans les deux).
+
+
+## Voix, dictée et capture d'écran (assistant IA)
+
+- **Lecture à voix haute** : bouton « 🔊 Écouter » sur chaque réponse de l'IA (site, fenêtre de l'agent, application Android). La voix
+  est la voix neuronale Google (`fr-FR-Neural2-A` par défaut), produite par le serveur (`apps/api/src/services/tts.ts`) : aucune clé
+  sur le PC ni dans le navigateur. Sans clé ou en cas de panne, le site et l'agent retombent sur la voix du navigateur.
+- **Site** : cases « Lire les réponses » (lecture automatique des nouvelles réponses), « 🎤 Parler » (dictée, reconnaissance vocale du
+  navigateur) et « 📷 Montrer mon écran » (une capture choisie par le client, réduite, envoyée à l'IA, jamais conservée).
+- **Fin d'assistance** : l'agent change le mot de passe RustDesk, arrête RustDesk et son service (`revokeShare`).

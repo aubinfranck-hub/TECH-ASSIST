@@ -23,6 +23,8 @@ class MainActivity : Activity() {
     private lateinit var code: TextView
     private lateinit var status: TextView
     private lateinit var assistant: TextView
+    private lateinit var speak: Button
+    private var player: android.media.MediaPlayer? = null
     private lateinit var resolved: Button
     private lateinit var notResolved: Button
     private lateinit var escalate: Button
@@ -46,6 +48,7 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
         phone=findViewById(R.id.phone); problem=findViewById(R.id.problem); start=findViewById(R.id.start)
         code=findViewById(R.id.code); status=findViewById(R.id.status); assistant=findViewById(R.id.assistant)
+        speak=findViewById(R.id.speak); speak.setOnClickListener { speakAnswer() }
         resolved=findViewById(R.id.resolved); notResolved=findViewById(R.id.notResolved); escalate=findViewById(R.id.escalate); stop=findViewById(R.id.stop)
         remoteBox=findViewById(R.id.remoteBox); remotePeer=findViewById(R.id.remotePeer); remotePassword=findViewById(R.id.remotePassword)
         remoteShare=findViewById(R.id.remoteShare); remoteOpen=findViewById(R.id.remoteOpen)
@@ -76,9 +79,43 @@ class MainActivity : Activity() {
                     resolved.visibility=View.VISIBLE; notResolved.visibility=View.VISIBLE; escalate.visibility=View.VISIBLE; stop.visibility=View.VISIBLE
                 }
                 val answer=api.chat(sessionId!!,sessionCode!!,issue,true)
-                runOnUiThread { assistant.text=answer.optString("answer","Aucune réponse"); procedureId=answer.optString("procedureId",null) }
-            } catch(e:Exception){ runOnUiThread { start.isEnabled=true; status.text="Erreur : \${e.message}" } }
+                runOnUiThread { assistant.text=answer.optString("answer","Aucune réponse"); procedureId=answer.optString("procedureId",null); speak.visibility=View.VISIBLE }
+            } catch(e:Exception){ runOnUiThread { start.isEnabled=true; status.text="Erreur : ${e.message}" } }
         }
+    }
+
+    /** Lit la réponse de l'IA à voix haute avec la voix neuronale Google du serveur Tech Assist. */
+    private fun speakAnswer() {
+        val text = assistant.text.toString()
+        val id = sessionId
+        val c = sessionCode
+        if (text.isBlank() || id == null || c == null) return
+        speak.isEnabled = false
+        io.execute {
+            try {
+                val r = api.tts(id, c, text)
+                val bytes = android.util.Base64.decode(r.getString("audio"), android.util.Base64.DEFAULT)
+                val file = java.io.File(cacheDir, "reponse.mp3")
+                file.writeBytes(bytes)
+                runOnUiThread {
+                    player?.release()
+                    val mp = android.media.MediaPlayer()
+                    mp.setDataSource(file.absolutePath)
+                    mp.setOnPreparedListener { it.start() }
+                    mp.setOnCompletionListener { it.release(); if (player === it) player = null; speak.isEnabled = true }
+                    mp.prepareAsync()
+                    player = mp
+                }
+            } catch (e: Exception) {
+                runOnUiThread { speak.isEnabled = true; Toast.makeText(this, "Lecture à voix haute indisponible", Toast.LENGTH_SHORT).show() }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        player?.release()
+        player = null
+        super.onDestroy()
     }
 
     private fun feedback(result:String) {

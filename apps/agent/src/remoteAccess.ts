@@ -104,6 +104,33 @@ Write-Output ('TECHASSIST_ID=' + $id)
 `;
 }
 
+/**
+ * Script PowerShell de fin d'assistance : nouveau mot de passe aléatoire (l'ancien, vu par le technicien, ne sert plus), arrêt de
+ * RustDesk et de son service (démarrage manuel). Le prochain partage les relance. Aucun accès n'est conservé sur le PC.
+ */
+export function buildRevokeScript(newPassword: string): string {
+  if (!/^[A-Za-z0-9]{8,64}$/.test(newPassword)) throw new Error('mot de passe invalide');
+  return `$ErrorActionPreference = 'SilentlyContinue'
+$rd = Join-Path $env:ProgramFiles 'RustDesk\\rustdesk.exe'
+if (Test-Path $rd) { & $rd --password '${newPassword}' | Out-Null }
+Stop-Service -Name 'RustDesk' -Force
+Set-Service -Name 'RustDesk' -StartupType Manual
+Get-Process -Name 'rustdesk' | Stop-Process -Force
+Write-Output 'TECHASSIST_REVOKED'
+`;
+}
+
+/** Coupe l'accès à distance à la fin de l'assistance. Ne lève jamais d'erreur : c'est un nettoyage. */
+export async function revokeShare(runner: CommandRunner, password: () => string = newPassword): Promise<boolean> {
+  try {
+    const run = await runner.runPowerShell(buildRevokeScript(password()), { timeoutMs: 60_000 });
+    return run.stdout.includes('TECHASSIST_REVOKED');
+  } catch (err) {
+    console.error(`[partage d'écran] arrêt impossible : ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+}
+
 export function parsePeerId(stdout: string): string | null {
   return /TECHASSIST_ID=(\d{6,12})/.exec(stdout)?.[1] ?? null;
 }

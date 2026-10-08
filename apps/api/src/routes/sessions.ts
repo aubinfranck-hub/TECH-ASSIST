@@ -11,7 +11,7 @@ import { HUMAN_MIN_MINUTES, expireOverdueSessions } from '../utils/sessionClock.
 import { progressView, STALE_PROGRESS_SECONDS } from '../utils/taskProgress.js';
 import { creditEarningSafely } from '../partners/earnings.js';
 import { closeViewerOrderIfUnpaid, settleViewerSession } from '../partners/viewer.js';
-import { AssistantUnavailableError, MAX_HISTORY_TURNS, MAX_MESSAGE_CHARS, MAX_TURN_CHARS, askOfficeAssistant } from '../assistant/officeAssistant.js';
+import { AssistantUnavailableError, MAX_HISTORY_TURNS, MAX_MESSAGE_CHARS, MAX_TURN_CHARS, askOfficeAssistant, MAX_IMAGE_BASE64_CHARS, imageMatchesMime } from '../assistant/officeAssistant.js';
 import { generateProcedure } from '../learning/orchestrator.js';
 import { tokenize } from '../learning/match.js';
 import { aiBudget, failedAlternatives, findForQuery, insertCandidate, markServed, recordCall, recordGap, recordOutcome } from '../learning/store.js';
@@ -233,6 +233,8 @@ const publicChatSchema = z.object({
   sessionCode: z.string().regex(/^\d{9}$/),
   message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
   initial: z.boolean().optional(),
+  /** Capture d'écran jointe par le client (PNG ou JPEG réduit) : l'IA la décrit ; elle n'est jamais conservée. */
+  image: z.object({ mime: z.enum(['image/png', 'image/jpeg']), data: z.string().min(1).max(MAX_IMAGE_BASE64_CHARS) }).optional(),
 });
 
 async function publicSession(id: string, code: string) {
@@ -297,6 +299,9 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
   if (session.mode !== 'ia') {
     return res.status(409).json({ error: 'Cette session est actuellement suivie par un technicien.' });
   }
+  if (body.image && !imageMatchesMime(body.image)) {
+    return res.status(400).json({ error: "L'image jointe n'est pas une capture PNG ou JPEG valide." });
+  }
 
   const stored = await pool.query(
     `SELECT sender, body FROM session_messages
@@ -330,7 +335,7 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
         hit.procedure.checks.length ? 'Vérifications : ' + hit.procedure.checks.map((c) => c.problem).join(' | ') : '',
         hit.procedure.fixes.length ? 'Pistes de correction : ' + hit.procedure.fixes.map((f) => f.why).join(' | ') : '',
         hit.procedure.advice.length ? 'Conseils : ' + hit.procedure.advice.join(' | ') : '',
-      ].filter(Boolean).join('\\n');
+      ].filter(Boolean).join('\n');
     }
   }
 
@@ -338,6 +343,7 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
     const answer = await askOfficeAssistant(body.message, history, {
       platform: session.platform === 'android' ? 'android' : 'windows',
       context: memoryContext,
+      image: body.image,
     });
     await pool.query(
       `INSERT INTO session_messages (session_id, sender, body) VALUES ($1, 'assistant', $2)`,
@@ -349,7 +355,7 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
       sessionId: session.id,
       orderId: session.order_id,
       action: 'agent.chat',
-      details: { question: body.message.slice(0, 300), answer: answer.text.slice(0, 500), model: answer.model, source: 'public_web' },
+      details: { question: body.message.slice(0, 300), answer: answer.text.slice(0, 500), model: answer.model, source: 'public_web', ...(body.image ? { image: true } : {}) },
     });
     return res.json({ answer: answer.text, model: answer.model, procedureId });
   } catch (err) {
@@ -415,7 +421,7 @@ sessionsRouter.post('/sessions/:id/ai-feedback', publicChatLimiter, validateBody
   }
   await markServed(pool, stored.id, session.id, null, tokens);
   const p = learned.procedure;
-  const context = ['Nouvelle piste : ' + p.title, 'Cause probable : ' + p.summary, p.checks.length ? 'Vérifications : ' + p.checks.map((c) => c.problem).join(' | ') : '', p.fixes.length ? 'Corrections possibles : ' + p.fixes.map((f) => f.why).join(' | ') : '', p.advice.length ? 'Conseils : ' + p.advice.join(' | ') : ''].filter(Boolean).join('\\n');
+  const context = ['Nouvelle piste : ' + p.title, 'Cause probable : ' + p.summary, p.checks.length ? 'Vérifications : ' + p.checks.map((c) => c.problem).join(' | ') : '', p.fixes.length ? 'Corrections possibles : ' + p.fixes.map((f) => f.why).join(' | ') : '', p.advice.length ? 'Conseils : ' + p.advice.join(' | ') : ''].filter(Boolean).join('\n');
   try {
     const answer = await askOfficeAssistant('La première piste n’a pas résolu le problème. Propose la nouvelle piste et demande de confirmer le résultat.\\n\\n' + query, history, { platform: session.platform === 'android' ? 'android' : 'windows', context });
     await pool.query('INSERT INTO session_messages (session_id, sender, body) VALUES ($1, \'assistant\', $2)', [session.id, answer.text]);

@@ -18,6 +18,7 @@ class ApiClient(private val baseUrl: String) {
     }
     fun start(phone: String, problem: String) = request("POST", "/api/assistance/start", JSONObject().put("clientPhone", phone).put("problem", problem).put("platform", "android").put("requestedMode", "ia"))
     fun chat(id: String, code: String, message: String, initial: Boolean = false) = request("POST", "/api/sessions/$id/chat", JSONObject().put("sessionCode", code).put("message", message).put("initial", initial))
+    fun tts(id: String, code: String, text: String) = request("POST", "/api/sessions/$id/tts", JSONObject().put("sessionCode", code).put("text", text))
     fun feedback(id: String, code: String, procedureId: String?, result: String) = request("POST", "/api/sessions/$id/ai-feedback", JSONObject().put("sessionCode", code).put("procedureId", procedureId).put("result", result))
     fun escalate(id: String, code: String) = request("POST", "/api/sessions/$id/escalate", JSONObject().put("sessionCode", code))
     fun stop(id: String, code: String) = request("POST", "/api/sessions/$id/stop", JSONObject().put("sessionCode", code).put("stoppedBy", "client"))

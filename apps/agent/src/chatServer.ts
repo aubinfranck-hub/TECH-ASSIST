@@ -301,6 +301,8 @@ export class ChatUi implements ConversationUi {
    * la demande est transmise à l'agent comme si le client l'avait écrite, et c'est lui qui propose le complément.
    */
   technicianIncluded: () => boolean = () => true;
+  /** Voix neuronale (via le serveur Tech Assist). Absent ou en échec : la fenêtre lit avec la voix du navigateur. */
+  speaker?: (text: string) => Promise<{ audio: string; mime: string } | null>;
 
   /** Le client a demandé un technicien pendant que l'agent travaillait (offre sans technicien) : à transmettre à la prochaine question. */
   private technicianWanted = false;
@@ -476,7 +478,7 @@ export class ChatUi implements ConversationUi {
       const nonce = randomBytes(16).toString('base64');
       res.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
-        'Content-Security-Policy': `default-src 'none'; img-src 'self'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+        'Content-Security-Policy': `default-src 'none'; img-src 'self'; media-src data:; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       });
       res.end(PAGE.replaceAll('__NONCE__', nonce).replaceAll('__TOKEN__', encodeURIComponent(this.token)));
       return;
@@ -520,7 +522,7 @@ export class ChatUi implements ConversationUi {
       return;
     }
 
-    if (req.method === 'POST' && (url.pathname === '/reply' || url.pathname === '/handoff' || url.pathname === '/attach')) {
+    if (req.method === 'POST' && (url.pathname === '/reply' || url.pathname === '/handoff' || url.pathname === '/attach' || url.pathname === '/speak')) {
       const origin = req.headers.origin;
       if (origin !== undefined && origin !== `http://127.0.0.1:${this.port}` && origin !== `http://localhost:${this.port}`) {
         res.writeHead(403).end();
@@ -545,6 +547,25 @@ export class ChatUi implements ConversationUi {
         if (url.pathname === '/handoff') {
           this.requestHandoff();
           res.writeHead(204).end();
+          return;
+        }
+        if (url.pathname === '/speak') {
+          let text = '';
+          try {
+            const parsed = JSON.parse(body) as { text?: unknown };
+            text = typeof parsed.text === 'string' ? parsed.text.slice(0, 4000) : '';
+          } catch {
+            return void res.writeHead(400).end();
+          }
+          const speaker = this.speaker;
+          if (!speaker || !text.trim()) return void res.writeHead(503).end();
+          speaker(text).then(
+            (out) => {
+              if (!out) return void res.writeHead(503).end();
+              res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(out));
+            },
+            () => void res.writeHead(503).end(),
+          );
           return;
         }
         if (url.pathname === '/attach') {
@@ -707,6 +728,8 @@ main { flex:1; min-height:0; overflow-y:auto; padding:18px 26px; }
 /* Messages */
 .msg { display:flex; gap:10px; margin:14px 0; align-items:flex-end; animation:rise .22s ease-out; }
 .msg.from-user { justify-content:flex-end; }
+.speak { display:block; margin-top:8px; background:none; border:0; padding:0; font:inherit; font-size:12px; font-weight:700; color:#b91c1c; cursor:pointer; }
+.speak:disabled { opacity:.5; }
 .avatar { width:32px; height:32px; flex:none; }
 .b { max-width:min(84%,560px); padding:11px 16px; border-radius:18px; white-space:pre-wrap; word-wrap:break-word; overflow-wrap:anywhere; }
 .agent { background:#f1f5f9; border-bottom-left-radius:6px; }
@@ -1000,6 +1023,24 @@ form button.act { flex:0 0 auto; min-width:170px; }
     log.appendChild(card);
     scrollDown();
   }
+  var audioNow = null;
+  function speakButton(text) {
+    var btn = el('button', 'speak', '\uD83D\uDD0A Écouter');
+    btn.type = 'button';
+    btn.addEventListener('click', function () {
+      if (audioNow) { audioNow.pause(); audioNow = null; }
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      btn.disabled = true;
+      fetch('/speak?t=' + encodeURIComponent(token), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) })
+        .then(function (r) { if (!r.ok) throw new Error('voix'); return r.json(); })
+        .then(function (d) { audioNow = new Audio('data:' + d.mime + ';base64,' + d.audio); return audioNow.play(); })
+        .catch(function () {
+          if (window.speechSynthesis) { var u = new SpeechSynthesisUtterance(text.slice(0, 900)); u.lang = 'fr-FR'; window.speechSynthesis.speak(u); }
+        })
+        .then(function () { btn.disabled = false; });
+    });
+    return btn;
+  }
   function bubble(cls, text, who) {
     var welcome = document.getElementById('welcome'); if (welcome) welcome.remove();
     hideTyping();
@@ -1010,6 +1051,7 @@ form button.act { flex:0 0 auto; min-width:170px; }
       var b = el('div', 'b ' + cls);
       if (who) b.appendChild(el('span', 'who', who + ' · technicien Tech Assist'));
       b.appendChild(document.createTextNode(text));
+      if (cls === 'agent' && text.length > 40) b.appendChild(speakButton(text));
       row.appendChild(b); log.appendChild(row);
     }
     scrollDown();

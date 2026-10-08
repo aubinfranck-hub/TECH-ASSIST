@@ -11,7 +11,8 @@ import { appWindowPlan, cleanupProfile } from './browser.js';
 import { converse } from './conversation.js';
 import { notifyFatal } from './fatal.js';
 import { relayWithTechnician } from './humanRelay.js';
-import { HttpRemote, shareScreen } from './remoteAccess.js';
+import { HttpRemote, revokeShare, shareScreen } from './remoteAccess.js';
+import { makeSpeaker } from './speech.js';
 import { isAdmin, launchElevated, relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
@@ -127,6 +128,7 @@ async function main() {
   }
 
   const chat = await ChatUi.start();
+  if (online) chat.speaker = makeSpeaker(apiBase!, token!);
   console.log(`Ouverture de l'assistant dans votre navigateur : ${chat.url}`);
   if (!flag('no-browser')) openBrowser(chat.url);
 
@@ -161,6 +163,7 @@ async function main() {
       conversationReporter = new CompositeReporter([new ConsoleReporter(), new HttpReporter(base, started.token, started.sessionId, fetch, human)]);
       conversationAssistant = new HttpAssistant(base, started.token, started.sessionId);
       conversationKnowledge = new HttpKnowledge(base, started.token, started.sessionId);
+      chat.speaker = makeSpeaker(base, started.token);
       // L'agent installé sur le PC fait lui-même le travail : « agent IA indisponible » ne concerne que l'assistant en ligne (questions).
       chat.info(
         started.coverage === 'free_offer'
@@ -204,8 +207,13 @@ async function main() {
     if (recorded && target) {
       chat.resumeAfterHandoff();
       // Avec l'accord du client, l'écran du PC est partagé avec le technicien (RustDesk) avant la discussion.
-      await shareScreen({ ui: chat, runner, remote: new HttpRemote(apiBase ?? DEFAULT_API_BASE, target.token, target.sessionId) });
-      await relayWithTechnician({ ui: chat, api: target.api, token: target.token, sessionId: target.sessionId });
+      const shared = await shareScreen({ ui: chat, runner, remote: new HttpRemote(apiBase ?? DEFAULT_API_BASE, target.token, target.sessionId) });
+      try {
+        await relayWithTechnician({ ui: chat, api: target.api, token: target.token, sessionId: target.sessionId });
+      } finally {
+        // Fin de l'assistance : plus aucun accès à distance n'est conservé sur le PC.
+        if (shared === 'shared') await revokeShare(runner);
+      }
     } else {
       chat.info(
         `Je n'ai pas réussi à prévenir un technicien (connexion Internet, ou assistance non démarrée). Réessayez dans un moment, ou écrivez-nous depuis ${DEFAULT_SITE.replace('https://', '')} : votre demande sera traitée.`,
