@@ -222,7 +222,6 @@ export function SessionPage() {
   if (!session) return <p className="ta-container max-w-md py-14 text-slate-500">Chargement…</p>;
 
   const remaining = session.ends_at ? new Date(session.ends_at).getTime() - now : null;
-  const codeRemaining = new Date(session.code_expires_at).getTime() - now;
   const statusLabel: Record<string, string> = {
     created: 'Demande reçue',
     waiting_technician: 'En attente d’un technicien',
@@ -261,7 +260,7 @@ export function SessionPage() {
       {session.status === 'created' && session.mode !== 'ia' && (
         <div className="ta-card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <p className="font-bold">Votre demande est bien reçue.</p>
-          <p className="mt-1">Un technicien doit prendre le dossier en charge. Le code de session expire dans {formatRemaining(codeRemaining)}.</p>
+          <p className="mt-1">Un technicien va prendre votre dossier en charge. Gardez cette page ouverte : vous pouvez déjà lui écrire ci-dessous, et il vous répondra ici.</p>
         </div>
       )}
       {session.status === 'waiting_technician' && (
@@ -323,7 +322,7 @@ export function SessionPage() {
         </div>
       )}
 
-      {session.mode === 'humain' && (session.status === 'waiting_technician' || session.status === 'active') && (
+      {session.mode === 'humain' && (session.status === 'created' || session.status === 'waiting_technician' || session.status === 'active') && (
         <div className="ta-card mt-6 p-5">
           <div className="mb-4">
             <p className="font-bold text-slate-900">💬 Échange avec le technicien</p>

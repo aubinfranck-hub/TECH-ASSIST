@@ -56,13 +56,17 @@ export function createApp() {
   // router (voir commentaire plus bas).
   // Désactivée en environnement de test pour ne pas polluer les suites (IP partagée par supertest).
   const isTest = process.env.NODE_ENV === 'test';
+  const POLLED = ['/api/technician/', '/api/admin/', '/api/company/', '/api/partner/', '/api/app/'];
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
       limit: 300,
       standardHeaders: true,
       legacyHeaders: false,
-      skip: () => isTest,
+      // Les pages ouvertes interrogent le serveur en continu (file, messages, identifiants, session : jusqu'à ~90 requêtes/min
+      // côté technicien). Ces routes sont authentifiées (ou ont leur propre limiteur ciblé) : sous un quota global de 300 requêtes
+      // par 15 min, tout se bloquait en 429 au bout de quelques minutes, connexion comprise.
+      skip: (req) => isTest || POLLED.some((p) => req.path.startsWith(p)) || (req.method === 'GET' && (req.path.startsWith('/api/sessions/') || req.path.startsWith('/api/orders/'))),
     }),
   );
   // Pas de front-end servi ici (voir apps/web) — réponse minimale pour que

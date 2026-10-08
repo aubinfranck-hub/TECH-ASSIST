@@ -204,6 +204,19 @@ sessionsRouter.post('/assistance/start', validateBody(publicAssistanceSchema), a
   }
 });
 
+/**
+ * Lectures publiques par code de session (session, messages), répétées toutes les 3 s par la page du client : seuls les ÉCHECS
+ * comptent. Un code valide ne consomme rien ; deviner des codes (réponses 4xx) est limité.
+ */
+const publicReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
 const publicChatLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
@@ -231,7 +244,7 @@ async function publicSession(id: string, code: string) {
   return rows[0];
 }
 
-sessionsRouter.get('/sessions/:id/messages', publicChatLimiter, async (req, res) => {
+sessionsRouter.get('/sessions/:id/messages', publicReadLimiter, async (req, res) => {
   const parsed = publicSessionCodeSchema.safeParse({ sessionCode: req.query.sessionCode });
   if (!parsed.success) return res.status(400).json({ error: 'Code de session invalide' });
   const session = await publicSession(req.params.id, parsed.data.sessionCode);
@@ -417,7 +430,7 @@ sessionsRouter.post('/sessions/:id/ai-feedback', publicChatLimiter, validateBody
   }
 });
 
-sessionsRouter.get('/sessions/:code', async (req, res) => {
+sessionsRouter.get('/sessions/:code', publicReadLimiter, async (req, res) => {
   await expireOverdueSessions(pool);
   const { rows } = await pool.query(
     `SELECT id, session_code, status, code_expires_at, duration_minutes,

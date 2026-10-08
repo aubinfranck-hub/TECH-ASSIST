@@ -125,7 +125,7 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
   useEffect(() => {
     void load();
     const messagesTimer = setInterval(() => void poll(), 3000);
-    const detailTimer = setInterval(() => void load(), 15000);
+    const detailTimer = setInterval(() => void load(), 4000);
     return () => {
       clearInterval(messagesTimer);
       clearInterval(detailTimer);
