@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { SITE_IMAGES } from '../lib/imageSources.js';
 import { PmeRequestForm } from '../components/PmeRequestForm.js';
 import { PricingTable } from '../components/PricingTable.js';
 import { TechnicianApplyForm } from '../components/TechnicianApplyForm.js';
@@ -23,7 +24,7 @@ export function HomePage() {
     <div>
       <section className="relative overflow-hidden bg-[#07101d] text-white">
         <img
-          src="/img/hero.jpg"
+          src={SITE_IMAGES.hero}
           alt="Technicien Tech Assist au casque, devant un ordinateur, dans un centre d’assistance"
           className="h-56 w-full object-cover object-[70%_center] sm:h-72 lg:absolute lg:inset-y-0 lg:right-0 lg:h-full lg:w-[66%] lg:object-center"
           fetchPriority="high"
@@ -59,10 +60,10 @@ export function HomePage() {
       <section className="ta-container pt-8 sm:pt-10">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ['/img/pc.jpg', 'PC & Laptop', 'Dépannage, optimisation, mises à jour, remplacement de pièces, installation…'],
-            ['/img/reseau.jpg', 'Réseau & Internet', 'Configuration, Wi-Fi, routeurs, partage de connexion, VPN, serveur…'],
-            ['/img/office.jpg', 'Windows & Office', 'Installation, configuration, formation, dépannage de vos logiciels…'],
-            ['/img/securite.jpg', 'Sécurité & Maintenance', 'Suppression de virus, sauvegarde de données, surveillance, maintenance…'],
+            [SITE_IMAGES.pc, 'PC & Laptop', 'Dépannage, optimisation, mises à jour, remplacement de pièces, installation…'],
+            [SITE_IMAGES.network, 'Réseau & Internet', 'Configuration, Wi-Fi, routeurs, partage de connexion, VPN, serveur…'],
+            [SITE_IMAGES.office, 'Windows & Office', 'Installation, configuration, formation, dépannage de vos logiciels…'],
+            [SITE_IMAGES.security, 'Sécurité & Maintenance', 'Suppression de virus, sauvegarde de données, surveillance, maintenance…'],
           ].map(([image, title, text]) => (
             <Link key={title} to="/assistance" className="group flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card sm:flex-col">
               <img src={image} alt="" loading="lazy" className="h-auto w-32 shrink-0 object-cover sm:aspect-[343/103] sm:w-full" />
