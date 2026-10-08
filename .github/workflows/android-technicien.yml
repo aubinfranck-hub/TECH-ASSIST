@@ -1,0 +1,81 @@
+name: TechAssist Android Technicien
+
+# Application Android des techniciens : alerte sonore en direct (service en arrière-plan) + console Tech Assist plein écran.
+# Publiée à une adresse fixe : releases/download/android-latest/tech-assist-technicien.apk
+on:
+  push:
+    branches: ["claude/ecstatic-maxwell-z0gk4g"]
+    paths: ['apps/android-technicien/**', '.github/workflows/android-technicien.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/android-technicien
+    env:
+      # Signature STABLE (mise à jour par-dessus la version installée, sans désinstaller) : uniquement si ces secrets existent.
+      # La clé ne doit JAMAIS être enregistrée dans le dépôt (il est public). Sans secrets : signature de débogage.
+      ORG_GRADLE_PROJECT_keystorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ORG_GRADLE_PROJECT_keyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ORG_GRADLE_PROJECT_keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10"
+      - name: Signature stable (si les secrets existent)
+        shell: bash
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/techassist.jks"
+            echo "ORG_GRADLE_PROJECT_keystorePath=$RUNNER_TEMP/techassist.jks" >> "$GITHUB_ENV"
+            echo "Signature stable activée."
+          else
+            echo "::warning::Pas de clé de signature (secret ANDROID_KEYSTORE_B64) : l'APK est signé avec une clé de débogage, la mise à jour par-dessus une version installée exigera de désinstaller d'abord."
+          fi
+      - name: Essais (logique d'alerte, lecture du flux, reconnexion, contre un vrai serveur local)
+        run: gradle :app:testDebugUnitTest --no-daemon
+      - name: Fabriquer l'APK
+        run: gradle :app:assembleDebug --no-daemon -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }}
+      - name: Contrôler l'APK fabriqué (nom, version, droits, service d'alerte)
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          AAPT2="$ANDROID_HOME/build-tools/35.0.0/aapt2"
+          "$AAPT2" dump badging "$APK" | tee badging.txt | head -12
+          grep -q "package: name='ci.techassist.technicien'" badging.txt
+          grep -q "versionCode='${{ github.run_number }}'" badging.txt
+          grep -q "uses-permission: name='android.permission.POST_NOTIFICATIONS'" badging.txt
+          grep -q "uses-permission: name='android.permission.FOREGROUND_SERVICE_SPECIAL_USE'" badging.txt
+          grep -q "uses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'" badging.txt
+          "$AAPT2" dump xmltree --file AndroidManifest.xml "$APK" > manifest.txt
+          grep -q "AlertService" manifest.txt
+          grep -q "BootReceiver" manifest.txt
+          unzip -l "$APK" | grep -q "res/raw/dingdong.wav"
+          echo "APK conforme."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: techassist-technicien-debug
+          path: apps/android-technicien/app/build/outputs/apk/debug/app-debug.apk
+      - name: Nom stable de l'APK
+        working-directory: .
+        run: cp apps/android-technicien/app/build/outputs/apk/debug/app-debug.apk tech-assist-technicien.apk
+      - name: Publier
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          target_commitish: ${{ github.sha }}
+          name: Application Android (dernière version)
+          files: tech-assist-technicien.apk

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { audioContext, newRequests, notifyRequest, ringDingDong } from '../lib/dingdong.js';
+import { nativeBridge } from '../lib/nativeBridge.js';
 
 const REPEAT_MS = 60_000;
 
 /** Ding-dong + notification dès qu'une demande de technicien arrive ; il se répète chaque minute tant qu'une demande attend. */
-export function NewRequestAlert({ ids }: { ids: string[] }) {
+function AlertPanel({ ids }: { ids: string[] }) {
   const [enabled, setEnabled] = useState(() => {
     try {
       return localStorage.getItem('ta_ding') !== 'off';
@@ -74,4 +75,9 @@ export function NewRequestAlert({ ids }: { ids: string[] }) {
       </button>
     </div>
   );
+}
+
+/** Application Android : le son et la notification viennent de l'application elle-même (même écran éteint) ; pas de doublon dans la page. */
+export function NewRequestAlert({ ids }: { ids: string[] }) {
+  return nativeBridge() ? null : <AlertPanel ids={ids} />;
 }

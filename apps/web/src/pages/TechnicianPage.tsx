@@ -1,6 +1,7 @@
 import { NewRequestAlert } from '../components/NewRequestAlert.js';
 import { consumeTokenFromHash, isAppMode } from '../lib/appMode.js';
 import { startTechnicianStream } from '../lib/technicianStream.js';
+import { syncNativeToken } from '../lib/nativeBridge.js';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ActiveSessionCard, type MySession } from '../components/ActiveSessionCard.js';
@@ -23,7 +24,8 @@ function useTechnicianManifest(){useEffect(()=>{const l=document.querySelector<H
 export function TechnicianPage(){
  const [token,setToken]=useState<string|null>(()=>{const clean=consumeTokenFromHash(window.location,localStorage);if(clean)window.history.replaceState(null,'',clean);return localStorage.getItem('tech_assist_token');});
  const inApp=isAppMode(window.location,sessionStorage);
- const [streamUp,setStreamUp]=useState(false); const [queue,setQueue]=useState<QueueItem[]>([]);
+ const [streamUp,setStreamUp]=useState(false);
+ useEffect(()=>{syncNativeToken(token);},[token]); const [queue,setQueue]=useState<QueueItem[]>([]);
  const [queueFilter,setQueueFilter]=useState<'all'|'urgent'|'android'|'windows'>('all');
  const [apiUp,setApiUp]=useState<boolean|null>(null);
  const tts=useTtsStatus();
@@ -36,7 +38,12 @@ export function TechnicianPage(){
  useEffect(()=>{if(!token)return;void refresh();const i=setInterval(()=>void refresh(),streamUp?20000:5000);return()=>clearInterval(i);},[token,refresh,streamUp]);
  useEffect(()=>{if(!token)return;return startTechnicianStream({base:import.meta.env.VITE_API_BASE_URL??'http://localhost:4000',token,onState:(st)=>{setStreamUp(st==='open');if(st==='unauthorized'){localStorage.removeItem('tech_assist_token');setToken(null);}},onEvent:(ev)=>{if(ev==='request'||ev==='taken'||ev==='snapshot')void refresh();}});},[token,refresh]);
  useEffect(()=>{const b=document.title;if(token&&queue.length)document.title=`(${queue.length}) Demande technicien · Tech Assist`;return()=>{document.title=b;};},[token,queue.length]);
- function login(t:string){localStorage.setItem('tech_assist_token',t);setToken(t);} const logout=useCallback(()=>{localStorage.removeItem('tech_assist_token');setToken(null);},[]);
+ async function login(t:string){
+  localStorage.setItem('tech_assist_token',t);
+  // Dans l'application Windows/Android : jeton d'APPAREIL de 30 jours (au lieu de 12 h), pour rester connecté et alerté sans se reconnecter chaque jour.
+  if(inApp){try{const d=await api.post<{deviceToken:string}>('/api/auth/technician/device-token',{label:navigator.userAgent.slice(0,50),platform:/android/i.test(navigator.userAgent)?'android':'windows'});localStorage.setItem('tech_assist_token',d.deviceToken);}catch{/* on garde la connexion normale */}}
+  setToken(localStorage.getItem('tech_assist_token'));
+ } const logout=useCallback(()=>{localStorage.removeItem('tech_assist_token');setToken(null);},[]);
  async function confirmPayment(id:string){await api.post(`/api/orders/${id}/confirm-payment`);void refresh();}
  if(!token)return <div className="ta-container flex min-h-[78vh] max-w-lg items-center py-14"><div className="w-full overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl"><div className="bg-slate-950 p-8 text-white"><p className="text-xs font-bold uppercase tracking-[.2em] text-slate-400">TECH ASSIST OS</p><h1 className="mt-2 text-3xl font-black">Console technicien</h1><p className="mt-2 text-sm text-slate-300">Interventions, clients, sessions et sécurité depuis un seul espace.</p></div><div className="p-8"><TechnicianLoginForm onLoggedIn={login}/></div></div></div>;
  if(openId&&UUID.test(openId))return <div className="ta-container max-w-5xl py-6 sm:py-10"><TechnicianRequest sessionId={openId} onBack={()=>setParams({})} onUnauthorized={logout} onChanged={()=>void refresh()}/></div>;
