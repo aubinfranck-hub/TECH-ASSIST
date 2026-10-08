@@ -115,6 +115,12 @@ export function modelName(env: Record<string, string | undefined> = process.env)
   return wanted && /^[a-z0-9][a-z0-9.-]{0,59}$/i.test(wanted) ? wanted : DEFAULT_MODEL;
 }
 
+/** Coupe à la dernière phrase (ou ligne) complète ; garde le texte entier s'il n'y en a pas. */
+export function trimToLastSentence(text: string): string {
+  const end = Math.max(text.lastIndexOf('. '), text.lastIndexOf('! '), text.lastIndexOf('? '), text.lastIndexOf('\n'), /[.!?]$/.test(text) ? text.length - 1 : -1);
+  return end > text.length * 0.3 ? text.slice(0, end + 1).trim() : text;
+}
+
 export interface AskOptions {
   timeoutMs?: number;
   /** Pour les tests. */
@@ -155,7 +161,7 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
               text:
                 (options.platform === 'android' ? PHONE_SYSTEM_PROMPT : SYSTEM_PROMPT) +
                 '\n\nTu es le premier niveau IA de TechAssist. Tu analyses et guides ; tu ne prétends jamais avoir vérifié ou réparé un appareil sans outil réel. Si les informations sont insuffisantes ou si le problème persiste, recommande clairement le technicien.\n' +
-                (options.context ? `\\nCONTEXTE VALIDÉ DE LA MÉMOIRE TECHASSIST :\\n${options.context.slice(0, 5000)}\\nUtilise-le comme piste sans prétendre avoir exécuté ses actions.\\n` : '') +
+                (options.context ? `\nCONTEXTE VALIDÉ DE LA MÉMOIRE TECHASSIST :\n${options.context.slice(0, 5000)}\nUtilise-le comme piste sans prétendre avoir exécuté ses actions.\n` : '') +
                 (options.lesson ? lessonInstruction(options.lesson.track, options.lesson.level, options.lesson.step, options.lesson.index) : '') +
                 (options.image ? IMAGE_RULES : '') +
                 (options.platform !== 'android' && !options.lesson ? referenceFor(message) : ''),
@@ -163,7 +169,13 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
           ],
         },
         contents: buildContents(history, message, options.image),
-        generationConfig: { temperature: 0.3, maxOutputTokens: options.lesson ? 1000 : 800 },
+        // Les modèles Gemini « réfléchissants » comptent leur réflexion dans maxOutputTokens : avec 800, il ne restait que quelques mots
+        // pour la réponse, coupée net en pleine phrase. Budget large, et réflexion coupée là où le modèle l'accepte (2.5).
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: options.lesson ? 2500 : 2048,
+          ...(modelId.startsWith('gemini-2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+        },
       }),
     });
     let usedModel = model;
@@ -176,12 +188,14 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
     }
     if (!response.ok) throw new AssistantUnavailableError(`Le fournisseur d'IA a répondu ${response.status}`);
 
-    const data = (await response.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const text = (data.candidates?.[0]?.content?.parts ?? [])
+    const data = (await response.json()) as { candidates?: { finishReason?: string; content?: { parts?: { text?: string }[] } }[] };
+    let text = (data.candidates?.[0]?.content?.parts ?? [])
       .map((p) => (typeof p.text === 'string' ? p.text : ''))
       .join('')
       .trim();
     if (!text) throw new AssistantUnavailableError('Réponse vide ou bloquée');
+    // Réponse tronquée par la limite de sortie : on s'arrête à la dernière phrase complète plutôt qu'au milieu d'un mot.
+    if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') text = trimToLastSentence(text);
     return { text: text.length > MAX_ANSWER_CHARS ? `${text.slice(0, MAX_ANSWER_CHARS - 1)}…` : text, model: usedModel };
   } catch (err) {
     if (err instanceof AssistantUnavailableError) throw err;

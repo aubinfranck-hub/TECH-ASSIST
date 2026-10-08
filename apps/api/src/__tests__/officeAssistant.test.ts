@@ -7,6 +7,7 @@ import {
   askOfficeAssistant,
   buildContents,
   modelName,
+  trimToLastSentence,
   type ChatTurn,
 } from '../assistant/officeAssistant.js';
 
@@ -88,7 +89,7 @@ describe('askOfficeAssistant', () => {
     expect(body.systemInstruction.parts[0].text.startsWith(SYSTEM_PROMPT)).toBe(true); // les règles restent en tête ; seules des fiches internes peuvent suivre
     expect(body.contents.at(-1)).toEqual({ role: 'user', parts: [{ text: 'Comment ajouter une signature ?' }] });
     expect(JSON.stringify(body.contents)).not.toContain('Règles impératives'); // les règles ne passent jamais par les tours du client
-    expect(body.generationConfig.maxOutputTokens).toBeLessThanOrEqual(1000);
+    expect(body.generationConfig.maxOutputTokens).toBe(2048);
     expect(body.tools).toBeUndefined(); // aucun outil : texte seulement
   });
 
@@ -174,5 +175,41 @@ describe('askOfficeAssistant', () => {
     const started = Date.now();
     await expect(askOfficeAssistant('Q', [], { env: { GEMINI_API_KEY: 'k' }, fetchImpl: impl, timeoutMs: 30 })).rejects.toThrow(/Délai dépassé/);
     expect(Date.now() - started).toBeLessThan(2000);
+  });
+});
+
+describe('Réponses tronquées par la limite de sortie (cas « …dire ce qui est »)', () => {
+  const ok = (text: string, finishReason?: string) => async () =>
+    new Response(JSON.stringify({ candidates: [{ finishReason, content: { parts: [{ text }] } }] }), { status: 200 });
+
+  it('une réponse coupée par MAX_TOKENS s’arrête à la dernière phrase complète', async () => {
+    const cut = 'Bonjour ! Je comprends que vous rencontrez un problème de lenteur.\n\nPour que je puisse vous aider au mieux, pourriez-vous me dire ce qui est';
+    const out = await askOfficeAssistant('LENT', [], { env: { GEMINI_API_KEY: 'k' }, fetchImpl: ok(cut, 'MAX_TOKENS') as unknown as typeof fetch });
+    expect(out.text).toBe('Bonjour ! Je comprends que vous rencontrez un problème de lenteur.');
+    expect(out.text).not.toMatch(/ce qui est$/);
+  });
+
+  it('une réponse complète n’est jamais modifiée', async () => {
+    const full = 'Redémarrez votre PC, puis dites-moi si la lenteur persiste.';
+    const out = await askOfficeAssistant('LENT', [], { env: { GEMINI_API_KEY: 'k' }, fetchImpl: ok(full, 'STOP') as unknown as typeof fetch });
+    expect(out.text).toBe(full);
+  });
+
+  it('budget de sortie large, et réflexion coupée seulement pour les modèles 2.5', async () => {
+    const bodies: Record<string, { generationConfig: Record<string, unknown> }> = {};
+    const impl = async (url: string, init: { body: string }) => {
+      bodies[url.includes('2.5') ? '2.5' : 'autre'] = JSON.parse(init.body);
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Bonjour.' }] } }] }), { status: 200 });
+    };
+    await askOfficeAssistant('LENT', [], { env: { GEMINI_API_KEY: 'k', GEMINI_MODEL: 'gemini-2.5-flash' }, fetchImpl: impl as unknown as typeof fetch });
+    await askOfficeAssistant('LENT', [], { env: { GEMINI_API_KEY: 'k', GEMINI_MODEL: 'gemini-3.5-flash' }, fetchImpl: impl as unknown as typeof fetch });
+    expect(bodies['2.5']!.generationConfig).toMatchObject({ maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } });
+    expect(bodies['autre']!.generationConfig.maxOutputTokens).toBe(2048);
+    expect(bodies['autre']!.generationConfig.thinkingConfig).toBeUndefined();
+  });
+
+  it('trimToLastSentence : texte sans phrase complète conservé tel quel', () => {
+    expect(trimToLastSentence('un texte sans ponctuation')).toBe('un texte sans ponctuation');
+    expect(trimToLastSentence('Première phrase. Seconde phrase qui est coupée')).toBe('Première phrase.');
   });
 });
