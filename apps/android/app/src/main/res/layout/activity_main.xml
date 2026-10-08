@@ -21,5 +21,12 @@
 <Button android:id="@+id/remoteShare" android:text="AUTORISER LE TECHNICIEN" android:layout_marginTop="10dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 <TextView android:text="Vous devez encore accepter la connexion affichée par RustDesk. Vous pouvez arrêter l’assistance à tout moment." android:textSize="12sp" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 </LinearLayout>
+<LinearLayout android:id="@+id/technicianChat" android:orientation="vertical" android:visibility="gone" android:layout_marginTop="18dp" android:padding="16dp" android:background="#EEF2FF" android:layout_width="match_parent" android:layout_height="wrap_content">
+<TextView android:text="👨‍🔧 DISCUSSION AVEC LE TECHNICIEN" android:textStyle="bold" android:textSize="18sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+<TextView android:id="@+id/technicianStatus" android:text="En attente de prise en charge…" android:layout_marginTop="6dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<TextView android:id="@+id/technicianMessages" android:text="" android:layout_marginTop="10dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<EditText android:id="@+id/technicianMessage" android:hint="Écrire au technicien…" android:inputType="textMultiLine" android:minLines="2" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+<Button android:id="@+id/sendTechnicianMessage" android:text="ENVOYER" android:layout_marginTop="8dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+</LinearLayout>
 <Button android:id="@+id/stop" android:text="ARRÊTER LA SESSION" android:visibility="gone" android:layout_marginTop="16dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
 </LinearLayout></ScrollView>
