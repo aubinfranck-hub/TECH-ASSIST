@@ -7,6 +7,8 @@ import { createApp } from '../app.js';
 import { pool } from '../db/pool.js';
 import { flushAlerts } from '../notify/technicianAlerts.js';
 import { connectedCount, resetHub } from '../notify/technicianHub.js';
+import { createServer as createTcpServer } from 'node:net';
+import { probePort } from '../routes/remote.js';
 import { applyMigrations, truncateAll } from './testDb.js';
 
 const app = createApp();
@@ -217,6 +219,35 @@ describe('Applications technicien : jeton d’appareil et flux temps réel', () 
       s.close();
       for (let i = 0; i < 40 && connectedCount() > 0; i++) await new Promise((r) => setTimeout(r, 25));
       expect(connectedCount()).toBe(0);
+    });
+  });
+
+  describe('serveur de connexion à distance : état vu depuis le serveur', () => {  it('probePort : vrai si le port répond, faux sinon (sans attendre indéfiniment)', async () => {
+      const srv = createTcpServer().listen(0, '127.0.0.1');
+      await new Promise((r) => srv.once('listening', r));
+      const open = (srv.address() as AddressInfo).port;
+      expect(await probePort('127.0.0.1', open, 1000)).toBe(true);
+      await new Promise((r) => srv.close(r));
+      expect(await probePort('127.0.0.1', open, 1000)).toBe(false);
+    });
+  
+    it('sans serveur privé : « public » ; avec un serveur injoignable : « privé » mais ports en échec', async () => {
+      const t = await technician('awa');
+      delete process.env.RUSTDESK_ID_SERVER;
+      delete process.env.RUSTDESK_PUBLIC_KEY;
+      const none = await request(app).get('/api/technician/remote-status').set('Authorization', `Bearer ${t.device}`);
+      expect(none.body).toEqual({ mode: 'public', configured: false });
+      process.env.RUSTDESK_ID_SERVER = '127.0.0.1';
+      process.env.RUSTDESK_PUBLIC_KEY = 'cle-publique-de-test';
+      try {
+        const res = await request(app).get('/api/technician/remote-status').set('Authorization', `Bearer ${t.device}`);
+        expect(res.body).toMatchObject({ mode: 'prive', configured: true, idServer: '127.0.0.1' });
+        expect(res.body.reachable).toEqual({ id: false, relay: false });
+        expect(JSON.stringify(res.body)).not.toContain('cle-publique-de-test');
+      } finally {
+        delete process.env.RUSTDESK_ID_SERVER;
+        delete process.env.RUSTDESK_PUBLIC_KEY;
+      }
     });
   });
 });

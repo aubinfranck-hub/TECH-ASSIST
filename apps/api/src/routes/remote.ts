@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { connect as netConnect } from 'node:net';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
@@ -57,6 +58,37 @@ export function rustdeskConfigString(server: { idServer: string; relayServer: st
   const json = JSON.stringify({ host: server.idServer, relay: server.relayServer, key: server.key, api: '' });
   return Buffer.from(json, 'utf8').toString('base64').split('').reverse().join('');
 }
+
+/** Essai de connexion TCP : le port répond-il depuis le serveur ? (jamais plus de `timeoutMs`). */
+export function probePort(host: string, port: number, timeoutMs = 4000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = netConnect({ host, port });
+    const done = (ok: boolean) => {
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(timeoutMs, () => done(false));
+    socket.once('connect', () => done(true));
+    socket.once('error', () => done(false));
+  });
+}
+
+const hostOf = (value: string) => value.replace(/^https?:\/\//, '').replace(/:[0-9]+$/, '');
+let remoteStatusCache: { at: number; value: unknown } | null = null;
+
+/**
+ * État du serveur de connexion à distance (celui du VPS) vu depuis le serveur de l'application : configuré ou non, et ses ports répondent-ils
+ * (21116 identifiants, 21117 relais). Sans serveur privé, RustDesk utilise le réseau public (plus lent, hors de notre contrôle).
+ */
+remoteRouter.get('/technician/remote-status', requireAuth('technician', 'admin'), async (_req, res) => {
+  const server = selfHostedRustdesk();
+  if (!server) return res.json({ mode: 'public', configured: false });
+  if (remoteStatusCache && Date.now() - remoteStatusCache.at < 60_000) return res.json(remoteStatusCache.value);
+  const [id, relay] = await Promise.all([probePort(hostOf(server.idServer), 21116), probePort(hostOf(server.relayServer), 21117)]);
+  const value = { mode: 'prive', configured: true, idServer: hostOf(server.idServer), relayServer: hostOf(server.relayServer), reachable: { id, relay } };
+  remoteStatusCache = { at: Date.now(), value };
+  res.json(value);
+});
 
 remoteRouter.get('/remote-config', (_req, res) => {
   const server = selfHostedRustdesk();

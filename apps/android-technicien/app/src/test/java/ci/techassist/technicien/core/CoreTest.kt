@@ -1,8 +1,10 @@
 package ci.techassist.technicien.core
 
-import com.sun.net.httpserver.HttpExchange
-import com.sun.net.httpserver.HttpServer
-import java.net.InetSocketAddress
+import java.io.OutputStream
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -86,38 +88,71 @@ class AlertTrackerTest {
     }
 }
 
+/** Requête reçue par le serveur d'essai : seul l'en-tête Authorization nous intéresse. */
+private class Request(val authorization: String?)
+
+/** Serveur HTTP minimal (sockets), comme l'API : renvoie un statut, ou un flux « text/event-stream » dont la fermeture termine la réponse. */
+private class RawServer(private val handler: (Request, Int, Socket) -> Unit) {
+    private val socket = ServerSocket(0, 10, InetAddress.getByName("127.0.0.1"))
+    private val hits = AtomicInteger()
+    @Volatile private var closed = false
+    val port: Int get() = socket.localPort
+
+    init {
+        Thread {
+            while (!closed) {
+                val client = try { socket.accept() } catch (_: Exception) { break }
+                Thread {
+                    try {
+                        val reader = client.getInputStream().bufferedReader()
+                        var auth: String? = null
+                        while (true) {
+                            val line = reader.readLine() ?: break
+                            if (line.isEmpty()) break
+                            if (line.startsWith("Authorization:", ignoreCase = true)) auth = line.substringAfter(":").trim()
+                        }
+                        handler(Request(auth), hits.incrementAndGet(), client)
+                    } catch (_: Exception) {
+                    } finally {
+                        try { client.close() } catch (_: Exception) {}
+                    }
+                }.apply { isDaemon = true }.start()
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    fun stop() {
+        closed = true
+        try { socket.close() } catch (_: Exception) {}
+    }
+}
+
+private fun OutputStream.text(s: String) {
+    write(s.toByteArray())
+    flush()
+}
+
 /** Le vrai client réseau contre un vrai serveur HTTP local qui parle comme l'API. */
 class TechnicianStreamTest {
-    private var server: HttpServer? = null
+    private var server: RawServer? = null
     private var stream: TechnicianStream? = null
 
     @After fun tearDown() {
         stream?.stop()
-        server?.stop(0)
+        server?.stop()
     }
 
-    private fun serve(handler: (HttpExchange, Int) -> Unit): String {
-        val s = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        val hits = java.util.concurrent.atomic.AtomicInteger()
-        s.createContext("/api/technician/stream") { ex ->
-            try {
-                handler(ex, hits.incrementAndGet())
-            } finally {
-                ex.close()
-            }
-        }
-        s.start()
+    private fun serve(handler: (Request, Int, Socket) -> Unit): String {
+        val s = RawServer(handler)
         server = s
-        return "http://127.0.0.1:${s.address.port}"
+        return "http://127.0.0.1:${s.port}"
     }
 
-    private fun send(ex: HttpExchange, vararg frames: String, keepOpenMs: Long = 0) {
-        ex.responseHeaders.add("Content-Type", "text/event-stream")
-        ex.sendResponseHeaders(200, 0)
-        for (f in frames) {
-            ex.responseBody.write(f.toByteArray())
-            ex.responseBody.flush()
-        }
+    /** Ouvre le flux (statut 200), envoie les trames, puis garde la connexion ouverte `keepOpenMs` ms avant de la fermer. */
+    private fun send(client: Socket, vararg frames: String, keepOpenMs: Long = 0) {
+        val out = client.getOutputStream()
+        out.text("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n")
+        for (f in frames) out.text(f)
         if (keepOpenMs > 0) Thread.sleep(keepOpenMs)
     }
 
@@ -139,9 +174,9 @@ class TechnicianStreamTest {
     @Test fun `recoit les evenements avec le jeton dans l'en-tete Authorization`() {
         var auth: String? = null
         val latch = CountDownLatch(2)
-        val base = serve { ex, _ ->
-            auth = ex.requestHeaders.getFirst("Authorization")
-            send(ex, "event: hello\ndata: {\"onDuty\":true}\n\n", "event: request\ndata: {\"request\":{\"id\":\"$ID1\",\"platform\":\"windows\",\"who\":\"Awa\"}}\n\n", keepOpenMs = 1500)
+        val base = serve { req, _, client ->
+            auth = req.authorization
+            send(client, "event: hello\ndata: {\"onDuty\":true}\n\n", "event: request\ndata: {\"request\":{\"id\":\"$ID1\",\"platform\":\"windows\",\"who\":\"Awa\"}}\n\n", keepOpenMs = 1500)
         }
         val rec = Recorder(eventsLatch = latch)
         start(base, rec)
@@ -154,7 +189,7 @@ class TechnicianStreamTest {
 
     @Test fun `jeton refuse (401)  - on s'arrete et on le dit`() {
         val latch = CountDownLatch(1)
-        val base = serve { ex, _ -> ex.sendResponseHeaders(401, -1) }
+        val base = serve { _, _, client -> client.getOutputStream().text("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n") }
         val rec = Recorder(unauthorizedLatch = latch)
         start(base, rec)
         assertTrue(latch.await(5, TimeUnit.SECONDS))
@@ -165,7 +200,7 @@ class TechnicianStreamTest {
 
     @Test fun `le serveur ferme la connexion  - reconnexion automatique`() {
         val latch = CountDownLatch(2)
-        val base = serve { ex, n -> send(ex, "event: request\ndata: {\"request\":{\"id\":\"${if (n == 1) ID1 else ID2}\"}}\n\n") }
+        val base = serve { _, n, client -> send(client, "event: request\ndata: {\"request\":{\"id\":\"${if (n == 1) ID1 else ID2}\"}}\n\n") }
         val rec = Recorder(eventsLatch = latch)
         start(base, rec)
         assertTrue(latch.await(5, TimeUnit.SECONDS))
@@ -175,9 +210,9 @@ class TechnicianStreamTest {
 
     @Test fun `silence trop long (connexion morte)  - on se reconnecte`() {
         val latch = CountDownLatch(1)
-        val base = serve { ex, n ->
-            if (n == 1) send(ex, ": ouvert\n\n", keepOpenMs = 3_000) // silence : le délai de lecture (300 ms) coupe
-            else send(ex, "event: request\ndata: {\"request\":{\"id\":\"$ID1\"}}\n\n", keepOpenMs = 500)
+        val base = serve { _, n, client ->
+            if (n == 1) send(client, ": ouvert\n\n", keepOpenMs = 3_000) // silence : le délai de lecture (300 ms) coupe
+            else send(client, "event: request\ndata: {\"request\":{\"id\":\"$ID1\"}}\n\n", keepOpenMs = 500)
         }
         val rec = Recorder(eventsLatch = latch)
         start(base, rec, timeout = 300)
@@ -193,7 +228,7 @@ class TechnicianStreamTest {
     }
 
     @Test fun `stop() arrete la boucle meme en pleine attente`() {
-        val base = serve { ex, _ -> send(ex, ": ouvert\n\n", keepOpenMs = 5_000) }
+        val base = serve { _, _, client -> send(client, ": ouvert\n\n", keepOpenMs = 5_000) }
         val rec = Recorder()
         val s = TechnicianStream(base, { "T" }, rec, backoff = longArrayOf(10), readTimeoutMs = 10_000)
         val t = Thread { s.run() }.apply { isDaemon = true }
