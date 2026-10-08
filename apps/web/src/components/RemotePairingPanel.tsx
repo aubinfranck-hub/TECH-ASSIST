@@ -11,7 +11,8 @@ interface Props {
 interface Bootstrap {
   sessionId: string;
   bootstrapToken: string;
-  rustdesk: { idServer: string; relayServer: string; key: string };
+  /** null : réseau public RustDesk (aucun serveur auto-hébergé). */
+  rustdesk: { idServer: string; relayServer: string; key: string } | null;
   windows: { version: string; url: string; sha256: string };
 }
 
@@ -52,6 +53,24 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
   function downloadAndRun() {
     if (!bootstrap) return;
     const apiBase = import.meta.env.VITE_API_BASE_URL ?? window.location.origin;
+    const server = bootstrap.rustdesk;
+    // Serveur auto-hébergé : on règle RustDesk dessus. Sinon, on laisse RustDesk sur son réseau public par défaut.
+    // Les valeurs viennent de notre API ; on refuse tout ce qui n'a pas la forme d'un nom de serveur ou d'une clé.
+    const safeHost = (v: string) => /^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$/.test(v);
+    const safeKey = (v: string) => /^[A-Za-z0-9+/=_-]{20,100}$/.test(v);
+    if (server && !(safeHost(server.idServer) && safeHost(server.relayServer) && safeKey(server.key))) {
+      setError("Configuration du serveur d'assistance invalide. Contactez Tech Assist.");
+      return;
+    }
+    const configLines = server
+      ? [
+          '$cfgDir = Join-Path $env:APPDATA "RustDesk\\config"',
+          'New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null',
+          '$cfg = Join-Path $cfgDir "RustDesk2.toml"',
+          `$lines = @("rendezvous_server = '${server.idServer}:21116'", "nat_type = 1", "serial = 0", "", "[options]", "custom-rendezvous-server = '${server.idServer}'", "relay-server = '${server.relayServer}'", "key = '${server.key}'", "approve-mode = 'password-click'", "verification-method = 'use-permanent-password'")`,
+          '$lines | Set-Content -Path $cfg -Encoding UTF8',
+        ]
+      : [];
     const lines = [
       '$ErrorActionPreference = "Stop"',
       '$ProgressPreference = "SilentlyContinue"',
@@ -63,30 +82,11 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
       '$apiBase = ' + JSON.stringify(apiBase),
       '$sessionId = ' + JSON.stringify(bootstrap.sessionId),
       '$token = ' + JSON.stringify(bootstrap.bootstrapToken),
-      '$idServer = ' + JSON.stringify(bootstrap.rustdesk.idServer),
-      '$relayServer = ' + JSON.stringify(bootstrap.rustdesk.relayServer),
-      '$key = ' + JSON.stringify(bootstrap.rustdesk.key),
       'Write-Host "Tech Assist - préparation de votre assistance..."',
       'Invoke-WebRequest -Uri $url -OutFile $exe',
       '$sha = (Get-FileHash -Algorithm SHA256 -Path $exe).Hash.ToLowerInvariant()',
       'if ($sha -ne $expectedSha) { Remove-Item $exe -Force; throw "Vérification de l’outil échouée." }',
-      '$cfgDir = Join-Path $env:APPDATA "RustDesk\\config"',
-      'New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null',
-      '$cfg = Join-Path $cfgDir "RustDesk2.toml"',
-      '$lines = @(',
-      "  \"rendezvous_server = '{0}:21116'\" -f \$idServer",
-      '  "nat_type = 1"',
-      '  "serial = 0"',
-      '  ""',
-      '  "[options]"',
-      "  \"custom-rendezvous-server = '{0}'\" -f \$idServer",
-      "  \"relay-server = '{0}'\" -f \$relayServer",
-      "  \"key = '{0}'\" -f \$key",
-      '  "approve-mode = \'password-click\'"',
-      '  "verification-method = \'use-permanent-password\'"',
-      '  "allow-only-conn-window-open = \'Y\'"',
-      ')',
-      '$lines | Set-Content -Path $cfg -Encoding UTF8',
+      ...configLines,
       'Start-Process -FilePath $exe',
       'Start-Sleep -Seconds 8',
       '$id = (& $exe --get-id | Out-String).Trim()',
@@ -100,11 +100,20 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
       'Write-Host "Le technicien pourra se connecter après votre consentement."',
       'Read-Host "Appuyez sur Entrée pour fermer"',
     ];
-    const blob = new Blob([lines.join("\r\n")], { type: 'text/plain;charset=utf-8' });
+    // Un fichier .ps1 s'ouvre dans le Bloc-notes ou est bloqué par Windows : on télécharge un .cmd qui lance le script lui-même.
+    const launcher = [
+      '@echo off',
+      'set "TA_SELF=%~f0"',
+      'powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Get-Content -LiteralPath $env:TA_SELF -Raw -Encoding UTF8; iex $f.Substring($f.IndexOf(\'#PS#\') + 4)"',
+      'pause',
+      'exit /b',
+    ];
+    const content = [...launcher, '#PS#', ...lines];
+    const blob = new Blob([content.join("\r\n")], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'TechAssist-Connexion.ps1';
+    a.download = 'TechAssist-Connexion.cmd';
     document.body.appendChild(a);
     a.click();
     a.remove();

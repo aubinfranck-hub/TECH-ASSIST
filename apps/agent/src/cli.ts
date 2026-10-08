@@ -11,6 +11,7 @@ import { appWindowPlan, cleanupProfile } from './browser.js';
 import { converse } from './conversation.js';
 import { notifyFatal } from './fatal.js';
 import { relayWithTechnician } from './humanRelay.js';
+import { HttpRemote, shareScreen } from './remoteAccess.js';
 import { isAdmin, launchElevated, relaunchAsAdminIfNeeded } from './elevate.js';
 import { PowerShellRunner } from './powershell.js';
 import { repairMyPc } from './repairPc.js';
@@ -202,6 +203,8 @@ async function main() {
     const target = relayTarget();
     if (recorded && target) {
       chat.resumeAfterHandoff();
+      // Avec l'accord du client, l'écran du PC est partagé avec le technicien (RustDesk) avant la discussion.
+      await shareScreen({ ui: chat, runner, remote: new HttpRemote(apiBase ?? DEFAULT_API_BASE, target.token, target.sessionId) });
       await relayWithTechnician({ ui: chat, api: target.api, token: target.token, sessionId: target.sessionId });
     } else {
       chat.info(

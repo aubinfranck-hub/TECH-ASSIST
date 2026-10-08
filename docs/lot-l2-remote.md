@@ -121,3 +121,25 @@ manuel après le push.
   fichier de config) pour éliminer la copie manuelle de l'ID/mot de passe.
 - TURN/relais dédié dimensionné pour la charge réelle, mesure de latence
   Abidjan (RN-01, RN-02).
+
+
+## Sans serveur auto-hébergé : réseau public RustDesk (par défaut)
+
+Tant que `RUSTDESK_ID_SERVER` et `RUSTDESK_PUBLIC_KEY` ne sont pas renseignés, l'assistance **fonctionne quand même** : RustDesk
+utilise son réseau public par défaut (`custom: false`). Le technicien installe RustDesk sans rien régler. Renseigner ces
+variables (après avoir déployé `infra/rustdesk/` sur un serveur — Render ne peut pas héberger les ports UDP/TCP de RustDesk)
+bascule automatiquement tout le monde sur le serveur Tech Assist, et l'écran « Première utilisation » du technicien affiche
+alors les réglages à saisir une fois.
+
+## Parcours de l'agent Windows (application)
+
+Quand le client passe la main à un technicien, l'agent (`apps/agent/src/remoteAccess.ts`) propose de partager l'écran :
+
+1. Le client répond « Oui » ou « Non » (rien n'est téléchargé ni lancé sans « Oui »).
+2. L'agent télécharge le client RustDesk **épinglé dans le code de l'agent** (version + SHA-256 ; le serveur ne dicte jamais
+   ce qui est exécuté), le règle si un serveur auto-hébergé existe, le lance et fixe un mot de passe à usage unique.
+3. `POST /api/app/sessions/:id/remote` enregistre identifiant + mot de passe (chiffré) et vaut consentement écran + contrôle.
+4. Le technicien assigné les lit via `remote-credentials` ; à chaque connexion, RustDesk demande au client de cliquer « Accepter ».
+
+Limites connues : le script PowerShell de préparation n'a pu être testé que par des tests unitaires (pas sur un vrai Windows) ;
+le mot de passe RustDesk reste défini sur le PC après la session (la connexion exige toujours le clic « Accepter »).

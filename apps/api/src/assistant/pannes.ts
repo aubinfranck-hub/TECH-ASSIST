@@ -22,6 +22,20 @@ const INDEX = PANNES.map((p) => ({ p, title: normalize(p.title), body: normalize
 /** Solutions écrites en commandes : l'assistant n'en donne jamais au client, la fiche n'est donc pas transmise. */
 const COMMAND = /\b(net (stop|start)|netsh|sfc|dism|chkdsk|w32tm|powercfg|regedit|gpedit|ipconfig|powershell|regsvr32|rename |reg add|cscript|wsreset|diskpart|msconfig)\b/i;
 
+/** Les mots utiles d'une recherche (hors mots vides et mots trop courts). */
+export function queryWordCount(query: string): number {
+  return tokens(query).slice(0, 12).length;
+}
+
+/**
+ * Une fiche répond-elle vraiment à la recherche ? Une seule correspondance dans le titre sur une recherche de plusieurs mots
+ * (« étiquettes zebra vides » → « fichiers vidés ») est un faux ami : la base ne sait pas, mieux vaut interroger l'IA.
+ */
+export function isConfidentHit(hit: PanneHit, wordCount: number): boolean {
+  if (wordCount <= 2) return hit.score >= 3;
+  return hit.titleHits >= 2 || hit.score >= 6;
+}
+
 export interface PanneHit {
   panne: Panne;
   score: number;

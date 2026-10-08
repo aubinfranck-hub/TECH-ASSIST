@@ -22,6 +22,38 @@ interface Credentials {
 }
 
 /** Identifiants de la prise en main à distance, une fois le client d'accord. */
+interface TechnicianRemoteConfig {
+  custom: boolean;
+  idServer?: string;
+  relayServer?: string;
+  key?: string;
+}
+
+/** Réglages à faire UNE fois dans le RustDesk du technicien : sans eux, le poste du client (sur notre serveur) reste introuvable. */
+function TechnicianSetup() {
+  const [config, setConfig] = useState<TechnicianRemoteConfig | null>(null);
+  useEffect(() => {
+    api.get<TechnicianRemoteConfig>('/api/technician/remote-config').then(setConfig).catch(() => undefined);
+  }, []);
+  if (!config) return null;
+  return (
+    <details className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
+      <summary className="cursor-pointer font-semibold text-slate-800">Première utilisation : régler RustDesk (une seule fois)</summary>
+      {config.custom ? (
+        <div className="mt-2 space-y-1">
+          <p>Dans RustDesk : menu ⋮ → Réseau → Serveur ID/Relais, puis saisissez :</p>
+          <p>Serveur ID : <span className="font-mono font-bold text-slate-900">{config.idServer}</span></p>
+          <p>Serveur relais : <span className="font-mono font-bold text-slate-900">{config.relayServer}</span></p>
+          <p>Clé : <span className="break-all font-mono font-bold text-slate-900">{config.key}</span></p>
+          <p>Sans ces réglages, le poste du client reste introuvable.</p>
+        </div>
+      ) : (
+        <p className="mt-2">Installez RustDesk (rustdesk.com) sans rien régler : le réseau public par défaut suffit. Si vous avez déjà modifié le serveur dans RustDesk, remettez-le par défaut.</p>
+      )}
+    </details>
+  );
+}
+
 export function RemoteAccess({ sessionId, controlGranted, android = false }: { sessionId: string; controlGranted: boolean; android?: boolean }) {
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +104,7 @@ export function RemoteAccess({ sessionId, controlGranted, android = false }: { s
   }
   return (
     <div className="space-y-2">
+      <TechnicianSetup />
       {loading && !credentials && <p className="rounded-xl bg-brand-50 p-3 text-sm font-semibold text-brand-800">Connexion autorisée. Préparation de la prise en main…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {credentials && (

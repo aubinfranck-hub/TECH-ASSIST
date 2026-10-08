@@ -24,6 +24,7 @@ import {
 import { TRAINING_STEPS, TRAINING_TRACK_IDS, findTrack } from '../assistant/trainingCatalog.js';
 import { JEKO_METHODS, JekoError, createJekoPayment, jekoConfigured, type JekoMethod } from '../payments/jeko.js';
 import { paymentLink } from './payments.js';
+import { selfHostedRustdesk } from './remote.js';
 import { createSessionForOrder } from './sessions.js';
 
 /**
@@ -707,6 +708,60 @@ appRouter.get('/app/sessions/:id/android-remote', limiter, requireAppInstall, as
   const key = process.env.RUSTDESK_PUBLIC_KEY;
   if (!idServer || !key) return res.status(503).json({ error: "Le contrôle à distance n'est pas encore disponible." });
   res.json({ idServer, relayServer: process.env.RUSTDESK_RELAY_SERVER ?? idServer, key });
+});
+
+/** Session de cette installation (n'importe quelle plateforme), encore ouverte. */
+async function ownedOpenSession(sessionId: string, installId: string) {
+  if (!UUID.test(sessionId)) return null;
+  const { rows } = await pool.query(
+    `SELECT s.id, s.order_id, s.human_included FROM sessions s JOIN orders o ON o.id = s.order_id
+     WHERE s.id = $1 AND o.app_install_id = $2 AND s.status IN ('created','waiting_technician','active')`,
+    [sessionId, installId],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Prise en main du PC par l'agent Windows : réglages du serveur RustDesk (`custom: false` = réseau public RustDesk).
+ * L'agent épingle lui-même la version et l'empreinte du client RustDesk : le serveur ne lui dit jamais quoi télécharger.
+ */
+appRouter.get('/app/sessions/:id/remote-config', limiter, requireAppInstall, async (req, res) => {
+  await expireOverdueSessions(pool);
+  const session = await ownedOpenSession(req.params.id!, req.appInstall!.id);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (session.human_included === false) return res.status(402).json({ error: 'human_not_included' });
+  const server = selfHostedRustdesk();
+  res.json(server ? { custom: true, ...server } : { custom: false });
+});
+
+/**
+ * L'agent a préparé RustDesk sur le PC, après l'accord explicite du client (affiché dans l'agent) : il envoie l'identifiant
+ * et le mot de passe. Le mot de passe est chiffré ; le technicien ne le voit qu'une fois assigné à la session.
+ */
+appRouter.post('/app/sessions/:id/remote', limiter, requireAppInstall, validateBody(z.object({
+  remotePeerId: z.string().trim().regex(/^\d{6,12}$/, "L'identifiant RustDesk comporte uniquement des chiffres"),
+  remotePassword: z.string().trim().regex(/^[A-Za-z0-9]{6,64}$/, 'Mot de passe invalide'),
+})), async (req, res) => {
+  await expireOverdueSessions(pool);
+  const session = await ownedOpenSession(req.params.id!, req.appInstall!.id);
+  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+  if (session.human_included === false) return res.status(402).json({ error: 'human_not_included' });
+  const body = req.body as { remotePeerId: string; remotePassword: string };
+  await pool.query(
+    `UPDATE sessions SET remote_peer_id = $2, remote_password_encrypted = $3, remote_paired_at = now(),
+       consent_control_at = COALESCE(consent_control_at, now()), consent_screen_at = COALESCE(consent_screen_at, now())
+     WHERE id = $1`,
+    [session.id, body.remotePeerId, encryptSecret(body.remotePassword)],
+  );
+  await logAudit(pool, {
+    actorType: 'client',
+    actorId: req.appInstall!.email,
+    sessionId: session.id,
+    orderId: session.order_id,
+    action: 'session.agent_remote_shared',
+    details: { remoteProvider: 'rustdesk', platform: 'windows' },
+  });
+  res.status(201).json({ shared: true });
 });
 
 const androidRemoteSchema = z.object({

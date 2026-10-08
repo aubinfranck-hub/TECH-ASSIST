@@ -7,7 +7,8 @@ import { pushPublicKey, sendPush } from '../notify/push.js';
 import { balanceFor, creditEarningSafely } from '../partners/earnings.js';
 import { logAudit } from '../utils/audit.js';
 import { progressView } from '../utils/taskProgress.js';
-import { searchPannes } from '../assistant/pannes.js';
+import { isConfidentHit, queryWordCount, searchPannes } from '../assistant/pannes.js';
+import { aiAvailable, composePanne, dailyAiLimitReached, findLearned, reviewLearned, storeLearned } from '../assistant/pannesLearning.js';
 
 /**
  * Console du technicien (téléphone ou ordinateur) : permanence et alertes, détail d'une demande avec ce que l'agent a
@@ -21,18 +22,63 @@ const firstName = (full: string | null | undefined) => (full ? full.trim().split
 
 // --- Permanence et alertes ---
 
-/** Base de pannes (≈500 fiches cause/solution) : recherche par mots pour le technicien, depuis son téléphone. */
-technicianConsoleRouter.get('/technician/pannes', (req, res) => {
-  const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 200) : '';
-  const hits = searchPannes(q, 8, 2).map((h) => ({
-    id: h.panne.id,
+/**
+ * Base de pannes (≈500 fiches de départ + fiches apprises) : recherche par mots pour le technicien. Quand rien ne correspond,
+ * une IA (DeepSeek, Gemini ou Claude) rédige une fiche, enregistrée pour les recherches suivantes (le technicien la confirme ou l'écarte).
+ */
+technicianConsoleRouter.get('/technician/pannes', async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 200) : '';
+  const baseHits = searchPannes(q, 8, 2);
+  const wordCount = queryWordCount(q);
+  const baseConfident = baseHits.some((h) => isConfidentHit(h, wordCount));
+  const fromBase = baseHits.map((h) => ({
+    id: h.panne.id as number | string,
     category: h.panne.category,
     title: h.panne.title,
     cause: h.panne.cause || h.panne.symptom,
     solution: h.panne.solution,
     advanced: h.panne.advanced,
+    origin: 'base' as 'base' | 'ia',
+    status: 'trusted' as 'trusted' | 'candidate',
   }));
-  res.json({ results: hits });
+  const learned = (await findLearned(q, 5)).map((l) => ({ id: l.id as number | string, category: l.category, title: l.title, cause: l.cause, solution: l.solution, advanced: l.advanced, origin: 'ia' as const, status: l.status }));
+  const results = [...learned, ...fromBase];
+  type Ai = { status: 'none' | 'generated' | 'not_configured' | 'limit' | 'unknown' | 'unavailable'; reason?: string };
+  let ai: Ai = { status: 'none' };
+
+  if (!baseConfident && learned.length === 0 && q.length >= 3 && req.query.ai !== '0') {
+    if (!aiAvailable()) {
+      ai = { status: 'not_configured', reason: "Aucune clé DeepSeek, Gemini ou Claude n'est configurée sur le serveur (DEEPSEEK_API_KEY, GEMINI_API_KEY ou ANTHROPIC_API_KEY)." };
+    } else {
+      const mine = (await pool.query(`SELECT count(*)::int AS n FROM learned_pannes WHERE created_by = $1 AND created_at > now() - interval '1 hour'`, [req.auth!.sub])).rows[0].n as number;
+      if (mine >= 20 || (await dailyAiLimitReached())) {
+        ai = { status: 'limit', reason: "La limite de recherches automatiques est atteinte pour le moment." };
+      } else {
+        const composed = await composePanne(q);
+        if (composed.kind === 'panne') {
+          const stored = await storeLearned(composed.panne, q, `ai:${composed.provider}`, req.auth!.sub);
+          results.unshift({ id: stored.id, category: stored.category, title: stored.title, cause: stored.cause, solution: stored.solution, advanced: stored.advanced, origin: 'ia', status: stored.status });
+          ai = { status: 'generated' };
+          await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, action: 'pannes.ai_generated', details: { query: q.slice(0, 200), provider: composed.provider, panneId: stored.id } });
+        } else if (composed.kind === 'unknown') {
+          ai = { status: 'unknown', reason: composed.reason };
+        } else {
+          console.error(`[pannes] aucune IA n'a pu répondre : ${composed.reason}`);
+          ai = { status: 'unavailable', reason: "L'IA n'a pas pu répondre pour le moment. Réessayez dans un instant." };
+        }
+      }
+    }
+  }
+  res.json({ results, ai });
+});
+
+const panneReviewSchema = z.object({ verdict: z.enum(['trusted', 'retired']) });
+technicianConsoleRouter.post('/technician/pannes/:id/review', validateBody(panneReviewSchema), async (req, res) => {
+  if (!UUID.test(req.params.id!)) return res.status(404).json({ error: 'Fiche introuvable' });
+  const panne = await reviewLearned(req.params.id!, (req.body as z.infer<typeof panneReviewSchema>).verdict, req.auth!.sub);
+  if (!panne) return res.status(404).json({ error: 'Fiche introuvable' });
+  await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, action: `pannes.${panne.status === 'trusted' ? 'confirmed' : 'retired'}`, details: { panneId: panne.id, title: panne.title } });
+  res.json({ panne });
 });
 
 technicianConsoleRouter.get('/technician/alerts', async (req, res) => {

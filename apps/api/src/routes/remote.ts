@@ -27,14 +27,34 @@ function validBootstrapToken(sessionId: string, sessionCode: string, token: stri
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/** Client Windows RustDesk épinglé (version + empreinte) : l'agent et le site vérifient l'empreinte avant de le lancer. */
+export const RUSTDESK_WINDOWS = {
+  version: '1.4.9',
+  url: 'https://github.com/rustdesk/rustdesk/releases/download/1.4.9/rustdesk-1.4.9-x86_64.exe',
+  sha256: 'eaedeb0088e687bf46f7c46a9c6ea5493ce51f3134dfd6acbedb47b5b9136274',
+};
+
+/**
+ * Serveur RustDesk auto-hébergé (D1), s'il est configuré. Sinon `null` : RustDesk utilise alors son réseau public par défaut,
+ * ce qui permet à l'assistance de fonctionner dès maintenant, sans serveur à héberger (voir docs/lot-l2-remote.md).
+ */
+export function selfHostedRustdesk(): { idServer: string; relayServer: string; key: string } | null {
+  const idServer = process.env.RUSTDESK_ID_SERVER?.trim();
+  const key = process.env.RUSTDESK_PUBLIC_KEY?.trim();
+  if (!idServer || !key) return null;
+  return { idServer, relayServer: process.env.RUSTDESK_RELAY_SERVER?.trim() || idServer, key };
+}
+
 remoteRouter.get('/remote-config', (_req, res) => {
-  const idServer = process.env.RUSTDESK_ID_SERVER;
-  const relayServer = process.env.RUSTDESK_RELAY_SERVER;
-  const key = process.env.RUSTDESK_PUBLIC_KEY;
-  if (!idServer || !relayServer || !key) {
-    return res.status(503).json({ error: "Serveur d'assistance à distance pas encore configuré" });
-  }
-  res.json({ idServer, relayServer, key });
+  const server = selfHostedRustdesk();
+  if (!server) return res.status(503).json({ error: "Serveur d'assistance à distance pas encore configuré" });
+  res.json(server);
+});
+
+/** Réglages à saisir une fois dans le RustDesk du technicien (inutile avec le réseau public RustDesk). */
+remoteRouter.get('/technician/remote-config', requireAuth('technician', 'admin'), (_req, res) => {
+  const server = selfHostedRustdesk();
+  res.json(server ? { custom: true, ...server } : { custom: false });
 });
 
 remoteRouter.get('/sessions/:code/remote-bootstrap', async (req, res) => {
@@ -48,20 +68,12 @@ remoteRouter.get('/sessions/:code/remote-bootstrap', async (req, res) => {
   if (!['created', 'waiting_technician', 'active'].includes(session.status)) return res.status(409).json({ error: 'Cette session ne peut plus être appairée' });
   if (session.remote_paired_at) return res.status(409).json({ error: 'Cette session est déjà appairée' });
 
-  const idServer = process.env.RUSTDESK_ID_SERVER;
-  const relayServer = process.env.RUSTDESK_RELAY_SERVER;
-  const key = process.env.RUSTDESK_PUBLIC_KEY;
-  if (!idServer || !relayServer || !key) return res.status(503).json({ error: "Serveur d'assistance à distance pas encore configuré" });
-
   res.json({
     sessionId: session.id,
     bootstrapToken: makeBootstrapToken(session.id, session.session_code),
-    rustdesk: { idServer, relayServer, key },
-    windows: {
-      version: '1.4.9',
-      url: 'https://github.com/rustdesk/rustdesk/releases/download/1.4.9/rustdesk-1.4.9-x86_64.exe',
-      sha256: 'eaedeb0088e687bf46f7c46a9c6ea5493ce51f3134dfd6acbedb47b5b9136274',
-    },
+    // null : réseau public RustDesk (aucun serveur auto-hébergé configuré).
+    rustdesk: selfHostedRustdesk(),
+    windows: RUSTDESK_WINDOWS,
   });
 });
 
