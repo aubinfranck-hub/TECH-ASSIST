@@ -22,7 +22,7 @@ export function DiagnosticPage() {
         eyebrow="WINDOWS & OFFICE"
         title="Un PC qui fonctionne. Un travail qui continue."
         text="TechAssist vous accompagne sur Windows et les outils Office avec une première analyse IA, puis un technicien reprend le dossier lorsque la situation l’exige."
-        image="/img/pc.jpg"
+        image={SITE_IMAGES.pc}
         imageAlt="Ordinateur Windows utilisé pour une assistance informatique"
         action={{ label: 'Démarrer mon assistance', to: '/demander-aide' }}
         dark
