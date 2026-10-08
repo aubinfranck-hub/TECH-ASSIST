@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api.js';
 
@@ -26,6 +26,7 @@ export function RemoteAccess({ sessionId, controlGranted, android = false }: { s
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   async function loadCredentials() {
     setLoading(true);
@@ -36,6 +37,23 @@ export function RemoteAccess({ sessionId, controlGranted, android = false }: { s
       setError(err instanceof ApiError ? err.message : 'Erreur.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!controlGranted || credentials || loading) return;
+    void loadCredentials();
+    // Le parent rafraîchit la session toutes les quelques secondes. Dès que le
+    // client valide le contrôle, les identifiants sont donc récupérés sans clic.
+  }, [controlGranted]);
+
+  async function copy(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      window.setTimeout(() => setCopied(null), 1800);
+    } catch {
+      // Le bouton principal reste utilisable même si le presse-papiers est bloqué.
     }
   }
 
@@ -50,17 +68,37 @@ export function RemoteAccess({ sessionId, controlGranted, android = false }: { s
   }
   return (
     <div className="space-y-2">
-      {!credentials && (
-        <button onClick={loadCredentials} disabled={loading} className="ta-button-secondary !w-auto !py-2 disabled:opacity-50">
-          {loading ? 'Chargement…' : 'Se connecter à distance'}
-        </button>
-      )}
+      {loading && !credentials && <p className="rounded-xl bg-brand-50 p-3 text-sm font-semibold text-brand-800">Connexion autorisée. Préparation de la prise en main…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {credentials && (
-        <div className="space-y-1 rounded-lg bg-slate-50 p-3 font-mono text-xs">
-          <p>ID RustDesk : {credentials.remotePeerId}</p>
-          <p>Mot de passe : {credentials.remotePassword}</p>
-          <p className="font-sans text-slate-500">{android ? "Dans RustDesk, configurez d'abord le serveur Tech Assist (Réglages > Serveur ID/Relais), puis saisissez cet ID. Le client doit accepter la demande d'accès sur son écran." : 'Saisissez ces identifiants dans votre propre client RustDesk pour vous connecter.'}</p>
+        <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div>
+            <p className="font-black text-emerald-950">✓ Connexion distante prête</p>
+            <p className="mt-1 text-xs leading-5 text-emerald-800">Le client a autorisé le contrôle. Ouvrez RustDesk pour afficher son écran.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button type="button" onClick={() => void copy(credentials.remotePeerId, 'id')} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-left text-xs">
+              <span className="block text-slate-500">ID RustDesk</span>
+              <span className="font-mono font-black text-slate-900">{copied === 'id' ? '✓ Copié' : credentials.remotePeerId}</span>
+            </button>
+            <button type="button" onClick={() => void copy(credentials.remotePassword, 'password')} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-left text-xs">
+              <span className="block text-slate-500">Mot de passe</span>
+              <span className="font-mono font-black text-slate-900">{copied === 'password' ? '✓ Copié' : credentials.remotePassword}</span>
+            </button>
+          </div>
+          {!android && (
+            <a
+              href={`rustdesk://connection/new/${encodeURIComponent(credentials.remotePeerId)}?password=${encodeURIComponent(credentials.remotePassword)}`}
+              className="ta-button-primary w-full"
+            >
+              🚀 Ouvrir RustDesk et voir l’écran
+            </a>
+          )}
+          <p className="text-xs leading-5 text-slate-600">
+            {android
+              ? "Pour Android, ouvrez RustDesk côté technicien et utilisez l’ID ci-dessus. Le téléphone doit avoir autorisé le partage/contrôle."
+              : "Si rien ne s’ouvre, RustDesk n’est probablement pas installé ou votre poste n’a pas encore enregistré le protocole rustdesk://. Installez/configurez RustDesk une seule fois."}
+          </p>
         </div>
       )}
     </div>
