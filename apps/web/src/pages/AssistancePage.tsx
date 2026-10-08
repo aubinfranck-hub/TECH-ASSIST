@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { PageHero } from '../components/PageHero.js';
+import { SITE_IMAGES } from '../lib/imageSources.js';
 
 const benefits = [
   ['🤖', 'IA TechAssist', 'Une première analyse claire avant de faire intervenir un technicien.'],
@@ -9,9 +10,9 @@ const benefits = [
 ];
 
 const products = [
-  ['📱', 'Android', 'APK natif pour le diagnostic IA, le suivi du dossier et le passage au technicien.', '/telephone', '/img/office.jpg'],
-  ['💻', 'Windows', 'Assistance PC, diagnostic local et intervention distante lorsque nécessaire.', '/diagnostic', '/img/pc.jpg'],
-  ['📄', 'Office', 'Accompagnement Word, Excel, Outlook et problèmes courants de productivité.', '/diagnostic', '/img/office.jpg'],
+  ['📱', 'Android', 'APK natif pour le diagnostic IA, le suivi du dossier et le passage au technicien.', '/telephone', SITE_IMAGES.office],
+  ['💻', 'Windows', 'Assistance PC, diagnostic local et intervention distante lorsque nécessaire.', '/diagnostic', SITE_IMAGES.pc],
+  ['📄', 'Office', 'Accompagnement Word, Excel, Outlook et problèmes courants de productivité.', '/diagnostic', SITE_IMAGES.office],
 ];
 
 export function AssistancePage() {
@@ -21,7 +22,7 @@ export function AssistancePage() {
         eyebrow="COMMENT ÇA MARCHE"
         title="Le support informatique qui continue jusqu’à la résolution."
         text="TechAssist combine portail web, applications, IA et techniciens. Vous expliquez votre problème une fois : le dossier suit son parcours sans vous faire recommencer."
-        image="/img/office.jpg"
+        image={SITE_IMAGES.office}
         imageAlt="Poste de travail utilisé pour une assistance informatique"
         action={{ label: 'Demander de l’aide', to: '/demander-aide' }}
         dark
@@ -83,17 +84,17 @@ export function AssistancePage() {
                 ))}
               </div>
             </div>
-            <img src="/img/pc.jpg" alt="Technicien travaillant sur un ordinateur" className="h-72 w-full object-cover lg:h-full" loading="lazy" />
+            <img src={SITE_IMAGES.pc} alt="Technicien travaillant sur un ordinateur" className="h-72 w-full object-cover lg:h-full" loading="lazy" />
           </div>
         </section>
 
         <section className="mt-10 grid gap-5 md:grid-cols-2">
           <article className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-card">
-            <img src="/img/reseau.jpg" alt="Réseau informatique d'entreprise" className="h-48 w-full object-cover" loading="lazy" />
+            <img src={SITE_IMAGES.network} alt="Réseau informatique d'entreprise" className="h-48 w-full object-cover" loading="lazy" />
             <div className="p-6"><p className="ta-eyebrow">POUR LES ENTREPRISES</p><h2 className="mt-2 font-display text-2xl font-black">Suivre tout votre parc</h2><p className="mt-2 text-sm leading-6 text-slate-600">Postes, demandes, diagnostics et interventions depuis un espace dédié.</p><Link to="/entreprise" className="mt-5 inline-flex font-black text-brand-700">Espace entreprise →</Link></div>
           </article>
           <article className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-card">
-            <img src="/img/securite.jpg" alt="Sécurité informatique" className="h-48 w-full object-cover" loading="lazy" />
+            <img src={SITE_IMAGES.security} alt="Sécurité informatique" className="h-48 w-full object-cover" loading="lazy" />
             <div className="p-6"><p className="ta-eyebrow">À DISTANCE</p><h2 className="mt-2 font-display text-2xl font-black">Vous gardez le contrôle</h2><p className="mt-2 text-sm leading-6 text-slate-600">Les outils distants sont utilisés lorsque l’intervention le nécessite et avec votre autorisation.</p><Link to="/demander-aide" className="mt-5 inline-flex font-black text-brand-700">Commencer →</Link></div>
           </article>
         </section>
