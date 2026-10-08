@@ -29,7 +29,8 @@ $problems = @(Get-CimInstance -ClassName Win32_PnPEntity | Where-Object { $_.Con
   [pscustomobject]@{ name = [string]$_.Name; deviceClass = [string]$_.PNPClass; id = [string]$_.PNPDeviceID; code = [int]$_.ConfigManagerErrorCode }
 })
 $limit = (Get-Date).AddYears(-3)
-$old = @(Get-CimInstance -ClassName Win32_PnPSignedDriver | Where-Object { $_.DriverDate -and $_.DriverDate -lt $limit -and @('DISPLAY', 'NET', 'BLUETOOTH', 'MEDIA') -contains $_.DeviceClass } | Select-Object -First 5 | ForEach-Object { [string]$_.DeviceName })
+$virtual = 'miniport|virtual|virtuel|loopback|tunnel|isatap|teredo|6to4|hyper-v|vmware|virtualbox|vpn|tap-|wan |kernel debug|remote desktop|usb audio class|bluetooth device|rfcomm|enumerator|generic'
+$old = @(Get-CimInstance -ClassName Win32_PnPSignedDriver | Where-Object { $_.DriverDate -and $_.DriverDate -lt $limit -and @('DISPLAY', 'NET', 'BLUETOOTH', 'MEDIA') -contains $_.DeviceClass -and $_.Manufacturer -notmatch '^Microsoft' -and $_.DeviceName -notmatch $virtual } | Select-Object -First 5 | ForEach-Object { [string]$_.DeviceName })
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 [pscustomobject]@{ problems = $problems; oldDrivers = $old; admin = $admin } | ConvertTo-Json -Depth 4 -Compress
 `);

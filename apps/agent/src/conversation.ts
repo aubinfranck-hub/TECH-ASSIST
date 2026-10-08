@@ -278,7 +278,10 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
       1000,
     );
     const reply = await deps.assistant!.answer(brief, history.slice(-8));
-    if (!reply.available) return false;
+    if (!reply.available) {
+      ui.info("L'assistant en ligne ne répond pas pour le moment (connexion Internet ou service occupé). Je passe donc directement au technicien.");
+      return false;
+    }
     history.push({ role: 'user', text: truncate(lastMessage, 500) }, { role: 'assistant', text: truncate(reply.text, 1500) });
     ui.info(reply.text);
     return ui.confirmFixed('Est-ce que cela règle votre problème ?');

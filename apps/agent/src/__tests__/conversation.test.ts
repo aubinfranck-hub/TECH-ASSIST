@@ -373,3 +373,23 @@ describe('converse — portée du forfait', () => {
     expect(noRunner.calls).toHaveLength(0);
   });
 });
+
+describe('converse — l’IA prend le relais avant le technicien', () => {
+  it('rien d’anormal côté Windows mais le problème persiste : l’IA répond, puis le client confirme', async () => {
+    const assistant = new FakeAssistant([{ available: true, text: 'Vérifiez le micro choisi dans Paramètres > Système > Son > Entrée.' }]);
+    const ui = new ScriptedConversation({ asks: ['mon micro ne marche pas', 'non merci'], fixed: [false, true] });
+    const out = await converse({ runner: noRunner, ui, reporter: new Recorder(), assistant, resolve: resolver({ drivers: stubSkill('drivers') }) });
+    expect(assistant.calls).toHaveLength(1);
+    expect(assistant.calls[0]!.message).toContain('mon micro ne marche pas');
+    expect(ui.infos.join('\n')).toContain('Paramètres > Système > Son > Entrée');
+    expect(out.handedOver).toBe(false);
+  });
+
+  it('l’IA ne répond pas : le client le sait (plus de silence), puis le technicien', async () => {
+    const assistant = new FakeAssistant([{ available: false }]);
+    const ui = new ScriptedConversation({ asks: ['mon micro ne marche pas'], fixed: [false] });
+    const out = await converse({ runner: noRunner, ui, reporter: new Recorder(), assistant, resolve: resolver({ drivers: stubSkill('drivers') }) });
+    expect(ui.infos.join('\n')).toContain("L'assistant en ligne ne répond pas pour le moment");
+    expect(out.handedOver).toBe(true);
+  });
+});
