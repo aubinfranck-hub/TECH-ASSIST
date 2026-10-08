@@ -32,6 +32,14 @@ class MainActivity : Activity() {
     private lateinit var remotePassword: EditText
     private lateinit var remoteShare: Button
     private lateinit var remoteOpen: Button
+    private lateinit var technicianChat: LinearLayout
+    private lateinit var technicianStatus: TextView
+    private lateinit var technicianMessages: TextView
+    private lateinit var technicianMessage: EditText
+    private lateinit var sendTechnicianMessage: Button
+    private val handler = Handler(Looper.getMainLooper())
+    private var lastMessageId = 0L
+    private var polling = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +49,9 @@ class MainActivity : Activity() {
         resolved=findViewById(R.id.resolved); notResolved=findViewById(R.id.notResolved); escalate=findViewById(R.id.escalate); stop=findViewById(R.id.stop)
         remoteBox=findViewById(R.id.remoteBox); remotePeer=findViewById(R.id.remotePeer); remotePassword=findViewById(R.id.remotePassword)
         remoteShare=findViewById(R.id.remoteShare); remoteOpen=findViewById(R.id.remoteOpen)
+        technicianChat=findViewById(R.id.technicianChat); technicianStatus=findViewById(R.id.technicianStatus)
+        technicianMessages=findViewById(R.id.technicianMessages); technicianMessage=findViewById(R.id.technicianMessage)
+        sendTechnicianMessage=findViewById(R.id.sendTechnicianMessage)
         start.setOnClickListener { startSession() }
         resolved.setOnClickListener { feedback("resolved") }
         notResolved.setOnClickListener { feedback("not_resolved") }
@@ -48,6 +59,7 @@ class MainActivity : Activity() {
         stop.setOnClickListener { stopSession() }
         remoteOpen.setOnClickListener { openRustDesk() }
         remoteShare.setOnClickListener { shareRemote() }
+        sendTechnicianMessage.setOnClickListener { sendTechnicianMessage() }
     }
 
     private fun startSession() {
@@ -79,6 +91,8 @@ class MainActivity : Activity() {
                             status.text="👨‍🔧 Votre dossier est transmis à un technicien."
                             assistant.text="Un technicien reprend votre dossier avec l'historique IA."
                             remoteBox.visibility=View.VISIBLE
+                            technicianChat.visibility=View.VISIBLE
+                            startTechnicianPolling()
                         }
                         "resolved" -> {
                             status.text="✓ Assistance terminée."
@@ -99,6 +113,8 @@ class MainActivity : Activity() {
                     status.text="👨‍🔧 Demande envoyée à la file technicien."
                     assistant.text="Votre dossier et l'historique sont transmis au technicien."
                     remoteBox.visibility=View.VISIBLE
+                    technicianChat.visibility=View.VISIBLE
+                    startTechnicianPolling()
                 }
             } catch(e:Exception){ runOnUiThread { Toast.makeText(this,e.message,Toast.LENGTH_LONG).show() } }
         }
@@ -136,9 +152,66 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun stopSession() {
+    private fun sendTechnicianMessage() {
+        val text = technicianMessage.text.toString().trim()
+        if (text.isBlank() || sessionId == null || sessionCode == null) return
+        sendTechnicianMessage.isEnabled=false
         io.execute {
-            try { api.stop(sessionId!!,sessionCode!!); runOnUiThread { status.text="Session arrêtée."; stop.visibility=View.GONE; remoteBox.visibility=View.GONE } }
+            try {
+                api.sendMessage(sessionId!!, sessionCode!!, text)
+                runOnUiThread { technicianMessage.setText(""); sendTechnicianMessage.isEnabled=true; pollTechnicianMessages() }
+            } catch(e:Exception) {
+                runOnUiThread { sendTechnicianMessage.isEnabled=true; Toast.makeText(this, e.message ?: "Message non envoyé", Toast.LENGTH_LONG).show() }
+            }
+        }
+    }
+
+    private fun startTechnicianPolling() {
+        if (polling) return
+        polling=true
+        pollTechnicianMessages()
+    }
+
+    private fun pollTechnicianMessages() {
+        if (!polling || sessionId == null || sessionCode == null) return
+        io.execute {
+            try {
+                val session = api.session(sessionCode!!).getJSONObject("session")
+                val state = session.optString("status")
+                val messages = api.messages(sessionId!!, sessionCode!!).getJSONArray("messages")
+                val lines = StringBuilder()
+                var maxId = lastMessageId
+                for (i in 0 until messages.length()) {
+                    val m = messages.getJSONObject(i)
+                    val id = m.optLong("id")
+                    maxId = maxOf(maxId, id)
+                    val sender = when(m.optString("sender")) {
+                        "technician" -> "Technicien"
+                        "system" -> "TechAssist"
+                        "client" -> "Vous"
+                        else -> m.optString("sender")
+                    }
+                    lines.append(sender).append(" : ").append(m.optString("body")).append("\n\n")
+                }
+                lastMessageId=maxId
+                runOnUiThread {
+                    technicianStatus.text = when(state) {
+                        "active" -> "🟢 Technicien connecté — vous pouvez échanger avec lui."
+                        "waiting_technician", "created" -> "🟠 Votre demande est dans la file technicien."
+                        "completed", "expired", "cancelled" -> { polling=false; "✓ Assistance terminée." }
+                        else -> "État : $state"
+                    }
+                    technicianMessages.text=lines.toString()
+                }
+            } catch(_:Exception) { /* une coupure réseau temporaire ne ferme pas la session */ }
+            if (polling) handler.postDelayed({ pollTechnicianMessages() }, 3000)
+        }
+    }
+
+    private fun stopSession() {
+        polling=false
+        io.execute {
+            try { api.stop(sessionId!!,sessionCode!!); runOnUiThread { polling=false; status.text="Session arrêtée."; stop.visibility=View.GONE; remoteBox.visibility=View.GONE; technicianChat.visibility=View.GONE } }
             catch(e:Exception){ runOnUiThread { Toast.makeText(this,e.message,Toast.LENGTH_LONG).show() } }
         }
     }
