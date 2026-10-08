@@ -21,6 +21,7 @@ import { pricingRouter } from './routes/pricing.js';
 import { remoteRouter } from './routes/remote.js';
 import { ttsRouter } from './routes/tts.js';
 import { aiStatusRouter } from './routes/aiStatus.js';
+import { technicianStreamRouter } from './routes/technicianStream.js';
 import { simpleRouter } from './routes/simple.js';
 import { partnerRouter } from './routes/partner.js';
 import { adminPartnersRouter } from './routes/adminPartners.js';
@@ -100,6 +101,7 @@ export function createApp() {
   app.use('/api', partnerRouter);
   app.use('/api', diagnosticsRouter);
   app.use('/api', humanRelayRouter);
+  app.use('/api', technicianStreamRouter);
   app.use('/api', sessionsRouter);
   app.use('/api', technicianConsoleRouter);
   app.use('/api', remoteRouter);

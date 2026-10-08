@@ -2,6 +2,7 @@ import { pool } from '../db/pool.js';
 import { logAudit } from '../utils/audit.js';
 import { sendMail } from '../utils/mailer.js';
 import { pushPublicKey, sendPush } from './push.js';
+import { broadcastRequest } from './technicianHub.js';
 
 export interface AlertSummary {
   pushed: number;
@@ -9,6 +10,8 @@ export interface AlertSummary {
   webhook: boolean;
   /** Techniciens de permanence prévenus (ou qui pouvaient l'être). */
   recipients: number;
+  /** Applications technicien connectées qui ont reçu l'alerte en temps réel. */
+  streamed: number;
 }
 
 function consoleUrl(sessionId: string): string {
@@ -77,6 +80,12 @@ export async function alertTechnicians(sessionId: string, reason?: string): Prom
     const short = reason ? reason.slice(0, 140) : 'Le client demande un technicien.';
     const payload = { title: 'Un client demande un technicien', body: `${who} · ${session.platform === 'android' ? 'Android' : 'Windows'} — ${short}`, url };
 
+    // Applications Windows / Android connectées : alerte immédiate, au même instant pour tous les techniciens de permanence.
+    const streamed = broadcastRequest(
+      techs.map((t) => t.id),
+      { id: session.id, platform: String(session.platform), who, reason: short, at: new Date().toISOString() },
+    );
+
     let pushed = 0;
     const gone: string[] = [];
     if (pushPublicKey()) {
@@ -99,7 +108,7 @@ export async function alertTechnicians(sessionId: string, reason?: string): Prom
     const hook = process.env.ALERT_WEBHOOK_URL;
     const webhook = hook ? await postWebhook(hook, { text: `${payload.title} — ${payload.body}\n${url}`, ...payload, sessionId: session.id }) : false;
 
-    const summary: AlertSummary = { pushed, emailed, webhook, recipients: techs.length };
+    const summary: AlertSummary = { pushed, emailed, webhook, recipients: techs.length, streamed };
     await logAudit(pool, { actorType: 'system', sessionId: session.id, action: 'technicians.alerted', details: { ...summary } });
     return summary;
   } catch (err) {

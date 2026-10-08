@@ -5,6 +5,7 @@ import { generateSessionCode, SESSION_CODE_TTL_MINUTES } from '../utils/sessionC
 import { validateBody } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 import { alertInBackground } from '../notify/technicianAlerts.js';
+import { broadcastTaken } from '../notify/technicianHub.js';
 import { logAudit, type Db } from '../utils/audit.js';
 import { freeLaunch, humanIncludedFor, upgradeOffer } from '../utils/offers.js';
 import { HUMAN_MIN_MINUTES, expireOverdueSessions } from '../utils/sessionClock.js';
@@ -644,6 +645,7 @@ sessionsRouter.patch('/technician/sessions/:id/claim', requireAuth('technician',
   // Le client le voit tout de suite dans la fenêtre de l'agent.
   const name = (await pool.query('SELECT full_name FROM technicians WHERE id = $1', [req.auth!.sub])).rows[0]?.full_name as string | undefined;
   const first = name?.trim().split(/\s+/)[0] ?? 'Un technicien';
+  broadcastTaken(req.params.id!, first); // les confrères retirent leur alerte
   await pool.query(`INSERT INTO session_messages (session_id, sender, technician_id, body) VALUES ($1, 'system', $2, $3)`, [
     req.params.id,
     req.auth!.sub,

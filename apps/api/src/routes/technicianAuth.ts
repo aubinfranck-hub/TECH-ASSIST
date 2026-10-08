@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { validateBody } from '../middleware/validate.js';
-import { requireAuth, signAuthToken, signPreAuthToken, verifyPreAuthToken } from '../middleware/auth.js';
+import { DEVICE_TOKEN_DAYS, requireAuth, signAuthToken, signDeviceToken, signPreAuthToken, verifyPreAuthToken } from '../middleware/auth.js';
 import { logAudit } from '../utils/audit.js';
 import { buildOtpauthUri, generateTotpSecret, verifyTotpCode } from '../utils/totp.js';
 
@@ -209,6 +209,54 @@ technicianAuthRouter.post('/technician/login/totp', authLimiter, validateBody(to
 
   const token = signAuthToken({ sub: technician.id, role: technician.role, username: technician.username });
   res.json({ token, technician: { id: technician.id, username: technician.username, role: technician.role } });
+});
+
+const deviceSchema = z.object({
+  label: z.string().trim().max(60).default(''),
+  platform: z.enum(['windows', 'android', 'web']),
+});
+
+const MAX_ACTIVE_DEVICES = 10;
+
+/**
+ * Application technicien (Windows, Android) : après la connexion normale (mot de passe + 2FA), l'application demande un jeton d'APPAREIL
+ * valable 30 jours pour rester connectée en arrière-plan et recevoir les alertes. Il est lié à cet appareil, révocable, et revérifié en base.
+ * Il ne peut pas en fabriquer un autre : seule une vraie connexion le peut.
+ */
+technicianAuthRouter.post('/technician/device-token', authLimiter, requireAuth('technician', 'admin'), validateBody(deviceSchema), async (req, res) => {
+  if (req.auth!.device) return res.status(403).json({ error: 'Reconnectez-vous avec votre mot de passe pour ajouter un appareil.' });
+  const body = req.body as z.infer<typeof deviceSchema>;
+  const { rows } = await pool.query(`INSERT INTO technician_devices (technician_id, label, platform) VALUES ($1, $2, $3) RETURNING id`, [req.auth!.sub, body.label, body.platform]);
+  const deviceId = rows[0].id as string;
+  // Au plus 10 appareils actifs : les plus anciens sont révoqués.
+  await pool.query(
+    `UPDATE technician_devices SET revoked_at = now()
+     WHERE technician_id = $1 AND revoked_at IS NULL AND id NOT IN (
+       SELECT id FROM technician_devices WHERE technician_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT $2)`,
+    [req.auth!.sub, MAX_ACTIVE_DEVICES],
+  );
+  await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, action: 'auth.device_added', details: { platform: body.platform, label: body.label } });
+  res.status(201).json({
+    deviceId,
+    deviceToken: signDeviceToken({ sub: req.auth!.sub, role: req.auth!.role, username: req.auth!.username }, deviceId),
+    expiresInDays: DEVICE_TOKEN_DAYS,
+  });
+});
+
+technicianAuthRouter.get('/technician/devices', requireAuth('technician', 'admin'), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, label, platform, created_at, last_seen_at, revoked_at FROM technician_devices WHERE technician_id = $1 ORDER BY created_at DESC LIMIT 30`,
+    [req.auth!.sub],
+  );
+  res.json({ devices: rows, current: req.auth!.device ?? null });
+});
+
+technicianAuthRouter.delete('/technician/devices/:id', requireAuth('technician', 'admin'), async (req, res) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id!)) return res.status(404).json({ error: 'Appareil introuvable' });
+  const { rowCount } = await pool.query(`UPDATE technician_devices SET revoked_at = now() WHERE id = $1 AND technician_id = $2 AND revoked_at IS NULL`, [req.params.id, req.auth!.sub]);
+  if (!rowCount) return res.status(404).json({ error: 'Appareil introuvable' });
+  await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, action: 'auth.device_revoked' });
+  res.json({ revoked: true });
 });
 
 /** RS-08 : démarrage de l'activation — génère un secret en attente de confirmation. */
