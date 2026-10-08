@@ -5,6 +5,8 @@ import { SITE_IMAGES } from '../lib/imageSources.js';
 const RELEASES = 'https://github.com/aubinfranck-hub/TECH-ASSIST/releases/download';
 export const WINDOWS_URL = `${RELEASES}/agent-latest/tech-assist-agent.exe`;
 export const ANDROID_URL = `${RELEASES}/android-latest/tech-assist-android.apk`;
+export const TECH_WINDOWS_URL = `${RELEASES}/agent-latest/tech-assist-technicien.exe`;
+export const TECH_ANDROID_URL = `${RELEASES}/android-latest/tech-assist-technicien.apk`;
 
 const STEPS = [
   { title: 'Vous téléchargez et vous ouvrez', text: 'Sur votre ordinateur Windows ou votre téléphone Android. Pas de compte à créer : un numéro d’aide s’affiche tout de suite.' },
@@ -72,8 +74,12 @@ export function HomePage() {
           <div className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50 p-6">
             <span className="text-4xl" aria-hidden>🧑‍💻</span>
             <h3 className="mt-4 font-display text-xl font-extrabold">Vous êtes technicien ?</h3>
-            <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">Ouvrez votre espace : dès qu’un client demande de l’aide, un signal sonore (ding-dong) vous alerte. Vous tapez son numéro et vous vous connectez.</p>
-            <Link to="/technicien" className="ta-button-secondary mt-5 w-full">Ouvrir mon espace technicien</Link>
+            <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">Installez l’application technicien : un ding-dong vous alerte dès qu’un client demande de l’aide, en même temps que vos confrères. Le premier qui prend la demande l’obtient.</p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <a href={TECH_WINDOWS_URL} className="ta-button-primary">↓ Windows</a>
+              <a href={TECH_ANDROID_URL} className="ta-button-primary">↓ Android</a>
+            </div>
+            <Link to="/technicien" className="mt-3 block text-center text-sm font-bold text-brand-700 hover:underline">Ou ouvrir la console dans le navigateur</Link>
             <p className="mt-2 text-center text-xs text-slate-500">Accès réservé aux techniciens Tech Assist</p>
           </div>
         </div>
