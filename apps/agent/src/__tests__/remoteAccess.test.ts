@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RUSTDESK_WINDOWS, buildPrepareScript, checkSettings, parsePeerId, shareScreen, type Remote } from '../remoteAccess.js';
+import { RUSTDESK_WINDOWS, buildPrepareScript, checkSettings, encodeServerConfig, parsePeerId, shareScreen, type Remote } from '../remoteAccess.js';
 import type { CommandRunner } from '../types.js';
 
 const KEY = 'A'.repeat(43) + '=';
@@ -70,9 +70,37 @@ describe('Partage d’écran avec le technicien', () => {
     expect(await shareScreen({ ui: t.ui, runner: t.runner, remote: t.remote })).toBe('failed');
   });
 
-  it('serveur auto-hébergé : la configuration est écrite ; réseau public : aucune configuration touchée', () => {
-    expect(buildPrepareScript(custom, 'abcDEF1234')).toContain('RustDesk2.toml');
-    expect(buildPrepareScript({ custom: false }, 'abcDEF1234')).not.toContain('RustDesk2.toml');
+  it('installe RustDesk en service (le mot de passe n’est pas applicable en mode portable) et vérifie le résultat', () => {
+    const script = buildPrepareScript({ custom: false }, 'abcDEF1234');
+    expect(script).toContain('--silent-install');
+    expect(script).toContain('ADMIN_REQUIRED');
+    expect(script).toContain("--password 'abcDEF1234'");
+    expect(script).toMatch(/required\|denied/); // la réponse de RustDesk est lue, plus ignorée
+    expect(script).not.toContain('--config');
+  });
+
+  it('les chemins et expressions du script rendu sont intacts (antislashs)', () => {
+    const script = buildPrepareScript({ custom: false }, 'abcDEF1234');
+    expect(script).toContain("'TechAssist\\rustdesk'");
+    expect(script).toContain("'RustDesk\\rustdesk.exe'");
+    expect(script).toContain("'^\\d{6,12}$'");
+    expect(script).not.toMatch(/[\r\f\v]/);
+  });
+
+  it('serveur auto-hébergé : le serveur est importé avec --config ; la chaîne se décode en {host, relay, key}', () => {
+    const script = buildPrepareScript(custom, 'abcDEF1234');
+    const encoded = encodeServerConfig(custom);
+    expect(script).toContain(`--config '${encoded}'`);
+    const decoded = JSON.parse(Buffer.from(encoded.split('').reverse().join(''), 'base64').toString('utf8'));
+    expect(decoded).toEqual({ host: custom.idServer, relay: custom.relayServer, key: custom.key, api: '' });
+  });
+
+  it('droits administrateur manquants : message clair, rien envoyé au serveur', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const t = setup({ run: { stdout: '', stderr: 'ADMIN_REQUIRED', exitCode: 1 } });
+    expect(await shareScreen({ ui: t.ui, runner: t.runner, remote: t.remote })).toBe('failed');
+    expect(t.info.join(' ')).toContain('administrateur');
+    expect(t.shared).toHaveLength(0);
   });
 
   it('refuse les réglages du réseau qui pourraient injecter du code dans le script', () => {

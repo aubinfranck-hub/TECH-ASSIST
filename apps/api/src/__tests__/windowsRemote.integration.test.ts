@@ -93,7 +93,10 @@ describe('PC Windows : l’agent partage l’écran avec le technicien (RustDesk
     const { sessionId, tech } = await paidSession(auth, 'assistance_rapide', 'humain');
     const expected = { custom: true, idServer: 'id.test.local', relayServer: 'relay.test.local', key: 'cle-publique-test-0123456789abcdef' };
     expect((await request(app).get(`/api/app/sessions/${sessionId}/remote-config`).set(auth)).body).toEqual(expected);
-    expect((await request(app).get('/api/technician/remote-config').set(tech.headers)).body).toEqual(expected);
+    const techCfg = (await request(app).get('/api/technician/remote-config').set(tech.headers)).body;
+    expect(techCfg).toMatchObject(expected);
+    const decoded = JSON.parse(Buffer.from((techCfg.configString as string).split('').reverse().join(''), 'base64').toString('utf8'));
+    expect(decoded).toEqual({ host: 'id.test.local', relay: 'relay.test.local', key: 'cle-publique-test-0123456789abcdef', api: '' });
   });
 
   it('le site (code de session) fonctionne aussi sans serveur auto-hébergé', async () => {

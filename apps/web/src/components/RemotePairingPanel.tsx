@@ -54,7 +54,6 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
     if (!bootstrap) return;
     const apiBase = import.meta.env.VITE_API_BASE_URL ?? window.location.origin;
     const server = bootstrap.rustdesk;
-    // Serveur auto-hébergé : on règle RustDesk dessus. Sinon, on laisse RustDesk sur son réseau public par défaut.
     // Les valeurs viennent de notre API ; on refuse tout ce qui n'a pas la forme d'un nom de serveur ou d'une clé.
     const safeHost = (v: string) => /^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$/.test(v);
     const safeKey = (v: string) => /^[A-Za-z0-9+/=_-]{20,100}$/.test(v);
@@ -62,49 +61,59 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
       setError("Configuration du serveur d'assistance invalide. Contactez Tech Assist.");
       return;
     }
-    const configLines = server
-      ? [
-          '$cfgDir = Join-Path $env:APPDATA "RustDesk\\config"',
-          'New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null',
-          '$cfg = Join-Path $cfgDir "RustDesk2.toml"',
-          `$lines = @("rendezvous_server = '${server.idServer}:21116'", "nat_type = 1", "serial = 0", "", "[options]", "custom-rendezvous-server = '${server.idServer}'", "relay-server = '${server.relayServer}'", "key = '${server.key}'", "approve-mode = 'password-click'", "verification-method = 'use-permanent-password'")`,
-          '$lines | Set-Content -Path $cfg -Encoding UTF8',
-        ]
-      : [];
+    // Format d'import de RustDesk : {host, relay, key, api} en base64, à l'envers.
+    const configString = server
+      ? btoa(JSON.stringify({ host: server.idServer, relay: server.relayServer, key: server.key, api: '' })).split('').reverse().join('')
+      : null;
+    // RustDesk doit être INSTALLÉ (service Windows) : en mode portable, le mot de passe n'est pas appliqué.
     const lines = [
       '$ErrorActionPreference = "Stop"',
       '$ProgressPreference = "SilentlyContinue"',
-      '$dir = Join-Path $env:TEMP "TechAssist-RustDesk"',
+      '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12',
+      '$dir = Join-Path $env:ProgramData "TechAssist\\rustdesk"',
       'New-Item -ItemType Directory -Force -Path $dir | Out-Null',
-      '$exe = Join-Path $dir "TechAssist-RustDesk.exe"',
+      '$setup = Join-Path $dir "rustdesk-setup.exe"',
       '$url = ' + JSON.stringify(bootstrap.windows.url),
       '$expectedSha = ' + JSON.stringify(bootstrap.windows.sha256),
       '$apiBase = ' + JSON.stringify(apiBase),
       '$sessionId = ' + JSON.stringify(bootstrap.sessionId),
       '$token = ' + JSON.stringify(bootstrap.bootstrapToken),
-      'Write-Host "Tech Assist - préparation de votre assistance..."',
-      'Invoke-WebRequest -Uri $url -OutFile $exe',
-      '$sha = (Get-FileHash -Algorithm SHA256 -Path $exe).Hash.ToLowerInvariant()',
-      'if ($sha -ne $expectedSha) { Remove-Item $exe -Force; throw "Vérification de l’outil échouée." }',
-      ...configLines,
-      'Start-Process -FilePath $exe',
-      'Start-Sleep -Seconds 8',
-      '$id = (& $exe --get-id | Out-String).Trim()',
-      'if (-not $id) { throw "Connexion sécurisée impossible." }',
-      '$bytes = New-Object byte[] 9; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes); $password = ([Convert]::ToBase64String($bytes) -replace "[^A-Za-z0-9]", "").Substring(0,8)',
-      '& $exe --password $password | Out-Null',
+      'Write-Host "Tech Assist - préparation de votre assistance (une minute environ)..."',
+      '$ok = (Test-Path $setup) -and ((Get-FileHash -Algorithm SHA256 -Path $setup).Hash.ToLowerInvariant() -eq $expectedSha)',
+      'if (-not $ok) { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $setup }',
+      'if ((Get-FileHash -Algorithm SHA256 -Path $setup).Hash.ToLowerInvariant() -ne $expectedSha) { Remove-Item $setup -Force; throw "Vérification de l\u2019outil échouée." }',
+      '$rd = Join-Path $env:ProgramFiles "RustDesk\\rustdesk.exe"',
+      'if (-not (Test-Path $rd)) { Start-Process -FilePath $setup -ArgumentList "--silent-install" -Wait; for ($i = 0; $i -lt 30 -and -not (Test-Path $rd); $i++) { Start-Sleep -Seconds 2 } }',
+      'if (-not (Test-Path $rd)) { throw "Installation de l\u2019outil impossible." }',
+      'Start-Service -Name "RustDesk" -ErrorAction SilentlyContinue',
+      'Start-Sleep -Seconds 3',
+      ...(configString ? [`& $rd --config '${configString}' | Out-Null`, 'Start-Sleep -Seconds 2'] : []),
+      'if (-not (Get-Process -Name "rustdesk" -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -ne 0 })) { Start-Process -FilePath $rd }',
+      '$id = ""',
+      'for ($i = 0; $i -lt 20; $i++) { Start-Sleep -Seconds 2; $id = ((& $rd --get-id | Out-String).Trim()); if ($id -match "^\\d{6,12}$") { break } }',
+      'if ($id -notmatch "^\\d{6,12}$") { throw "Connexion sécurisée impossible." }',
+      '$bytes = New-Object byte[] 9; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes); $password = ([Convert]::ToBase64String($bytes) -replace "[^A-Za-z0-9]", "").PadRight(8, "k").Substring(0,8)',
+      '$out = (& $rd --password $password | Out-String)',
+      'if ($out -match "required|denied|disabled|error") { throw ("Mot de passe non appliqué : " + $out.Trim()) }',
+      '& $rd --option approve-mode password-click | Out-Null',
+      '& $rd --option verification-method use-permanent-password | Out-Null',
       '$payload = @{ remotePeerId = $id; remotePassword = $password; bootstrapToken = $token } | ConvertTo-Json -Compress',
       'Invoke-RestMethod -Uri "$apiBase/api/sessions/$sessionId/pair" -Method Post -ContentType "application/json" -Body $payload | Out-Null',
       'Write-Host ""',
       'Write-Host "Tech Assist est prêt. Connexion sécurisée établie."',
       'Write-Host "Le technicien pourra se connecter après votre consentement."',
-      'Read-Host "Appuyez sur Entrée pour fermer"',
     ];
-    // Un fichier .ps1 s'ouvre dans le Bloc-notes ou est bloqué par Windows : on télécharge un .cmd qui lance le script lui-même.
+    // Un .ps1 s'ouvre dans le Bloc-notes ou est bloqué par Windows : on télécharge un .cmd qui se relance en administrateur
+    // (nécessaire pour installer RustDesk) puis exécute le script lui-même.
     const launcher = [
       '@echo off',
+      'net session >nul 2>&1',
+      'if %errorlevel% neq 0 (',
+      '  powershell -NoProfile -Command "Start-Process -FilePath \'%~f0\' -Verb RunAs"',
+      '  exit /b',
+      ')',
       'set "TA_SELF=%~f0"',
-      'powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Get-Content -LiteralPath $env:TA_SELF -Raw -Encoding UTF8; iex $f.Substring($f.IndexOf(\'#PS#\') + 4)"',
+      'powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $f = Get-Content -LiteralPath $env:TA_SELF -Raw -Encoding UTF8; iex $f.Substring($f.IndexOf(\'#PS#\') + 4) } catch { Write-Host (\'ERREUR : \' + $_.Exception.Message) -ForegroundColor Red }"',
       'pause',
       'exit /b',
     ];

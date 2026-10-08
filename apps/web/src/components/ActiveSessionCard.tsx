@@ -27,6 +27,7 @@ interface TechnicianRemoteConfig {
   idServer?: string;
   relayServer?: string;
   key?: string;
+  configString?: string;
 }
 
 /** Réglages à faire UNE fois dans le RustDesk du technicien : sans eux, le poste du client (sur notre serveur) reste introuvable. */
@@ -41,7 +42,13 @@ function TechnicianSetup() {
       <summary className="cursor-pointer font-semibold text-slate-800">Première utilisation : régler RustDesk (une seule fois)</summary>
       {config.custom ? (
         <div className="mt-2 space-y-1">
-          <p>Dans RustDesk : menu ⋮ → Réseau → Serveur ID/Relais, puis saisissez :</p>
+          <p>Le plus simple : copiez la configuration, puis dans RustDesk : ⋮ → Réseau → « Importer la configuration du serveur ».</p>
+          {config.configString && (
+            <button type="button" onClick={() => void navigator.clipboard?.writeText(config.configString!)} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-900">
+              Copier la configuration du serveur
+            </button>
+          )}
+          <p>Ou à la main (⋮ → Réseau → Serveur ID/Relais) :</p>
           <p>Serveur ID : <span className="font-mono font-bold text-slate-900">{config.idServer}</span></p>
           <p>Serveur relais : <span className="font-mono font-bold text-slate-900">{config.relayServer}</span></p>
           <p>Clé : <span className="break-all font-mono font-bold text-slate-900">{config.key}</span></p>

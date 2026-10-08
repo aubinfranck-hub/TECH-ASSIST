@@ -45,54 +45,61 @@ export function newPassword(): string {
   return randomBytes(12).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 10).padEnd(10, 'k');
 }
 
-/** Script PowerShell (écrit par nous) : télécharge et vérifie RustDesk, le règle, le lance, fixe le mot de passe, affiche l'identifiant. */
+/**
+ * Chaîne de configuration au format d'import/`--config` de RustDesk : JSON {host, relay, key, api} en base64, à l'envers.
+ * C'est ce que le menu « Réseau » de RustDesk exporte et importe.
+ */
+export function encodeServerConfig(s: { idServer: string; relayServer: string; key: string }): string {
+  const json = JSON.stringify({ host: s.idServer, relay: s.relayServer, key: s.key, api: '' });
+  return Buffer.from(json, 'utf8').toString('base64').split('').reverse().join('');
+}
+
+/**
+ * Script PowerShell (écrit par nous). RustDesk doit être INSTALLÉ (service Windows) et lancé en administrateur : en mode
+ * « portable », `--password` n'est pas appliqué et le technicien recevrait un mot de passe qui ne correspond à rien.
+ * Étapes : télécharger et vérifier → installer en silence → régler le serveur → lire l'identifiant → poser le mot de passe → vérifier.
+ */
 export function buildPrepareScript(settings: RemoteSettings, password: string): string {
   if (!/^[A-Za-z0-9]{8,64}$/.test(password)) throw new Error('mot de passe invalide');
   const config = settings.custom
-    ? `
-$cfgDir = Join-Path $env:APPDATA 'RustDesk\\config'
-New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
-$cfg = Join-Path $cfgDir 'RustDesk2.toml'
-if (Test-Path $cfg) { Copy-Item $cfg ($cfg + '.techassist-backup') -Force }
-$lines = @(
-  "rendezvous_server = '${settings.idServer}:21116'",
-  'nat_type = 1',
-  'serial = 0',
-  '',
-  '[options]',
-  "custom-rendezvous-server = '${settings.idServer}'",
-  "relay-server = '${settings.relayServer}'",
-  "key = '${settings.key}'",
-  "approve-mode = 'password-click'",
-  "verification-method = 'use-permanent-password'"
-)
-$lines | Set-Content -Path $cfg -Encoding UTF8
+    ? `& $rd --config '${encodeServerConfig({ idServer: settings.idServer!, relayServer: settings.relayServer!, key: settings.key! })}' | Out-Null
+Start-Sleep -Seconds 2
 `
     : '';
   return `$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $admin) { throw 'ADMIN_REQUIRED' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $dir = Join-Path $env:ProgramData 'TechAssist\\rustdesk'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
-$exe = Join-Path $dir 'TechAssist-RustDesk.exe'
+$setup = Join-Path $dir 'rustdesk-setup.exe'
 $expected = '${RUSTDESK_WINDOWS.sha256}'
-$ok = (Test-Path $exe) -and ((Get-FileHash -Algorithm SHA256 -Path $exe).Hash.ToLowerInvariant() -eq $expected)
+$ok = (Test-Path $setup) -and ((Get-FileHash -Algorithm SHA256 -Path $setup).Hash.ToLowerInvariant() -eq $expected)
 if (-not $ok) {
-  Get-Process -Name 'TechAssist-RustDesk' -ErrorAction SilentlyContinue | Stop-Process -Force
-  Invoke-WebRequest -UseBasicParsing -Uri '${RUSTDESK_WINDOWS.url}' -OutFile $exe
-  if ((Get-FileHash -Algorithm SHA256 -Path $exe).Hash.ToLowerInvariant() -ne $expected) { Remove-Item $exe -Force; throw 'Vérification de l outil échouée' }
+  Invoke-WebRequest -UseBasicParsing -Uri '${RUSTDESK_WINDOWS.url}' -OutFile $setup
+  if ((Get-FileHash -Algorithm SHA256 -Path $setup).Hash.ToLowerInvariant() -ne $expected) { Remove-Item $setup -Force; throw 'Verification de l outil echouee' }
 }
-${config}
-Get-Process -Name 'TechAssist-RustDesk' -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Process -FilePath $exe
+$rd = Join-Path $env:ProgramFiles 'RustDesk\\rustdesk.exe'
+if (-not (Test-Path $rd)) {
+  Start-Process -FilePath $setup -ArgumentList '--silent-install' -Wait
+  for ($i = 0; $i -lt 30 -and -not (Test-Path $rd); $i++) { Start-Sleep -Seconds 2 }
+}
+if (-not (Test-Path $rd)) { throw 'Installation de l outil impossible' }
+Start-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 3
+${config}if (-not (Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -ne 0 })) { Start-Process -FilePath $rd }
 $id = ''
-for ($i = 0; $i -lt 12; $i++) {
+for ($i = 0; $i -lt 20; $i++) {
   Start-Sleep -Seconds 2
-  $id = ((& $exe --get-id | Out-String).Trim())
+  $id = ((& $rd --get-id | Out-String).Trim())
   if ($id -match '^\\d{6,12}$') { break }
 }
 if ($id -notmatch '^\\d{6,12}$') { throw 'Identifiant introuvable' }
-& $exe --password '${password}' | Out-Null
+$out = (& $rd --password '${password}' | Out-String)
+if ($out -match 'required|denied|disabled|error') { throw ('Mot de passe non applique : ' + $out.Trim()) }
+& $rd --option approve-mode password-click | Out-Null
+& $rd --option verification-method use-permanent-password | Out-Null
 Write-Output ('TECHASSIST_ID=' + $id)
 `;
 }
@@ -132,9 +139,15 @@ export async function shareScreen(deps: { ui: Pick<ConversationUi, 'info' | 'cho
   try {
     const run = await runner.runPowerShell(buildPrepareScript(checked, password), { timeoutMs: 180_000 });
     const peerId = parsePeerId(run.stdout);
-    if (run.exitCode !== 0 || !peerId) throw new Error(run.stderr.trim().slice(0, 200) || 'préparation impossible');
+    if (run.exitCode !== 0 || !peerId) {
+      if (/ADMIN_REQUIRED/.test(run.stderr)) {
+        ui.info("Il faut les droits administrateur pour préparer le partage d'écran. Relancez Tech Assist en choisissant « J'ai le mot de passe administrateur », ou laissez le technicien vous guider par la discussion.");
+        return 'failed';
+      }
+      throw new Error(run.stderr.trim().slice(0, 200) || 'préparation impossible');
+    }
     if (!(await remote.share(peerId, password))) throw new Error("le serveur n'a pas enregistré la connexion");
-    ui.info("Connexion prête. Quand le technicien se connectera, une fenêtre RustDesk s'ouvrira : cliquez sur « Accepter » pour qu'il voie votre écran.");
+    ui.info("Connexion prête. Quand le technicien se connectera, une fenêtre RustDesk peut s'afficher : cliquez sur « Accepter » pour qu'il voie votre écran.");
     return 'shared';
   } catch (err) {
     console.error(`[partage d'écran] ${err instanceof Error ? err.message : String(err)}`);

@@ -45,6 +45,12 @@ export function selfHostedRustdesk(): { idServer: string; relayServer: string; k
   return { idServer, relayServer: process.env.RUSTDESK_RELAY_SERVER?.trim() || idServer, key };
 }
 
+/** Chaîne d'import RustDesk (menu Réseau → importer la configuration du serveur) : JSON {host, relay, key, api} en base64, à l'envers. */
+export function rustdeskConfigString(server: { idServer: string; relayServer: string; key: string }): string {
+  const json = JSON.stringify({ host: server.idServer, relay: server.relayServer, key: server.key, api: '' });
+  return Buffer.from(json, 'utf8').toString('base64').split('').reverse().join('');
+}
+
 remoteRouter.get('/remote-config', (_req, res) => {
   const server = selfHostedRustdesk();
   if (!server) return res.status(503).json({ error: "Serveur d'assistance à distance pas encore configuré" });
@@ -54,7 +60,7 @@ remoteRouter.get('/remote-config', (_req, res) => {
 /** Réglages à saisir une fois dans le RustDesk du technicien (inutile avec le réseau public RustDesk). */
 remoteRouter.get('/technician/remote-config', requireAuth('technician', 'admin'), (_req, res) => {
   const server = selfHostedRustdesk();
-  res.json(server ? { custom: true, ...server } : { custom: false });
+  res.json(server ? { custom: true, ...server, configString: rustdeskConfigString(server) } : { custom: false });
 });
 
 remoteRouter.get('/sessions/:code/remote-bootstrap', async (req, res) => {
