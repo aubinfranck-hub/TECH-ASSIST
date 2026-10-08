@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../lib/api.js';
+import { downloadCmd } from '../lib/cmdLauncher.js';
 
 interface ToolConfig {
   custom: boolean;
@@ -30,27 +31,7 @@ function downloadToolInstaller(cfg: ToolConfig): void {
     'Write-Host ""',
     'Write-Host "Termine. Revenez sur la console : le bouton Ouvrir RustDesk fonctionne maintenant."',
   ];
-  const launcher = [
-    '@echo off',
-    'net session >nul 2>&1',
-    'if %errorlevel% neq 0 (',
-    '  powershell -NoProfile -Command "Start-Process -FilePath \'%~f0\' -Verb RunAs"',
-    '  exit /b',
-    ')',
-    'set "TA_SELF=%~f0"',
-    'powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $f = Get-Content -LiteralPath $env:TA_SELF -Raw -Encoding UTF8; iex $f.Substring($f.IndexOf(\'#PS#\') + 4) } catch { Write-Host (\'ERREUR : \' + $_.Exception.Message) -ForegroundColor Red }"',
-    'pause',
-    'exit /b',
-  ];
-  const blob = new Blob([[...launcher, '#PS#', ...lines].join('\r\n')], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'TechAssist-Outil-Technicien.cmd';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  downloadCmd('TechAssist-Outil-Technicien.cmd', lines);
 }
 
 /** Installation de l'outil de prise en main, une seule fois. */
@@ -80,6 +61,21 @@ export function TechnicianTool() {
         Installer mon outil (Windows)
       </button>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      <details className="mt-3 text-xs text-slate-600">
+        <summary className="cursor-pointer font-semibold">Le navigateur bloque le fichier ? Faites-le à la main (2 minutes)</summary>
+        <ol className="mt-2 list-decimal space-y-1 pl-5">
+          <li>Installez RustDesk : <a href="https://rustdesk.com" target="_blank" rel="noreferrer" className="font-semibold text-brand-700 underline">rustdesk.com</a>.</li>
+          <li>
+            Copiez la configuration de notre serveur :{' '}
+            {cfg.configString ? (
+              <button type="button" onClick={() => void navigator.clipboard?.writeText(cfg.configString!)} className="font-bold text-brand-700 underline">Copier la configuration</button>
+            ) : (
+              <span>aucune à copier : le réseau public suffit.</span>
+            )}
+          </li>
+          <li>Dans RustDesk : menu ⋮ → Réseau → « Importer la configuration du serveur » (le presse-papiers).</li>
+        </ol>
+      </details>
     </div>
   );
 }

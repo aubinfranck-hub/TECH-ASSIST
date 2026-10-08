@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../lib/api.js';
+import { downloadCmd } from '../lib/cmdLauncher.js';
 
 interface Props {
   sessionId: string;
@@ -103,30 +104,7 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
       'Write-Host "Tech Assist est prêt. Connexion sécurisée établie."',
       'Write-Host "Le technicien pourra se connecter après votre consentement."',
     ];
-    // Un .ps1 s'ouvre dans le Bloc-notes ou est bloqué par Windows : on télécharge un .cmd qui se relance en administrateur
-    // (nécessaire pour installer RustDesk) puis exécute le script lui-même.
-    const launcher = [
-      '@echo off',
-      'net session >nul 2>&1',
-      'if %errorlevel% neq 0 (',
-      '  powershell -NoProfile -Command "Start-Process -FilePath \'%~f0\' -Verb RunAs"',
-      '  exit /b',
-      ')',
-      'set "TA_SELF=%~f0"',
-      'powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $f = Get-Content -LiteralPath $env:TA_SELF -Raw -Encoding UTF8; iex $f.Substring($f.IndexOf(\'#PS#\') + 4) } catch { Write-Host (\'ERREUR : \' + $_.Exception.Message) -ForegroundColor Red }"',
-      'pause',
-      'exit /b',
-    ];
-    const content = [...launcher, '#PS#', ...lines];
-    const blob = new Blob([content.join("\r\n")], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'TechAssist-Connexion.cmd';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadCmd('TechAssist-Connexion.cmd', lines);
   }
 
   if (alreadyPaired) {
