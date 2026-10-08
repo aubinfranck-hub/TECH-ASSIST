@@ -292,9 +292,9 @@ export class ChatUi implements ConversationUi {
   }
 
   /** Version de l'exe, discrètement en bas de la fenêtre : permet de savoir si la mise à jour automatique a joué. */
-  showVersion(version: string): void {
+  showVersion(version: string, note?: string): void {
     if (this.closed || !/^[0-9][0-9.]{0,20}$/.test(version)) return;
-    this.push({ type: 'version', text: `Version ${version}` });
+    this.push({ type: 'version', text: `Version ${version}${note ? ` · ${note.slice(0, 90)}` : ''}` });
   }
 
   /** Étape affichée en haut de la fenêtre : 1 coordonnées, 2 demande, 3 intervention, 4 tout est terminé. */

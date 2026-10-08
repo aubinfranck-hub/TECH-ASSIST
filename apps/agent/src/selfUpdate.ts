@@ -93,15 +93,25 @@ export async function checkForUpdate(deps: UpdateDeps = {}): Promise<UpdateResul
   if (!/^\d+(\.\d+)+$/.test(currentVersion)) return { status: 'skipped', reason: 'version de développement' };
   if (!/^https:\/\//i.test(base)) return { status: 'skipped', reason: 'adresse de mise à jour non sécurisée' };
 
-  let manifest: UpdateManifest | null;
-  try {
-    const res = await doFetch(`${base}/latest.json`, { signal: AbortSignal.timeout(6_000), redirect: 'follow' });
-    if (!res.ok) return { status: 'skipped', reason: `manifeste indisponible (${res.status})` };
-    manifest = parseManifest(await res.json());
-  } catch {
-    return { status: 'skipped', reason: 'hors connexion' };
+  // Connexion lente (réseau mobile) : trois essais, 20 s chacun, avant de conclure qu'on est hors connexion.
+  let manifest: UpdateManifest | null = null;
+  let manifestFailure = 'hors connexion';
+  for (let attempt = 0; attempt < 3 && !manifest; attempt++) {
+    try {
+      const res = await doFetch(`${base}/latest.json`, { signal: AbortSignal.timeout(20_000), redirect: 'follow' });
+      if (!res.ok) {
+        manifestFailure = `manifeste indisponible (${res.status})`;
+        if (res.status >= 400 && res.status < 500) break;
+        continue;
+      }
+      const parsed = parseManifest(await res.json());
+      if (!parsed) return { status: 'failed', reason: 'manifeste illisible' };
+      manifest = parsed;
+    } catch {
+      manifestFailure = 'hors connexion';
+    }
   }
-  if (!manifest) return { status: 'failed', reason: 'manifeste illisible' };
+  if (!manifest) return { status: 'skipped', reason: manifestFailure };
   if (compareVersions(manifest.version, currentVersion) <= 0) return { status: 'current', version: currentVersion };
 
   const name = publishedName(basename(exePath));
@@ -111,7 +121,7 @@ export async function checkForUpdate(deps: UpdateDeps = {}): Promise<UpdateResul
   const tmp = `${exePath}.new`;
   const old = `${exePath}.old`;
   try {
-    const res = await doFetch(`${base}/${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(180_000), redirect: 'follow' });
+    const res = await doFetch(`${base}/${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(900_000), redirect: 'follow' });
     if (!res.ok) return { status: 'failed', reason: `téléchargement refusé (${res.status})` };
     const bytes = Buffer.from(await res.arrayBuffer());
     if (bytes.length < 1_000_000 || bytes[0] !== 0x4d || bytes[1] !== 0x5a) return { status: 'failed', reason: 'fichier téléchargé invalide' };

@@ -128,7 +128,10 @@ async function main() {
   }
 
   const chat = await ChatUi.start();
-  chat.showVersion(AGENT_VERSION);
+  chat.showVersion(
+    AGENT_VERSION,
+    update.status === 'current' ? 'à jour' : update.status === 'failed' ? `mise à jour échouée : ${update.reason}` : update.status === 'skipped' ? `mise à jour non vérifiée : ${update.reason}` : undefined,
+  );
   if (update.status === 'failed') chat.info(`Une nouvelle version de Tech Assist existe mais elle n'a pas pu s'installer (${update.reason}). Téléchargez-la de nouveau sur le site : le fichier se met ensuite à jour tout seul.`);
   if (online) chat.speaker = makeSpeaker(apiBase!, token!);
   console.log(`Ouverture de l'assistant dans votre navigateur : ${chat.url}`);
