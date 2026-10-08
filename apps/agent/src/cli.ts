@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { hostname } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { runSkill } from './agent.js';
-import { AppApi, DEFAULT_API_BASE, FileAccountStore, answerCompanyRequest, humanAccessFor, joinCompany, readHardwareHash, signIn, startCovered } from './appAccount.js';
+import { AppApi, DEFAULT_API_BASE, FileAccountStore, answerCompanyRequest, humanAccessFor, joinCompany, readHardwareHash, signIn, startCovered, ensureContact } from './appAccount.js';
 import { collectFleetHealth } from './skills/fleetStatus.js';
 import { HttpAssistant, type Assistant } from './assistant.js';
 import { HttpKnowledge, type Knowledge } from './knowledge.js';
@@ -139,9 +139,11 @@ async function main() {
   let companyDeps: Parameters<typeof converse>[0]['company'];
   let conversationScope: Parameters<typeof converse>[0]['scope'];
   let startedSession: { token: string; sessionId: string } | null = null;
+  let account: { api: AppApi; store: FileAccountStore } | null = null;
   if (!online && !flag('offline')) {
     const api = new AppApi(apiBase ?? DEFAULT_API_BASE);
     const deps = { ui: chat, api, store: new FileAccountStore(), hardwareHash: await readHardwareHash(runner) };
+    account = { api, store: deps.store };
     const login = await signIn(deps);
     if (login) {
       const token = login.token;
@@ -164,6 +166,10 @@ async function main() {
       conversationAssistant = new HttpAssistant(base, started.token, started.sessionId);
       conversationKnowledge = new HttpKnowledge(base, started.token, started.sessionId);
       chat.speaker = makeSpeaker(base, started.token);
+      if (started.code) {
+        chat.showHelpCode(started.code);
+        chat.info(`Votre numéro d'aide est le ${started.code.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')} (affiché en haut de la fenêtre). Si un technicien doit se connecter, donnez-lui ce numéro.`);
+      }
       // L'agent installé sur le PC fait lui-même le travail : « agent IA indisponible » ne concerne que l'assistant en ligne (questions).
       chat.info(
         started.coverage === 'free_offer'
@@ -197,16 +203,34 @@ async function main() {
     return startedSession ? { api: new AppApi(base), token: startedSession.token, sessionId: startedSession.sessionId } : null;
   };
   // Le technicien suit l'intervention en direct : l'état des tâches part vers le serveur (sans effet sans session ouverte).
+  // Comme AnyDesk : si le technicien tape le numéro d'aide et prend la demande, la fenêtre le détecte et passe au partage d'écran.
+  const watchTarget = relayTarget();
+  const watcher = watchTarget
+    ? setInterval(() => {
+        watchTarget.api
+          .relayPoll(watchTarget.token, watchTarget.sessionId, 0)
+          .then((poll) => {
+            if (poll.state.claimed && !chat.wasHandedOff()) {
+              clearInterval(watcher);
+              chat.technicianArrived(poll.state.technician);
+            }
+          })
+          .catch(() => undefined);
+      }, 4000)
+    : undefined;
   const progressTarget = relayTarget();
   const progress = progressTarget ? new ProgressSync(apiBase ?? DEFAULT_API_BASE, progressTarget.token, progressTarget.sessionId) : null;
   if (progress) chat.onTasks = (snapshot) => progress.update(snapshot);
   const result = await converse({ runner, ui: chat, reporter: conversationReporter, assistant: conversationAssistant, knowledge: conversationKnowledge, machine, company: companyDeps, scope: conversationScope, autonomous: true, isAdmin: isAdmin(), requestAdmin: () => launchElevated(process.argv) });
+  if (watcher) clearInterval(watcher);
   if (result.handedOver && !result.relaunched) {
     const recorded = !result.escalationFailed && (buttonHandoff ? await buttonHandoff : true);
     const target = relayTarget();
     if (recorded && target) {
       chat.resumeAfterHandoff();
       // Avec l'accord du client, l'écran du PC est partagé avec le technicien (RustDesk) avant la discussion.
+      // Les coordonnées ne sont demandées qu'ici, quand un technicien intervient (rien à saisir pour démarrer).
+      if (account) await ensureContact({ ui: chat, api: account.api, store: account.store }, target.token).catch(() => false);
       const shared = await shareScreen({ ui: chat, runner, remote: new HttpRemote(apiBase ?? DEFAULT_API_BASE, target.token, target.sessionId) });
       try {
         await relayWithTechnician({ ui: chat, api: target.api, token: target.token, sessionId: target.sessionId });

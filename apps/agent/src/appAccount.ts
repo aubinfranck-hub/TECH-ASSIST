@@ -86,6 +86,8 @@ export const FORFAITS: { planId: string; label: string; price: number; scope: Sc
 export interface StartedSession {
   token: string;
   sessionId: string;
+  /** Numéro d'aide à 9 chiffres, à donner au technicien. */
+  code?: string;
   scope: Scope;
   coverage: 'subscription' | 'company' | 'free_offer' | 'paid_forfait';
   fallbackToHuman: boolean;
@@ -149,6 +151,13 @@ export class AppApi {
     return data as T;
   }
 
+  /** Démarrage sans inscription : ni e-mail ni téléphone. Les coordonnées ne sont demandées que pour appeler un technicien. */
+  anonymous(input: { installId: string; hardwareHash?: string }) {
+    return this.call<{ token: string; anonymous: boolean }>('/app/anonymous', { platform: 'windows', ...input });
+  }
+  contact(token: string, input: { email: string; phone?: string; name?: string }) {
+    return this.call<{ saved: boolean }>('/app/contact', input, token);
+  }
   requestCode(email: string) {
     return this.call<{ sent: boolean; verification?: boolean }>('/app/email-code', { email });
   }
@@ -160,7 +169,7 @@ export class AppApi {
   }
   startAssistance(token: string, orderId?: string) {
     return this.call<{
-      session: { id: string };
+      session: { id: string; session_code?: string };
       coverage: 'subscription' | 'company' | 'free_offer' | 'paid_forfait';
       scope?: Scope;
       fallbackToHuman: boolean;
@@ -254,6 +263,22 @@ export async function signIn(deps: AccountDeps): Promise<{ token: string; entitl
     }
   }
 
+  // Comme AnyDesk : aucune inscription pour commencer. Une installation déjà inscrite (avec e-mail) garde la connexion par code.
+  if (!saved.email) {
+    try {
+      const result = await api.anonymous({ installId: saved.installId, hardwareHash: deps.hardwareHash });
+      store.save({ installId: saved.installId, token: result.token });
+      const me = await api.me(result.token);
+      return { token: result.token, entitlements: me.entitlements };
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.code !== 'registered') {
+        ui.info(err instanceof Error ? err.message : 'Connexion impossible.');
+        return null;
+      }
+      // déjà inscrite avec un e-mail côté serveur : connexion par code ci-dessous
+    }
+  }
+
   ui.info("Pour commencer, j'ai besoin de votre adresse email (c'est ce qui vous donne droit à votre assistance offerte).");
   const email = (
     await askValid(ui, 'Quelle est votre adresse email ?', (v) => EMAIL.test(v), "Cette adresse n'a pas l'air valide. Exemple : nom@exemple.com")
@@ -305,6 +330,31 @@ export async function signIn(deps: AccountDeps): Promise<{ token: string; entitl
   return null;
 }
 
+/**
+ * Coordonnées demandées seulement quand le client appelle un technicien (pour qu'il puisse le rappeler).
+ * Déjà connues (installation inscrite) : rien n'est demandé. Renvoie false si le client renonce.
+ */
+export async function ensureContact(deps: { ui: ConversationUi; api: AppApi; store: AccountStore }, token: string): Promise<boolean> {
+  const { ui, api, store } = deps;
+  const saved = store.load();
+  if (saved.email) return true;
+  ui.info("Pour qu'un technicien puisse vous joindre, j'ai besoin de votre adresse e-mail (et, si vous le voulez, de votre numéro).");
+  const email = (await askValid(ui, 'Votre adresse e-mail :', (v) => EMAIL.test(v), "Cette adresse n'a pas l'air valide. Exemple : nom@exemple.com"))?.toLowerCase();
+  if (!email) return false;
+  let phone: string | undefined;
+  const answer = await ui.ask('Votre numéro de téléphone (facultatif, écrivez « non » pour passer) :');
+  const cleaned = (answer ?? '').replace(/[\s.-]/g, '');
+  if (PHONE.test(cleaned)) phone = cleaned;
+  try {
+    await api.contact(token, { email, ...(phone ? { phone } : {}) });
+    store.save({ ...saved, email });
+    return true;
+  } catch (err) {
+    ui.info(err instanceof Error ? err.message : "Impossible d'enregistrer vos coordonnées.");
+    return false;
+  }
+}
+
 const METHOD_LABELS: Record<string, string> = { wave: 'Wave', orange: 'Orange Money', mtn: 'MTN Mobile Money', moov: 'Moov Money', djamo: 'Djamo' };
 
 const fcfa = (n: number) => `${n.toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ')} FCFA`;
@@ -333,6 +383,7 @@ export async function startCovered(deps: StartDeps, login: { token: string; enti
       return {
         token,
         sessionId: started.session.id,
+        ...(started.session.session_code ? { code: started.session.session_code } : {}),
         scope: started.scope ?? fallbackScope,
         coverage: started.coverage,
         fallbackToHuman: started.fallbackToHuman,

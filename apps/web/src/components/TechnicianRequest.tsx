@@ -209,14 +209,18 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <a href={`tel:${client.phone}`} className="ta-button-secondary !w-auto !py-2">Appeler {client.phone}</a>
-          {client.phone && (
-            <a href={`https://wa.me/${waNumber(client.phone)}`} target="_blank" rel="noreferrer" className="ta-button-secondary !w-auto !py-2">
-              WhatsApp
-            </a>
+          {client.phone ? (
+            <>
+              <a href={`tel:${client.phone}`} className="ta-button-secondary !w-auto !py-2">Appeler {client.phone}</a>
+              <a href={`https://wa.me/${waNumber(client.phone)}`} target="_blank" rel="noreferrer" className="ta-button-secondary !w-auto !py-2">
+                WhatsApp
+              </a>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">Le client n'a pas laissé de numéro : écrivez-lui dans la discussion.</p>
           )}
         </div>
-        {client.email && <p className="break-all text-sm text-slate-500">{client.email}</p>}
+        {client.email && !client.email.endsWith('.invalid') && <p className="break-all text-sm text-slate-500">{client.email}</p>}
 
         {free && (
           <button onClick={claim} disabled={busy === 'claim'} className="ta-button-primary disabled:opacity-60">

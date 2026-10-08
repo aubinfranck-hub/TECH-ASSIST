@@ -38,6 +38,8 @@ export type AssistantReply = { available: true; text: string } | { available: fa
  */
 export interface Assistant {
   answer(message: string, history: ChatTurn[], options?: AnswerOptions): Promise<AssistantReply>;
+  /** « Cette réponse vous aide-t-elle ? » : si oui, le serveur la retient dans le lexique (à relire par un technicien). */
+  feedback?(helped: boolean): Promise<void>;
 }
 
 /** Assistant fourni par l'API Tech Assist (route de chat de la session). */
@@ -66,6 +68,19 @@ export class HttpAssistant implements Assistant {
       return typeof body.answer === 'string' && body.answer.trim() ? { available: true, text: body.answer.trim() } : { available: false };
     } catch {
       return { available: false };
+    }
+  }
+
+  async feedback(helped: boolean): Promise<void> {
+    try {
+      await this.fetchImpl(`${this.apiBase.replace(/\/$/, '')}/api/app/sessions/${this.sessionId}/chat/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
+        body: JSON.stringify({ helped }),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      // Aide à l'apprentissage : sans effet sur le dépannage si elle ne part pas.
     }
   }
 }

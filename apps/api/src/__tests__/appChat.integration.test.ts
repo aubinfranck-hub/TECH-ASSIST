@@ -48,6 +48,8 @@ describe('Assistant Office / Outlook : route de chat de la session', () => {
   beforeEach(async () => {
     await truncateAll();
     process.env.GEMINI_API_KEY = 'cle-test-123';
+    // Ces tests comptent les appels à l'IA du chat : pas d'enrichissement du lexique en arrière-plan (testé dans simple.integration).
+    process.env.LEARNING_PROVIDERS = 'deepseek';
     delete process.env.GEMINI_MODEL;
     fetchMock = vi.fn(async () => geminiOk('1. Ouvrez Outlook.\n2. Cliquez sur Fichier.'));
     vi.stubGlobal('fetch', fetchMock); // supertest utilise le module http, pas fetch
@@ -58,6 +60,7 @@ describe('Assistant Office / Outlook : route de chat de la session', () => {
     vi.restoreAllMocks();
     delete process.env.AI_AGENT_ENABLED;
     delete process.env.GEMINI_API_KEY;
+    delete process.env.LEARNING_PROVIDERS;
     delete process.env.GEMINI_MODEL;
   });
   afterAll(async () => {

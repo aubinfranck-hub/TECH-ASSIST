@@ -25,6 +25,7 @@ type ChatEvent =
   | { seq: number; type: 'choose'; id: string; text: string; options: string[] }
   | { seq: number; type: 'resolved'; id: string }
   | { seq: number; type: 'step'; n: number }
+  | { seq: number; type: 'code'; code: string }
   | { seq: number; type: 'tasks'; items: TaskView[]; now: number; complete: boolean }
   | { seq: number; type: 'results'; view: ResultsView }
   | { seq: number; type: 'ended'; text: string };
@@ -283,6 +284,12 @@ export class ChatUi implements ConversationUi {
     this.handoff = false;
   }
 
+  /** Numéro d'aide (9 chiffres) affiché en permanence en haut de la fenêtre : le client le donne au technicien, comme AnyDesk. */
+  showHelpCode(code: string): void {
+    if (this.closed || !/^\d{9}$/.test(code)) return;
+    this.push({ type: 'code', code });
+  }
+
   /** Étape affichée en haut de la fenêtre : 1 coordonnées, 2 demande, 3 intervention, 4 tout est terminé. */
   progress(step: 1 | 2 | 3 | 4): void {
     if (this.closed) return;
@@ -318,6 +325,17 @@ export class ChatUi implements ConversationUi {
     this.push({ type: 'say', text: 'Je préviens un technicien…' });
     this.settleAll();
     this.onHandoff?.();
+  }
+
+  /**
+   * Un technicien a tapé le numéro d'aide et pris la demande (comme avec AnyDesk) : la conversation avec l'agent s'arrête et le client
+   * passe à la suite (accord de partage d'écran, discussion). Le serveur le sait déjà : rien n'est renvoyé.
+   */
+  technicianArrived(name: string | null): void {
+    if (this.handoff || this.closed) return;
+    this.handoff = true;
+    this.push({ type: 'say', text: `${name ? `${name}, un technicien Tech Assist,` : 'Un technicien'} a pris votre demande.` });
+    this.settleAll();
   }
 
   private requestTechnicianThroughAgent(): void {
@@ -627,6 +645,10 @@ body { margin:0; font:16px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,sans-s
 .wordmark b { color:var(--brand); font-weight:800; }
 .tag { font-size:.74rem; color:var(--muted); margin-top:4px; white-space:nowrap; }
 .top .grow { flex:1; }
+.helpcode { display:flex; flex-direction:column; align-items:flex-end; line-height:1.15; }
+.helpcode[hidden] { display:none; }
+.helpcode span { font-size:11px; font-weight:700; color:var(--muted,#64748b); text-transform:uppercase; letter-spacing:.06em; }
+.helpcode strong { font-size:24px; font-weight:900; letter-spacing:.14em; font-variant-numeric:tabular-nums; color:#0f172a; }
 #handoff { display:inline-flex; align-items:center; gap:8px; background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:9px 16px; font:inherit; font-size:.88rem; font-weight:600; cursor:pointer; white-space:nowrap; transition:border-color .15s,color .15s; }
 #handoff:hover { border-color:var(--brand); color:var(--brand); }
 #handoff .ic { width:18px; height:18px; }
@@ -828,6 +850,7 @@ form button.act { flex:0 0 auto; min-width:170px; }
 <div><div class="wordmark">Tech<b>Assist</b></div><div class="tag">Votre technicien informatique, à distance</div></div>
 </div>
 <div class="grow"></div>
+<div class="helpcode" id="helpcode" hidden><span>Votre numéro d'aide</span><strong id="helpcodeval"></strong></div>
 <button id="handoff" type="button"><svg class="ic" aria-hidden="true"><use href="#i-headset"/></svg><span>Parler à un technicien</span></button>
 </header>
 <div class="body">
@@ -845,8 +868,8 @@ form button.act { flex:0 0 auto; min-width:170px; }
 </aside>
 <section class="stage">
 <nav class="steps" aria-label="Progression">
-<div class="step current" aria-current="step"><div class="dot"><span class="n">1</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div><div class="t">Vos coordonnées</div><div class="s">Email et téléphone</div></div>
-<div class="step"><div class="dot"><span class="n">2</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div><div class="t">Votre demande</div><div class="s">Accord et problème à régler</div></div>
+<div class="step current" aria-current="step"><div class="dot"><span class="n">1</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div><div class="t">Votre numéro</div><div class="s">À donner au technicien</div></div>
+<div class="step"><div class="dot"><span class="n">2</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div><div class="t">Votre demande</div><div class="s">Le problème à régler</div></div>
 <div class="step"><div class="dot"><span class="n">3</span><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></div><div class="t">Intervention</div><div class="s">Analyse et correction</div></div>
 </nav>
 <section class="tasks" id="tasks" hidden aria-label="Suivi de l'intervention">
@@ -1220,6 +1243,7 @@ form button.act { flex:0 0 auto; min-width:170px; }
     else if (ev.type === 'confirm') { hideTyping(); current = ev.id; showConfirm(ev); }
     else if (ev.type === 'choose') { hideTyping(); current = ev.id; showChoose(ev); }
     else if (ev.type === 'step') setStep(ev.n);
+    else if (ev.type === 'code') { document.getElementById('helpcodeval').textContent = ev.code.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'); document.getElementById('helpcode').hidden = false; }
     else if (ev.type === 'tasks') setTasks(ev);
     else if (ev.type === 'results') showResults(ev.view);
     else if (ev.type === 'resolved') { if (current === ev.id) { clearControls(); current = null; showTyping(); } }

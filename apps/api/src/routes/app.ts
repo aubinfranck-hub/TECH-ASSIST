@@ -25,6 +25,8 @@ import { TRAINING_STEPS, TRAINING_TRACK_IDS, findTrack } from '../assistant/trai
 import { JEKO_METHODS, JekoError, createJekoPayment, jekoConfigured, type JekoMethod } from '../payments/jeko.js';
 import { paymentLink } from './payments.js';
 import { selfHostedRustdesk } from './remote.js';
+import { contextFrom, searchLexique } from '../assistant/lexique.js';
+import { enrichInBackground } from '../assistant/pannesLearning.js';
 import { createSessionForOrder } from './sessions.js';
 
 /**
@@ -860,10 +862,13 @@ appRouter.post('/app/sessions/:id/chat', chatLimiter, requireAppInstall, validat
     return res.status(400).json({ error: "L'image jointe n'est pas une capture PNG ou JPEG valide." });
   }
 
+  // Le lexique d'abord (entrées confirmées seulement) ; s'il ne sait rien, l'IA répond ET l'enrichit pour la prochaine fois.
+  const lexique = body.lesson ? { entries: [], confident: true } : await searchLexique(body.message).catch(() => ({ entries: [], confident: true }));
   let answer: { text: string; model: string };
   try {
     answer = await askOfficeAssistant(body.message, body.history, {
       image: body.image,
+      context: contextFrom(lexique.entries),
       platform: install.platform === 'android' ? 'android' : 'windows',
       lesson: body.lesson ? { track: findTrack(body.lesson.track)!, level: body.lesson.level, step: body.lesson.step, index: body.lesson.index } : undefined,
     });
@@ -882,10 +887,12 @@ appRouter.post('/app/sessions/:id/chat', chatLimiter, requireAppInstall, validat
     details: {
       question: body.message.slice(0, 300),
       answer: answer.text.slice(0, 500),
+      answerFull: answer.text.slice(0, 2500),
       model: answer.model,
       ...(body.lesson ? { lesson: body.lesson } : {}),
       ...(body.image ? { image: true } : {}), // l'image elle-même n'est jamais conservée
     },
   });
+  if (!lexique.confident && !body.lesson && body.message.trim().length >= 6) void enrichInBackground(body.message);
   res.json({ answer: answer.text });
 });

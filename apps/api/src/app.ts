@@ -20,6 +20,7 @@ import { paymentsRouter } from './routes/payments.js';
 import { pricingRouter } from './routes/pricing.js';
 import { remoteRouter } from './routes/remote.js';
 import { ttsRouter } from './routes/tts.js';
+import { simpleRouter } from './routes/simple.js';
 import { partnerRouter } from './routes/partner.js';
 import { adminPartnersRouter } from './routes/adminPartners.js';
 import { sessionsRouter } from './routes/sessions.js';
@@ -102,6 +103,7 @@ export function createApp() {
   app.use('/api', technicianConsoleRouter);
   app.use('/api', remoteRouter);
   app.use('/api', ttsRouter);
+  app.use('/api', simpleRouter);
   app.use('/api/auth', technicianAuthRouter);
   app.use('/api/auth', companyAuthRouter);
   app.use('/api', leadsRouter);

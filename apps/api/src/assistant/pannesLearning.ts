@@ -149,7 +149,7 @@ export async function dailyAiLimitReached(env: Env = process.env): Promise<boole
   return rows[0].n >= max;
 }
 
-export async function storeLearned(draft: z.infer<typeof draftSchema>, query: string, source: string, technicianId: string): Promise<LearnedPanne> {
+export async function storeLearned(draft: z.infer<typeof draftSchema>, query: string, source: string, technicianId: string | null): Promise<LearnedPanne> {
   const tokens = [...new Set([...tokenize(`${draft.title} ${draft.cause}`), ...tokenize(query)])].slice(0, 30);
   const { rows } = await pool.query(
     `INSERT INTO learned_pannes (category, title, cause, solution, advanced, tokens, source, example_query, created_by)
@@ -191,4 +191,18 @@ export async function rememberResolved(question: string, answer: string): Promis
     [draft.category, draft.title, draft.cause, draft.solution, draft.advanced, tokens, q],
   );
   return rows[0]?.id ?? null;
+}
+
+/**
+ * Le lexique ne savait pas répondre : une IA (DeepSeek, Gemini ou Claude) cherche, et la fiche est enregistrée « à vérifier » pour la
+ * prochaine fois. S'exécute en arrière-plan, plafonné par le coût ; ne lève jamais d'erreur (le client a déjà sa réponse).
+ */
+export async function enrichInBackground(query: string): Promise<void> {
+  try {
+    if (!aiAvailable() || (await dailyAiLimitReached())) return;
+    const composed = await composePanne(query);
+    if (composed.kind === 'panne') await storeLearned(composed.panne, query, `ai:${composed.provider}`, null);
+  } catch (err) {
+    console.error('[lexique] enrichissement impossible :', err instanceof Error ? err.message : err);
+  }
 }

@@ -64,7 +64,7 @@ describe('PC Windows : l’agent partage l’écran avec le technicien (RustDesk
     const { sessionId, tech } = await paidSession(auth, 'assistance_rapide', 'humain');
 
     expect((await request(app).get(`/api/app/sessions/${sessionId}/remote-config`).set(auth)).body).toEqual({ custom: false });
-    expect((await request(app).get('/api/technician/remote-config').set(tech.headers)).body).toEqual({ custom: false });
+    expect((await request(app).get('/api/technician/remote-config').set(tech.headers)).body).toMatchObject({ custom: false, windows: { sha256: expect.stringMatching(/^[a-f0-9]{64}$/) } });
 
     await request(app).post(`/api/app/sessions/${sessionId}/remote`).set(auth).send({ remotePeerId: 'abc', remotePassword: 'x' }).expect(400);
     await request(app).post(`/api/app/sessions/${sessionId}/remote`).set(auth).send({ remotePeerId: '123456789', remotePassword: "x'; calc; '" }).expect(400);

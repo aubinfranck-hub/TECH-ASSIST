@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api.js';
+import { TechnicianTool } from './TechnicianTool.js';
 
 export interface MySession {
   id: string;
@@ -22,43 +23,9 @@ interface Credentials {
 }
 
 /** Identifiants de la prise en main à distance, une fois le client d'accord. */
-interface TechnicianRemoteConfig {
-  custom: boolean;
-  idServer?: string;
-  relayServer?: string;
-  key?: string;
-  configString?: string;
-}
-
-/** Réglages à faire UNE fois dans le RustDesk du technicien : sans eux, le poste du client (sur notre serveur) reste introuvable. */
+/** Outil de prise en main : installé et réglé en un clic, une seule fois (voir TechnicianTool). */
 function TechnicianSetup() {
-  const [config, setConfig] = useState<TechnicianRemoteConfig | null>(null);
-  useEffect(() => {
-    api.get<TechnicianRemoteConfig>('/api/technician/remote-config').then(setConfig).catch(() => undefined);
-  }, []);
-  if (!config) return null;
-  return (
-    <details className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
-      <summary className="cursor-pointer font-semibold text-slate-800">Première utilisation : régler RustDesk (une seule fois)</summary>
-      {config.custom ? (
-        <div className="mt-2 space-y-1">
-          <p>Le plus simple : copiez la configuration, puis dans RustDesk : ⋮ → Réseau → « Importer la configuration du serveur ».</p>
-          {config.configString && (
-            <button type="button" onClick={() => void navigator.clipboard?.writeText(config.configString!)} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-900">
-              Copier la configuration du serveur
-            </button>
-          )}
-          <p>Ou à la main (⋮ → Réseau → Serveur ID/Relais) :</p>
-          <p>Serveur ID : <span className="font-mono font-bold text-slate-900">{config.idServer}</span></p>
-          <p>Serveur relais : <span className="font-mono font-bold text-slate-900">{config.relayServer}</span></p>
-          <p>Clé : <span className="break-all font-mono font-bold text-slate-900">{config.key}</span></p>
-          <p>Sans ces réglages, le poste du client reste introuvable.</p>
-        </div>
-      ) : (
-        <p className="mt-2">Installez RustDesk (rustdesk.com) sans rien régler : le réseau public par défaut suffit. Si vous avez déjà modifié le serveur dans RustDesk, remettez-le par défaut.</p>
-      )}
-    </details>
-  );
+  return <TechnicianTool />;
 }
 
 /** Message prêt à envoyer : dit au client, pas à pas, comment partager son écran (la marche à suivre dépend d'où il vient). */
@@ -69,7 +36,7 @@ export function shareInstructions(platform: string): string {
   return "Bonjour, pour que je voie votre écran et vous aide directement : 1) sur cette page, cliquez sur « Préparer mon ordinateur » puis ouvrez le fichier téléchargé (acceptez la demande de Windows) ; 2) cliquez sur « J'autorise le partage d'écran », puis sur « J'autorise le technicien à prendre le contrôle » ; 3) quand une fenêtre RustDesk s'affiche, cliquez sur « Accepter ». Je reste avec vous.";
 }
 
-export function RemoteAccess({ sessionId, controlGranted, android = false, platform = 'web' }: { sessionId: string; controlGranted: boolean; android?: boolean; platform?: string }) {
+export function RemoteAccess({ sessionId, controlGranted, android = false, platform = 'web', showTool = true }: { sessionId: string; controlGranted: boolean; android?: boolean; platform?: string; showTool?: boolean }) {
   const [asked, setAsked] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   async function askClient() {
     setAsked('sending');
@@ -138,7 +105,7 @@ export function RemoteAccess({ sessionId, controlGranted, android = false, platf
   }
   return (
     <div className="space-y-2">
-      <TechnicianSetup />
+      {showTool && <TechnicianSetup />}
       {loading && !credentials && <p className="rounded-xl bg-brand-50 p-3 text-sm font-semibold text-brand-800">Connexion autorisée. Préparation de la prise en main…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {credentials && (
@@ -196,7 +163,7 @@ export function ActiveSessionCard({ session }: { session: MySession }) {
           <span className="min-w-0 break-words">L'agent travaille : {session.agent_task}</span>
         </p>
       )}
-      <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} android={session.platform === 'android'} platform={session.platform} />
+      <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} android={session.platform === 'android'} platform={session.platform} showTool={false} />
     </li>
   );
 }

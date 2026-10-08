@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AppApi, readHardwareHash, signIn, startCovered, type AccountStore, type SavedAccount } from '../appAccount.js';
+import { AppApi, ensureContact, readHardwareHash, signIn, startCovered, type AccountStore, type SavedAccount } from '../appAccount.js';
 import { ScriptedConversation, ScriptedRunner } from './fakeScripts.js';
 
 function memoryStore(initial: SavedAccount = { installId: 'install-0123456789abcdef' }): AccountStore & { data: SavedAccount } {
@@ -27,6 +27,76 @@ function fakeFetch(routes: Record<string, Route>, calls: { path: string; body: R
 
 const ENT = { freeOfferAvailable: true, subscription: null, aiAgentAvailable: true };
 
+describe('démarrage sans inscription (comme AnyDesk)', () => {
+  it('première utilisation : aucun e-mail ni téléphone demandé, jeton mémorisé', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/anonymous': () => ({ status: 201, json: { token: 'ANON', anonymous: true } }),
+      '/app/me': (_b, auth) => (auth === 'Bearer ANON' ? { status: 200, json: { email: 'anonyme@x.invalid', entitlements: ENT } } : { status: 401, json: {} }),
+    }, calls));
+    const store = memoryStore();
+    const ui = new ScriptedConversation();
+    const login = await signIn({ ui, api, store, hardwareHash: 'h'.repeat(64) });
+    expect(login?.token).toBe('ANON');
+    expect(ui.prompts).toEqual([]);
+    expect(store.data.token).toBe('ANON');
+    expect(store.data.email).toBeUndefined();
+    expect(calls[0]).toEqual({ path: '/app/anonymous', body: { platform: 'windows', installId: 'install-0123456789abcdef', hardwareHash: 'h'.repeat(64) } });
+  });
+
+  it('installation déjà inscrite côté serveur : retour à la connexion par code', async () => {
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/anonymous': () => ({ status: 409, json: { error: 'déjà enregistrée', code: 'registered' } }),
+      '/app/email-code': () => ({ status: 200, json: { sent: true } }),
+      '/app/register': () => ({ status: 201, json: { token: 'T9', entitlements: ENT } }),
+    }));
+    const ui = new ScriptedConversation({ asks: ['a@b.co', '0707123456', '123456'] });
+    expect((await signIn({ ui, api, store: memoryStore() }))?.token).toBe('T9');
+  });
+
+  it('réseau coupé : message clair, pas d’inscription forcée', async () => {
+    const api = new AppApi('https://x.test', (async () => { throw new Error('net'); }) as unknown as typeof fetch);
+    const ui = new ScriptedConversation();
+    expect(await signIn({ ui, api, store: memoryStore() })).toBeNull();
+    expect(ui.infos.join(' ')).toMatch(/Internet/);
+  });
+});
+
+describe('coordonnées demandées seulement pour un technicien', () => {
+  it('anonyme : e-mail demandé (téléphone facultatif), puis mémorisé', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({ '/app/contact': () => ({ status: 200, json: { saved: true } }) }, calls));
+    const store = memoryStore({ installId: 'install-0123456789abcdef', token: 'ANON' });
+    const ui = new ScriptedConversation({ asks: ['Awa@Exemple.com', '07 07 12 34 56'] });
+    expect(await ensureContact({ ui, api, store }, 'ANON')).toBe(true);
+    expect(calls[0]).toEqual({ path: '/app/contact', body: { email: 'awa@exemple.com', phone: '0707123456' } });
+    expect(store.data.email).toBe('awa@exemple.com');
+  });
+
+  it('téléphone facultatif : « non » le saute', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({ '/app/contact': () => ({ status: 200, json: { saved: true } }) }, calls));
+    const ui = new ScriptedConversation({ asks: ['a@b.co', 'non'] });
+    expect(await ensureContact({ ui, api, store: memoryStore() }, 'T')).toBe(true);
+    expect(calls[0]!.body).toEqual({ email: 'a@b.co' });
+  });
+
+  it('déjà connues : rien n’est demandé', async () => {
+    const ui = new ScriptedConversation();
+    const api = new AppApi('https://x.test', fakeFetch({}));
+    expect(await ensureContact({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'a@b.co' }) }, 'T')).toBe(true);
+    expect(ui.prompts).toEqual([]);
+  });
+
+  it('le client renonce : false, rien d’envoyé', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({}, calls));
+    const ui = new ScriptedConversation({ asks: [null] });
+    expect(await ensureContact({ ui, api, store: memoryStore() }, 'T')).toBe(false);
+    expect(calls).toEqual([]);
+  });
+});
+
 describe('connexion par email', () => {
   it('envoie le code, inscrit l\'appareil et mémorise le jeton', async () => {
     const calls: { path: string; body: Record<string, unknown> }[] = [];
@@ -34,7 +104,7 @@ describe('connexion par email', () => {
       '/app/email-code': () => ({ status: 200, json: { sent: true } }),
       '/app/register': () => ({ status: 201, json: { token: 'T1', entitlements: ENT } }),
     }, calls));
-    const store = memoryStore();
+    const store = memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' });
     const ui = new ScriptedConversation({ asks: ['Franck@Exemple.com', '0707 12 34 56', '123456'] });
     const login = await signIn({ ui, api, store, hardwareHash: 'h'.repeat(64) });
     expect(login?.token).toBe('T1');
@@ -57,7 +127,7 @@ describe('connexion par email', () => {
     const calls: { path: string; body: Record<string, unknown> }[] = [];
     const api = new AppApi('https://x.test', fakeFetch({}, calls));
     const ui = new ScriptedConversation({ asks: ['abc', 'def', 'ghi'] });
-    expect(await signIn({ ui, api, store: memoryStore() })).toBeNull();
+    expect(await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' }) })).toBeNull();
     expect(calls).toEqual([]);
   });
 
@@ -71,7 +141,7 @@ describe('connexion par email', () => {
       },
     }));
     const ui = new ScriptedConversation({ asks: ['a@b.co', '0707123456', '111111', '222222', '333333'] });
-    expect(await signIn({ ui, api, store: memoryStore() })).toBeNull();
+    expect(await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' }) })).toBeNull();
     expect(tries).toBe(3);
     expect(ui.said).toContain('Code invalide');
   });
@@ -86,7 +156,7 @@ describe('connexion par email', () => {
       },
     }));
     const ui = new ScriptedConversation({ asks: ['a@b.co', '0707123456', '111111', '222222'] });
-    expect(await signIn({ ui, api, store: memoryStore() })).toBeNull();
+    expect(await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' }) })).toBeNull();
     expect(tries).toBe(1);
   });
 
@@ -95,7 +165,7 @@ describe('connexion par email', () => {
       throw new Error('réseau');
     }) as unknown as typeof fetch);
     const ui = new ScriptedConversation({ asks: ['a@b.co'] });
-    expect(await signIn({ ui, api, store: memoryStore() })).toBeNull();
+    expect(await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' }) })).toBeNull();
     expect(ui.said).toContain('Impossible de joindre Tech Assist');
   });
 });

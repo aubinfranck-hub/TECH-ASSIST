@@ -158,11 +158,20 @@ describe('converse — choix et menu', () => {
     expect(reporter.events.some((e) => e.type === 'escalated' && e.message === 'Le client demande un technicien')).toBe(true);
   });
 
-  it('demande incomprise : le menu mène aussi à la désinstallation et aux questions', async () => {
-    const assistant = new FakeAssistant([{ available: true, text: 'Voici.' }]);
-    const ui = new ScriptedConversation({ asks: ['bidule truc machin', 'Quelque chose', null], picks: [5] });
+  it('demande incomprise : l\'IA conseille directement par écrit (au lieu d\'un menu), et le retour du client part au serveur', async () => {
+    const feedback: boolean[] = [];
+    const assistant = Object.assign(new FakeAssistant([{ available: true, text: 'Voici.' }]), { feedback: async (h: boolean) => void feedback.push(h) });
+    const ui = new ScriptedConversation({ asks: ['bidule truc machin', null], confirms: [true] });
     await converse({ runner: noRunner, ui, reporter: new Recorder(), assistant });
-    expect(assistant.calls.map((c) => c.message)).toEqual(['Quelque chose']);
+    expect(assistant.calls.map((c) => c.message)).toEqual(['bidule truc machin']);
+    expect(feedback).toEqual([true]);
+  });
+
+  it('demande incomprise, assistant indisponible : on retombe sur le menu', async () => {
+    const assistant = new FakeAssistant([{ available: false }]);
+    const ui = new ScriptedConversation({ asks: ['bidule truc machin', null], picks: [6] });
+    await converse({ runner: noRunner, ui, reporter: new Recorder(), assistant });
+    expect(ui.infos.join(' ')).toMatch(/pas bien compris/);
   });
 
   it('compétence inconnue : on le dit et on propose un technicien (accord du client)', async () => {

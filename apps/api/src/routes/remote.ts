@@ -67,7 +67,7 @@ remoteRouter.get('/remote-config', (_req, res) => {
 /** Réglages à saisir une fois dans le RustDesk du technicien (inutile avec le réseau public RustDesk). */
 remoteRouter.get('/technician/remote-config', requireAuth('technician', 'admin'), (_req, res) => {
   const server = selfHostedRustdesk();
-  res.json(server ? { custom: true, ...server, configString: rustdeskConfigString(server) } : { custom: false });
+  res.json(server ? { custom: true, ...server, configString: rustdeskConfigString(server), windows: RUSTDESK_WINDOWS } : { custom: false, windows: RUSTDESK_WINDOWS });
 });
 
 remoteRouter.get('/sessions/:code/remote-bootstrap', async (req, res) => {

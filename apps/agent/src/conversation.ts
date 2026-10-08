@@ -202,6 +202,11 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     if (!intent) {
       // Cas inconnu du routeur : la mémoire d'abord (aucun appel d'IA si le cas a déjà été résolu), puis l'IA qui compose un plan.
       if (deps.knowledge && (await handleLearned(message))) continue;
+      // Hors du catalogue d'actions : l'IA conseille par écrit (et le serveur enrichit le lexique), au lieu d'une analyse à l'aveugle.
+      if (deps.assistant && message.trim().length >= 6) {
+        const answered = await handleQuestion(message, true);
+        if (answered) continue;
+      }
       if (deps.autonomous) {
         ui.info("Je n'ai pas tout saisi, mais pas d'inquiétude : je regarde l'état complet de votre ordinateur pour trouver la cause.");
         await handleRepair();
@@ -509,7 +514,8 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     outcomes.push(await runAndNote(uninstallProgramSkill(target, deps.roots)));
   }
 
-  async function handleQuestion(question: string) {
+  /** Pose la question à l'assistant en ligne. `quiet` : si l'assistant est indisponible, ne rien dire (l'appelant a un autre plan). Renvoie true si une réponse a été donnée. */
+  async function handleQuestion(question: string, quiet = false): Promise<boolean> {
     if (deps.assistant && !privacyNoted) {
       privacyNoted = true;
       ui.info("Votre question est transmise à notre assistant en ligne (une IA). N'y écrivez jamais de mot de passe, de code reçu par SMS ou de numéro de carte.");
@@ -523,13 +529,16 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     // Le message courant part à part : l'historique ne contient que les échanges précédents.
     const reply = deps.assistant ? await deps.assistant.answer(truncate(question, 1000), history.slice(-8), image ? { image } : undefined) : ({ available: false } as const);
     if (!reply.available) {
+      if (quiet) return false;
       ui.info("L'assistant en ligne n'est pas disponible pour le moment.");
       await offerTechnician();
-      return;
+      return true;
     }
     history.push({ role: 'user', text: truncate(question, 1000) }, { role: 'assistant', text: truncate(reply.text, 1500) });
     ui.info(reply.text);
     const helped = await ui.confirmFixed('Cette réponse vous aide-t-elle ?');
+    await deps.assistant?.feedback?.(helped);
     if (!helped) await offerTechnician();
+    return true;
   }
 }

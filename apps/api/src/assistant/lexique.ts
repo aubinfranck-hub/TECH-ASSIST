@@ -97,11 +97,14 @@ const COMMAND = /\b(net (stop|start)|netsh|sfc|dism|chkdsk|w32tm|powercfg|regedi
  * Contexte donné à l'IA du chat client : seules les entrées CONFIRMÉES du lexique, faisables par le client lui-même
  * (ni matériel, ni BIOS, ni registre, ni commande). Une proposition non relue n'est jamais ressortie à d'autres clients.
  */
-export async function lexiqueContext(query: string): Promise<string> {
-  const { entries } = await searchLexique(query);
+export function contextFrom(entries: LexiqueEntry[]): string {
   const usable = entries
     .filter((e) => e.origin !== 'base' && e.status === 'trusted' && !e.advanced && !COMMAND.test(e.solution))
     .slice(0, 3);
   if (usable.length === 0) return '';
   return usable.map((e) => `Fiche du lexique : ${e.title} — cause : ${e.cause || 'non précisée'} — piste : ${e.solution.slice(0, 600)}`).join('\n');
+}
+
+export async function lexiqueContext(query: string): Promise<string> {
+  return contextFrom((await searchLexique(query)).entries);
 }

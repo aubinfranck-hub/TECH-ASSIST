@@ -229,3 +229,17 @@ Sans réseau ni IA : aucun changement de comportement. Les clés d'IA n'existent
 - **Site** : cases « Lire les réponses » (lecture automatique des nouvelles réponses), « 🎤 Parler » (dictée, reconnaissance vocale du
   navigateur) et « 📷 Montrer mon écran » (une capture choisie par le client, réduite, envoyée à l'IA, jamais conservée).
 - **Fin d'assistance** : l'agent change le mot de passe RustDesk, arrête RustDesk et son service (`revokeShare`).
+
+
+## Parcours « comme AnyDesk » (l'exe fait tout, le site est le miroir)
+
+1. **Lancer l'exe** : aucune inscription (`POST /api/app/anonymous`, installation anonyme). La fenêtre affiche en permanence le
+   **numéro d'aide** (9 chiffres) et l'assistant répond tout de suite.
+2. **Cerveau unique** (lexique) : fiches de départ + fiches de l'IA + retours clients + procédures apprises. L'assistant de l'exe
+   s'appuie sur les entrées confirmées ; si le lexique ne sait rien, l'IA répond ET enregistre une fiche « à vérifier » (un technicien
+   la confirme ou l'écarte). « Cette réponse vous aide-t-elle ? » oui → la solution entre au lexique.
+3. **Technicien** : il tape le numéro d'aide dans sa console (`POST /api/technician/sessions/by-code`), prend la demande ; l'exe le
+   détecte (surveillance toutes les 4 s), demande les coordonnées du client **à ce moment seulement** (`POST /api/app/contact`), puis le
+   consentement de partage d'écran. RustDesk est installé et réglé par l'exe ; le technicien installe son outil une seule fois
+   (« Installer mon outil » : fichier .cmd qui installe RustDesk et le règle sur notre serveur).
+4. **Site** : télécharger l'exe, et suivre sa demande avec son numéro (`/demander-aide`, `/session`). Aucun parcours parallèle.
