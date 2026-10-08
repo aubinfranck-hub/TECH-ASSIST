@@ -110,7 +110,10 @@ remoteRouter.post('/sessions/:id/pair', validateBody(pairSchema), async (req, re
   if (!validBootstrapToken(session.id, session.session_code, bootstrapToken)) return res.status(403).json({ error: 'Jeton d’appairage invalide ou expiré' });
 
   const { rows } = await pool.query(
-    'UPDATE sessions SET remote_peer_id = $2, remote_password_encrypted = $3, remote_paired_at = now() WHERE id = $1 AND remote_paired_at IS NULL RETURNING id, remote_paired_at',
+    // Comme AnyDesk : lancer l'outil sur son PC, c'est donner son accord (RustDesk redemande « Accepter » à chaque connexion).
+    `UPDATE sessions SET remote_peer_id = $2, remote_password_encrypted = $3, remote_paired_at = now(),
+       consent_screen_at = COALESCE(consent_screen_at, now()), consent_control_at = COALESCE(consent_control_at, now())
+     WHERE id = $1 AND remote_paired_at IS NULL RETURNING id, remote_paired_at`,
     [req.params.id, remotePeerId, encryptSecret(remotePassword)],
   );
   if (!rows[0]) return res.status(409).json({ error: 'Session déjà appairée' });
@@ -119,7 +122,7 @@ remoteRouter.post('/sessions/:id/pair', validateBody(pairSchema), async (req, re
     actorType: 'client',
     sessionId: req.params.id,
     action: 'session.paired',
-    details: { remoteProvider: 'rustdesk', method: 'bootstrap' },
+    details: { remoteProvider: 'rustdesk', method: 'bootstrap', consentImplied: true },
   });
 
   res.status(201).json({ session: rows[0] });

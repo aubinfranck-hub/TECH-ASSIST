@@ -214,31 +214,28 @@ describe('Tech Assist API — parcours commande → paiement → diagnostic/sess
       expect(res.status).toBe(503);
     });
 
-    it('refuse de livrer les identifiants tant que le client n\'a pas consenti au contrôle', async () => {
+    it('ne livre rien avant que le client ait lancé l\'outil ; une fois appairé (accord implicite, comme AnyDesk), les identifiants sont livrés', async () => {
       const techToken = await createAdmin();
       const { sessionId, sessionCode } = await createActiveSession(techToken);
       const bootstrapToken = await getBootstrapToken(sessionCode);
 
-      await request(app).post(`/api/sessions/${sessionId}/pair`).send({
+      const before = await request(app).get(`/api/technician/sessions/${sessionId}/remote-credentials`).set('Authorization', `Bearer ${techToken}`);
+      expect(before.status).toBe(403);
+
+      const paired = await request(app).post(`/api/sessions/${sessionId}/pair`).send({
         remotePeerId: '123456789',
         remotePassword: 'motdepasse-temp',
         bootstrapToken,
       });
+      expect(paired.status).toBe(201);
 
-      const blocked = await request(app)
-        .get(`/api/technician/sessions/${sessionId}/remote-credentials`)
-        .set('Authorization', `Bearer ${techToken}`);
-      expect(blocked.status).toBe(403);
-
-      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'screen', sessionCode: await codeOf(sessionId) });
-      await request(app).post(`/api/sessions/${sessionId}/consent`).send({ stage: 'control', sessionCode: await codeOf(sessionId) });
-
-      const allowed = await request(app)
-        .get(`/api/technician/sessions/${sessionId}/remote-credentials`)
-        .set('Authorization', `Bearer ${techToken}`);
+      const allowed = await request(app).get(`/api/technician/sessions/${sessionId}/remote-credentials`).set('Authorization', `Bearer ${techToken}`);
       expect(allowed.status).toBe(200);
       expect(allowed.body.remotePeerId).toBe('123456789');
       expect(allowed.body.remotePassword).toBe('motdepasse-temp');
+      const row = await pool.query('SELECT consent_screen_at, consent_control_at FROM sessions WHERE id = $1', [sessionId]);
+      expect(row.rows[0].consent_screen_at).not.toBeNull();
+      expect(row.rows[0].consent_control_at).not.toBeNull();
     });
 
     it('interdit à un technicien non assigné de voir les identifiants', async () => {

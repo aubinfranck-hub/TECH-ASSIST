@@ -7,7 +7,7 @@ import { pushPublicKey, sendPush } from '../notify/push.js';
 import { balanceFor, creditEarningSafely } from '../partners/earnings.js';
 import { logAudit } from '../utils/audit.js';
 import { progressView } from '../utils/taskProgress.js';
-import { isConfidentHit, queryWordCount, searchPannes } from '../assistant/pannes.js';
+import { searchLexique, type LexiqueEntry } from '../assistant/lexique.js';
 import { aiAvailable, composePanne, dailyAiLimitReached, findLearned, reviewLearned, storeLearned } from '../assistant/pannesLearning.js';
 
 /**
@@ -28,25 +28,13 @@ const firstName = (full: string | null | undefined) => (full ? full.trim().split
  */
 technicianConsoleRouter.get('/technician/pannes', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 200) : '';
-  const baseHits = searchPannes(q, 8, 2);
-  const wordCount = queryWordCount(q);
-  const baseConfident = baseHits.some((h) => isConfidentHit(h, wordCount));
-  const fromBase = baseHits.map((h) => ({
-    id: h.panne.id as number | string,
-    category: h.panne.category,
-    title: h.panne.title,
-    cause: h.panne.cause || h.panne.symptom,
-    solution: h.panne.solution,
-    advanced: h.panne.advanced,
-    origin: 'base' as 'base' | 'ia',
-    status: 'trusted' as 'trusted' | 'candidate',
-  }));
-  const learned = (await findLearned(q, 5)).map((l) => ({ id: l.id as number | string, category: l.category, title: l.title, cause: l.cause, solution: l.solution, advanced: l.advanced, origin: 'ia' as const, status: l.status }));
-  const results = [...learned, ...fromBase];
+  const { entries, confident } = await searchLexique(q);
+  const results = [...entries] as (LexiqueEntry & { reviewable?: boolean })[];
   type Ai = { status: 'none' | 'generated' | 'not_configured' | 'limit' | 'unknown' | 'unavailable'; reason?: string };
   let ai: Ai = { status: 'none' };
 
-  if (!baseConfident && learned.length === 0 && q.length >= 3 && req.query.ai !== '0') {
+  // Rien de sérieux dans le lexique : une IA rédige une fiche, qui l'enrichit pour les recherches suivantes.
+  if (!confident && q.length >= 3 && req.query.ai !== '0') {
     if (!aiAvailable()) {
       ai = { status: 'not_configured', reason: "Aucune clé DeepSeek, Gemini ou Claude n'est configurée sur le serveur (DEEPSEEK_API_KEY, GEMINI_API_KEY ou ANTHROPIC_API_KEY)." };
     } else {
@@ -57,7 +45,7 @@ technicianConsoleRouter.get('/technician/pannes', async (req, res) => {
         const composed = await composePanne(q);
         if (composed.kind === 'panne') {
           const stored = await storeLearned(composed.panne, q, `ai:${composed.provider}`, req.auth!.sub);
-          results.unshift({ id: stored.id, category: stored.category, title: stored.title, cause: stored.cause, solution: stored.solution, advanced: stored.advanced, origin: 'ia', status: stored.status });
+          results.unshift({ id: stored.id, origin: 'ia', category: stored.category, title: stored.title, cause: stored.cause, solution: stored.solution, advanced: stored.advanced, status: stored.status });
           ai = { status: 'generated' };
           await logAudit(pool, { actorType: 'technician', actorId: req.auth!.sub, action: 'pannes.ai_generated', details: { query: q.slice(0, 200), provider: composed.provider, panneId: stored.id } });
         } else if (composed.kind === 'unknown') {

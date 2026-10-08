@@ -13,6 +13,8 @@ import { creditEarningSafely } from '../partners/earnings.js';
 import { closeViewerOrderIfUnpaid, settleViewerSession } from '../partners/viewer.js';
 import { AssistantUnavailableError, MAX_HISTORY_TURNS, MAX_MESSAGE_CHARS, MAX_TURN_CHARS, askOfficeAssistant, MAX_IMAGE_BASE64_CHARS, imageMatchesMime } from '../assistant/officeAssistant.js';
 import { generateProcedure } from '../learning/orchestrator.js';
+import { lexiqueContext } from '../assistant/lexique.js';
+import { rememberResolved } from '../assistant/pannesLearning.js';
 import { tokenize } from '../learning/match.js';
 import { aiBudget, failedAlternatives, findForQuery, insertCandidate, markServed, recordCall, recordGap, recordOutcome } from '../learning/store.js';
 import rateLimit from 'express-rate-limit';
@@ -339,6 +341,14 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
     }
   }
 
+  // Le lexique (entrées CONFIRMÉES seulement) complète la mémoire des procédures : l'IA part de ce que Tech Assist sait déjà.
+  try {
+    const lexique = await lexiqueContext(body.message);
+    if (lexique) memoryContext = [memoryContext, lexique].filter(Boolean).join('\n');
+  } catch (err) {
+    console.error('[lexique] contexte indisponible :', err instanceof Error ? err.message : err);
+  }
+
   try {
     const answer = await askOfficeAssistant(body.message, history, {
       platform: session.platform === 'android' ? 'android' : 'windows',
@@ -375,6 +385,17 @@ sessionsRouter.post('/sessions/:id/ai-feedback', publicChatLimiter, validateBody
   if (!['created', 'waiting_technician', 'active'].includes(session.status)) return res.status(409).json({ error: 'Cette assistance est terminée.' });
   if (body.procedureId) await recordOutcome(pool, { procedureId: body.procedureId, sessionId: session.id, result: body.result, note: body.note });
   if (body.result === 'resolved') {
+    // Sans procédure apprise derrière la réponse, la question et la réponse de l'IA entrent quand même au lexique (à relire par un technicien).
+    if (!body.procedureId) {
+      try {
+        const last = await pool.query(`SELECT sender, body FROM session_messages WHERE session_id = $1 AND sender IN ('client','assistant') ORDER BY id DESC LIMIT 12`, [session.id]);
+        const answer = last.rows.find((m) => m.sender === 'assistant')?.body as string | undefined;
+        const question = last.rows.find((m) => m.sender === 'client')?.body as string | undefined;
+        if (answer && question) await rememberResolved(question, answer);
+      } catch (err) {
+        console.error('[lexique] retour client non mémorisé :', err instanceof Error ? err.message : err);
+      }
+    }
     await pool.query(
       `UPDATE sessions
        SET status = 'completed', stopped_at = now(), stopped_by = 'client', remote_password_encrypted = NULL
@@ -423,7 +444,7 @@ sessionsRouter.post('/sessions/:id/ai-feedback', publicChatLimiter, validateBody
   const p = learned.procedure;
   const context = ['Nouvelle piste : ' + p.title, 'Cause probable : ' + p.summary, p.checks.length ? 'Vérifications : ' + p.checks.map((c) => c.problem).join(' | ') : '', p.fixes.length ? 'Corrections possibles : ' + p.fixes.map((f) => f.why).join(' | ') : '', p.advice.length ? 'Conseils : ' + p.advice.join(' | ') : ''].filter(Boolean).join('\n');
   try {
-    const answer = await askOfficeAssistant('La première piste n’a pas résolu le problème. Propose la nouvelle piste et demande de confirmer le résultat.\\n\\n' + query, history, { platform: session.platform === 'android' ? 'android' : 'windows', context });
+    const answer = await askOfficeAssistant('La première piste n’a pas résolu le problème. Propose la nouvelle piste et demande de confirmer le résultat.\n\n' + query, history, { platform: session.platform === 'android' ? 'android' : 'windows', context });
     await pool.query('INSERT INTO session_messages (session_id, sender, body) VALUES ($1, \'assistant\', $2)', [session.id, answer.text]);
     return res.json({ status: 'next_attempt', procedureId: stored.id, answer: answer.text });
   } catch (err) {

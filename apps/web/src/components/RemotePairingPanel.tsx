@@ -136,40 +136,16 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
   return (
     <div className="ta-card overflow-hidden">
       <div className="border-b border-slate-100 bg-slate-50 p-5 sm:p-6">
-        <p className="ta-eyebrow">Connexion sécurisée</p>
-        <h2 className="mt-1 text-lg font-black text-slate-950">Préparer mon ordinateur</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          Tech Assist prépare automatiquement la connexion : vous n'avez rien à saisir ni à comprendre.
+        <h2 className="text-lg font-black text-slate-950">Préparer mon ordinateur</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Un petit fichier s'installe et vous donne l'accès à un technicien — comme AnyDesk. Cliquez, ouvrez le fichier, acceptez la demande de Windows. C'est tout.
         </p>
-        <ul className="mt-3 space-y-1 text-sm text-slate-700">
-          <li>{bootstrap ? '✓' : '○'} Connexion sécurisée prête</li>
-          <li>○ Outil installé sur votre ordinateur</li>
-          <li>○ Technicien identifié</li>
-          <li>○ Votre autorisation avant toute intervention</li>
-        </ul>
       </div>
       <div className="space-y-4 p-5 sm:p-6">
         <button type="button" onClick={downloadAndRun} disabled={!bootstrap} className="ta-button-primary w-full disabled:cursor-not-allowed disabled:opacity-50">
           {!bootstrap ? 'Préparation…' : 'Préparer mon ordinateur'}
         </button>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-500">
-          <p className="font-semibold text-slate-800">1 clic</p>
-          <p className="mt-1">Tech Assist configure et sécurise la connexion pour vous. Le technicien ne peut agir qu'après votre autorisation, et vous pouvez l'arrêter à tout moment.</p>
-        </div>
-        <button type="button" onClick={() => setManual((v) => !v)} className="text-sm font-semibold text-slate-600 hover:text-brand-700">
-          {manual ? 'Masquer la configuration avancée' : 'Configuration avancée (technicien)'}
-        </button>
-        {manual && (
-          <form onSubmit={submitManual} className="grid gap-3 sm:grid-cols-2">
-            <input required placeholder="Identifiant poste" value={peerId} onChange={(e) => setPeerId(e.target.value)} className="ta-input" />
-            <input required placeholder="Code temporaire" value={password} onChange={(e) => setPassword(e.target.value)} className="ta-input" />
-            {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
-            <button type="submit" disabled={submitting || !bootstrap} className="ta-button-primary sm:col-span-2 disabled:opacity-50">
-              {submitting ? 'Appairage…' : "Confirmer l'appairage"}
-            </button>
-          </form>
-        )}
-        {error && !manual && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
     </div>
   );

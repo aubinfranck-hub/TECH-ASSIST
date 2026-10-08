@@ -266,20 +266,15 @@ export function SessionPage() {
     <div className="ta-container max-w-xl py-14">
       <p className="ta-eyebrow mb-2">Ma demande d’aide</p>
       <h1 className="mb-2 text-2xl font-bold sm:text-3xl">{statusLabel[session.status] ?? session.status}</h1>
-      <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
-        <span>
-          Votre numéro de dossier : <strong className="font-mono text-base tracking-wider text-slate-950">{session.session_code}</strong>
-        </span>
-        <button type="button" onClick={() => void navigator.clipboard?.writeText(session.session_code)} className="font-semibold text-brand-700 underline">Copier</button>
-        <span className="basis-full text-xs text-slate-500">Vous n’avez rien à saisir avec ce numéro. Notez-le seulement pour retrouver cette page si vous la fermez (menu « J’ai un code »).</span>
-      </div>
+      <p className="mb-5 text-sm text-slate-500">
+        Dossier n° <strong className="font-mono text-slate-800">{session.session_code}</strong> — notez-le pour retrouver cette page si vous la fermez.
+      </p>
 
       {session.mode === 'humain' && ['created', 'waiting_technician', 'active'].includes(session.status) && (
         <ol className="mb-5 space-y-2 text-sm">
           {([
-            ['Votre demande est envoyée', true],
-            [session.technician_id ? 'Un technicien a pris votre dossier' : 'Un technicien va prendre votre dossier — gardez cette page ouverte, elle se met à jour toute seule', !!session.technician_id],
-            [session.consent_control_at ? 'Le technicien peut voir votre écran et vous aider' : 'Discutez avec lui ci-dessous ; s’il le faut, vous l’autoriserez à voir votre écran (rien ne se fait sans votre accord)', !!session.consent_control_at],
+            [session.remote_paired_at ? 'Votre ordinateur est prêt.' : 'Cliquez sur « Préparer mon ordinateur » ci-dessous, puis ouvrez le fichier téléchargé.', !!session.remote_paired_at],
+            [session.technician_id ? 'Un technicien est là. Quand il se connecte, cliquez sur « Accepter » dans la fenêtre RustDesk.' : 'Un technicien va vous répondre ici. Quand il se connecte, cliquez sur « Accepter » dans la fenêtre RustDesk.', false],
           ] as const).map(([text, done], i) => (
             <li key={i} className={`flex gap-3 rounded-xl border p-3 ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-white text-slate-700'}`}>
               <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black ${done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>{done ? '✓' : i + 1}</span>
@@ -410,7 +405,7 @@ export function SessionPage() {
         </div>
       )}
 
-      {session.status === 'active' && session.mode === 'humain' && Boolean(session.technician_id) && (
+      {['created', 'waiting_technician', 'active'].includes(session.status) && session.mode === 'humain' && (
         <div className="mt-6">
           <RemotePairingPanel
             sessionId={session.id}
@@ -418,32 +413,6 @@ export function SessionPage() {
             alreadyPaired={Boolean(session.remote_paired_at)}
             onPaired={() => refresh(code)}
           />
-        </div>
-      )}
-
-      {session.status === 'active' && session.mode === 'humain' && Boolean(session.technician_id) && (
-        <div className="mt-6 space-y-3">
-          {!session.consent_screen_at && (
-            <button
-              onClick={() => giveConsent('screen')}
-              className="w-full rounded-xl border border-brand-600 px-4 py-3 font-medium text-brand-700 transition hover:bg-brand-50"
-            >
-              J'autorise le partage d'écran
-            </button>
-          )}
-          {session.consent_screen_at && !session.consent_control_at && (
-            <button
-              onClick={() => giveConsent('control')}
-              className="w-full rounded-xl border border-brand-600 px-4 py-3 font-medium text-brand-700 transition hover:bg-brand-50"
-            >
-              J'autorise le technicien à prendre le contrôle
-            </button>
-          )}
-          {session.consent_control_at && (
-            <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">
-              Partage d'écran et contrôle autorisés.
-            </p>
-          )}
         </div>
       )}
 

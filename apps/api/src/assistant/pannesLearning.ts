@@ -170,3 +170,25 @@ export async function reviewLearned(id: string, verdict: 'trusted' | 'retired', 
   );
   return rows[0] ? toPublic({ ...rows[0], successes: 0 }) : null;
 }
+
+/**
+ * Le client confirme « c'est résolu » : sa question et la réponse de l'IA entrent au lexique comme « retour client » (à relire par
+ * un technicien). Ce texte vient d'un client : il reste « candidate » et n'est JAMAIS redonné à d'autres clients tant qu'un technicien
+ * ne l'a pas confirmé. Une 2e confirmation du même cas ne change rien à ce statut. Renvoie l'id de la fiche, ou null si rien à retenir.
+ */
+export async function rememberResolved(question: string, answer: string): Promise<string | null> {
+  const q = question.replace(/\s+/g, ' ').trim().slice(0, 100);
+  const a = answer.trim().slice(0, 2500);
+  if (q.length < 3 || a.length < 15) return null;
+  const draft = { category: 'Retours clients', title: `Problème signalé : ${q}`.slice(0, 120), cause: '', solution: a, advanced: false };
+  const tokens = [...new Set(tokenize(q))].slice(0, 30);
+  if (tokens.length === 0) return null;
+  const { rows } = await pool.query(
+    `INSERT INTO learned_pannes (category, title, cause, solution, advanced, tokens, source, example_query)
+     VALUES ($1, $2, $3, $4, $5, $6, 'client:resolved', $7)
+     ON CONFLICT (lower(title)) DO UPDATE SET uses = learned_pannes.uses + 1, updated_at = now()
+     RETURNING id`,
+    [draft.category, draft.title, draft.cause, draft.solution, draft.advanced, tokens, q],
+  );
+  return rows[0]?.id ?? null;
+}

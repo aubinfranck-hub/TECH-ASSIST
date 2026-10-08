@@ -9,7 +9,7 @@ interface Result {
   solution: string;
   advanced: boolean;
   /** « ia » : fiche rédigée par l'IA lors d'une recherche précédente ou de celle-ci. */
-  origin: 'base' | 'ia';
+  origin: 'base' | 'ia' | 'client' | 'procedure';
   status: 'trusted' | 'candidate';
 }
 
@@ -59,7 +59,7 @@ export function PannesSearch() {
         <input className="ta-input flex-1" placeholder="Symptôme : écran noir, Outlook plante…" value={q} onChange={(e) => setQ(e.target.value)} />
         <button className="ta-button-secondary !w-auto !py-2 disabled:opacity-50" disabled={busy || q.trim().length < 3}>{busy ? 'Recherche…' : 'Chercher'}</button>
       </form>
-      {busy && <p className="text-xs text-slate-500">Si la base ne connaît pas ce cas, l'IA en rédige une fiche (quelques secondes)…</p>}
+      {busy && <p className="text-xs text-slate-500">Si le lexique ne connaît pas ce cas, l'IA en rédige une fiche (quelques secondes)…</p>}
       {failed && <p className="text-sm text-red-600">Recherche impossible pour le moment. Réessayez.</p>}
       {!failed && results && results.length === 0 && (
         <p className="text-sm text-slate-500">
@@ -73,11 +73,13 @@ export function PannesSearch() {
               {r.category}
               {r.advanced && ' · avancé (matériel, BIOS ou registre)'}
               {r.origin === 'ia' && (r.status === 'trusted' ? ' · fiche apprise, confirmée' : ' · proposée par l\'IA, à vérifier')}
+              {r.origin === 'client' && (r.status === 'trusted' ? ' · retour client, confirmé' : ' · retour d\'un client (« résolu »), à vérifier')}
+              {r.origin === 'procedure' && (r.status === 'trusted' ? ' · procédure apprise, confirmée' : ' · procédure apprise, pas encore confirmée')}
             </p>
             <p className="mt-0.5 font-semibold">{r.title}</p>
             {r.cause && <p className="mt-1 text-slate-600"><span className="font-semibold">Cause :</span> {r.cause}</p>}
             <p className="mt-1 whitespace-pre-line text-slate-800"><span className="font-semibold">Solution :</span> {r.solution}</p>
-            {r.origin === 'ia' && r.status === 'candidate' && (
+            {(r.origin === 'ia' || r.origin === 'client') && r.status === 'candidate' && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void review(r.id, 'trusted')} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">Ça a marché : confirmer</button>
                 <button type="button" onClick={() => void review(r.id, 'retired')} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">Écarter</button>
