@@ -56,6 +56,37 @@ jobs:
           code=0
           ./tech-assist-agent-console.exe --skill inconnu --no-elevate || code=$?
           test "$code" -eq 2
+      # --- Application TECHNICIEN : un second programme, avec sa propre icône et son propre nom, fabriqué de la même façon ---
+      - name: Empaqueter l'application technicien
+        shell: bash
+        run: npx --yes esbuild@0.24.0 apps/agent/src/technicien.ts --bundle --platform=node --format=cjs --target=node22 --outfile=technicien.cjs "--define:__AGENT_VERSION__=\"${AGENT_VERSION}\""
+      - name: Fabriquer l'exécutable technicien (Node SEA)
+        shell: bash
+        run: |
+          echo '{"main":"technicien.cjs","output":"technicien.blob","disableExperimentalSEAWarning":true}' > sea-technicien.json
+          node --experimental-sea-config sea-technicien.json
+          node -e "require('fs').copyFileSync(process.execPath,'tech-assist-technicien.exe')"
+          node -e "require(process.env.RUNNER_TEMP + '/rc/node_modules/rcedit')('tech-assist-technicien.exe', {icon: 'apps/agent/assets/icon.ico', 'version-string': {ProductName: 'Tech Assist Technicien', FileDescription: 'Tech Assist Technicien - alertes en direct et assistance a distance', CompanyName: 'NTIC Strategy', LegalCopyright: 'NTIC Strategy', OriginalFilename: 'tech-assist-technicien.exe', InternalName: 'tech-assist-technicien'}, 'file-version': process.env.AGENT_VERSION + '.0', 'product-version': process.env.AGENT_VERSION + '.0'}).catch(e => { console.error(e); process.exit(1); })"
+          npx --yes postject@1.0.0-alpha.6 tech-assist-technicien.exe NODE_SEA_BLOB technicien.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+          node apps/agent/scripts/pe-subsystem.mjs tech-assist-technicien.exe gui
+      # Essais RÉELS sous Windows : ce que le programme fait vraiment (verrou, démarrage avec Windows, navigateur), pas seulement ses tests unitaires.
+      - name: Essai réel - auto-contrôle de l'application technicien
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\tech-assist-technicien.exe -ArgumentList '--selftest' -Wait -PassThru -RedirectStandardOutput selftest.txt -RedirectStandardError selftest-err.txt
+          Get-Content selftest.txt, selftest-err.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "Auto-controle en echec : code $($p.ExitCode)" }
+      - name: Essai réel - un seul exemplaire à la fois
+        shell: pwsh
+        run: |
+          $first = Start-Process -FilePath .\tech-assist-technicien.exe -ArgumentList '--no-update','--test-port','47356','--hold','20000' -PassThru
+          Start-Sleep -Seconds 4
+          $second = Start-Process -FilePath .\tech-assist-technicien.exe -ArgumentList '--no-update','--test-port','47356' -Wait -PassThru
+          if (-not $first.HasExited) { Stop-Process -Id $first.Id -Force }
+          if ($second.ExitCode -ne 3) { throw "Second exemplaire : code $($second.ExitCode) (3 attendu)" }
+      - name: Essai réel - vraie fenêtre Edge en mode application, son sans clic
+        shell: bash
+        run: node apps/agent/scripts/ci-technicien-window.mjs ./tech-assist-technicien.exe
       # Manifeste lu par les agents installés : version + empreinte SHA-256 de chaque .exe (vérifiée avant tout remplacement).
       - name: Manifeste de mise à jour
         shell: bash
@@ -63,7 +94,7 @@ jobs:
           node -e "
           const c=require('crypto'),fs=require('fs');
           const h=f=>c.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
-          fs.writeFileSync('latest.json',JSON.stringify({version:process.env.AGENT_VERSION,files:{'tech-assist-agent.exe':{sha256:h('tech-assist-agent.exe')},'tech-assist-agent-console.exe':{sha256:h('tech-assist-agent-console.exe')}}},null,2));
+          fs.writeFileSync('latest.json',JSON.stringify({version:process.env.AGENT_VERSION,files:{'tech-assist-agent.exe':{sha256:h('tech-assist-agent.exe')},'tech-assist-agent-console.exe':{sha256:h('tech-assist-agent-console.exe')},'tech-assist-technicien.exe':{sha256:h('tech-assist-technicien.exe')}}},null,2));
           "
           cat latest.json
       - name: Publier
@@ -75,5 +106,6 @@ jobs:
           files: |
             tech-assist-agent.exe
             tech-assist-agent-console.exe
+            tech-assist-technicien.exe
             latest.json
           make_latest: true

@@ -78,6 +78,7 @@ export async function cleanupOldVersion(exePath: string = process.execPath): Pro
  * (« tech-assist-agent (1).exe ») et le client peut renommer le fichier : seul le type compte (technicien « console » ou client).
  */
 export function publishedName(fileName: string): string {
+  if (/technicien/i.test(fileName)) return 'tech-assist-technicien.exe';
   return /console/i.test(fileName) ? 'tech-assist-agent-console.exe' : 'tech-assist-agent.exe';
 }
 
