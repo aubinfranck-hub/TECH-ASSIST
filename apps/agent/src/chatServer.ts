@@ -1058,7 +1058,7 @@ form button.act { flex:0 0 auto; min-width:170px; }
         .then(function (r) { if (!r.ok) throw new Error('voix'); return r.json(); })
         .then(function (d) { audioNow = new Audio('data:' + d.mime + ';base64,' + d.audio); return audioNow.play(); })
         .catch(function () {
-          if (window.speechSynthesis) { var u = new SpeechSynthesisUtterance(text.slice(0, 900)); u.lang = 'fr-FR'; window.speechSynthesis.speak(u); }
+          if (window.speechSynthesis) { var u = new SpeechSynthesisUtterance(text.slice(0, 900)); u.lang = 'fr-FR'; window.speechSynthesis.speak(u); btn.textContent = '\uD83D\uDD0A Écouter (voix de secours)'; }
         })
         .then(function () { btn.disabled = false; });
     });

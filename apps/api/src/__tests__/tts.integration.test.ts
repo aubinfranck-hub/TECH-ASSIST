@@ -2,7 +2,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { pool } from '../db/pool.js';
-import { speechText, synthesize, ttsVoice, TtsError } from '../services/tts.js';
+import { resetTtsHealthCache, speechText, synthesize, ttsHealth, ttsVoice, TtsError } from '../services/tts.js';
 import { applyMigrations, truncateAll } from './testDb.js';
 
 const app = createApp();
@@ -24,21 +24,47 @@ describe('Voix : nettoyage du texte et appel Google Text-to-Speech', () => {
     expect(t.endsWith('.')).toBe(true);
   });
 
-  it('voix neuronale française par défaut, nom invalide ignoré', () => {
-    expect(ttsVoice({})).toBe('fr-FR-Neural2-A');
-    expect(ttsVoice({ GOOGLE_TTS_VOICE: 'fr-FR-Neural2-B' })).toBe('fr-FR-Neural2-B');
-    expect(ttsVoice({ GOOGLE_TTS_VOICE: "x'; drop" })).toBe('fr-FR-Neural2-A');
+  it('voix la plus naturelle par défaut (Chirp 3 HD), nom invalide ignoré', () => {
+    expect(ttsVoice({})).toBe('fr-FR-Chirp3-HD-Aoede');
+    expect(ttsVoice({ GOOGLE_TTS_VOICE: 'fr-FR-Chirp3-HD-Charon' })).toBe('fr-FR-Chirp3-HD-Charon');
+    expect(ttsVoice({ GOOGLE_TTS_VOICE: "x'; drop" })).toBe('fr-FR-Chirp3-HD-Aoede');
   });
 
   it('la clé voyage en en-tête (jamais dans l’adresse) et la requête demande du MP3 en voix Neural2', async () => {
     const fetchImpl = vi.fn(async () => google());
     const out = await synthesize('Bonjour, voici la marche à suivre.', { env: { GOOGLE_TTS_API_KEY: 'cle-secrete-tts' }, fetchImpl });
-    expect(out).toMatchObject({ audioBase64: AUDIO, mime: 'audio/mpeg', voice: 'fr-FR-Neural2-A' });
+    expect(out).toMatchObject({ audioBase64: AUDIO, mime: 'audio/mpeg', voice: 'fr-FR-Chirp3-HD-Aoede' });
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://texttospeech.googleapis.com/v1/text:synthesize');
     expect(url).not.toContain('cle-secrete-tts');
     expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('cle-secrete-tts');
-    expect(JSON.parse(String(init.body))).toMatchObject({ voice: { languageCode: 'fr-FR', name: 'fr-FR-Neural2-A' }, audioConfig: { audioEncoding: 'MP3' } });
+    const sent = JSON.parse(String(init.body));
+    expect(sent).toMatchObject({ voice: { languageCode: 'fr-FR', name: 'fr-FR-Chirp3-HD-Aoede' }, audioConfig: { audioEncoding: 'MP3' } });
+    expect(sent.audioConfig.pitch).toBeUndefined(); // les voix Chirp refusent le réglage de hauteur
+  });
+
+  it('voix Chirp non offerte (400) : repli sur Neural2 ; clé refusée (403) : aucun repli inutile', async () => {
+    const calls: string[] = [];
+    const chirpRefused = vi.fn(async (_u: string, init: RequestInit) => {
+      const name = JSON.parse(String(init.body)).voice.name as string;
+      calls.push(name);
+      return name.includes('Chirp') ? google({}, 400) : google();
+    });
+    const out = await synthesize('Bonjour à tous.', { env: { GOOGLE_TTS_API_KEY: 'k' }, fetchImpl: chirpRefused as unknown as typeof fetch });
+    expect(out.voice).toBe('fr-FR-Neural2-A');
+    expect(calls).toEqual(['fr-FR-Chirp3-HD-Aoede', 'fr-FR-Neural2-A']);
+
+    const forbidden = vi.fn(async () => google({}, 403));
+    const err = await synthesize('Bonjour.', { env: { GOOGLE_TTS_API_KEY: 'k' }, fetchImpl: forbidden as unknown as typeof fetch }).catch((e) => e as TtsError);
+    expect(err).toMatchObject({ code: 'forbidden' });
+    expect(forbidden).toHaveBeenCalledTimes(1);
+  });
+
+  it('le statut fait un VRAI essai : on sait si la voix Google marche, pas seulement si une clé existe', async () => {
+    resetTtsHealthCache();
+    expect(await ttsHealth({ env: {}, fetchImpl: vi.fn() as unknown as typeof fetch })).toEqual({ available: false, reason: 'not_configured' });
+    expect(await ttsHealth({ env: { GOOGLE_TTS_API_KEY: 'k' }, fetchImpl: (async () => google({}, 403)) as unknown as typeof fetch })).toEqual({ available: false, reason: 'forbidden' });
+    expect(await ttsHealth({ env: { GOOGLE_TTS_API_KEY: 'k' }, fetchImpl: (async () => google()) as unknown as typeof fetch })).toEqual({ available: true, voice: 'fr-FR-Chirp3-HD-Aoede' });
   });
 
   it('utilise la clé Gemini en secours ; sans aucune clé : not_configured ; erreur Google : unavailable sans fuite', async () => {
@@ -46,7 +72,7 @@ describe('Voix : nettoyage du texte et appel Google Text-to-Speech', () => {
     await synthesize('Bonjour à tous.', { env: { GEMINI_API_KEY: 'cle-gemini' }, fetchImpl: ok });
     expect((ok.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toMatchObject({ 'x-goog-api-key': 'cle-gemini' });
     await expect(synthesize('Bonjour.', { env: {}, fetchImpl: ok })).rejects.toMatchObject({ code: 'not_configured' });
-    const err = await synthesize('Bonjour.', { env: { GOOGLE_TTS_API_KEY: 'cle-secrete-tts' }, fetchImpl: async () => google({}, 403) }).catch((e) => e as TtsError);
+    const err = await synthesize('Bonjour.', { env: { GOOGLE_TTS_API_KEY: 'cle-secrete-tts' }, fetchImpl: async () => google({}, 500) }).catch((e) => e as TtsError);
     expect(err).toMatchObject({ code: 'unavailable' });
     expect(String((err as Error).message)).not.toContain('cle-secrete-tts');
   });
@@ -60,6 +86,7 @@ describe('Voix : routes du site et de l’application', () => {
     await truncateAll();
     process.env.FREE_LAUNCH = 'true';
     process.env.GOOGLE_TTS_API_KEY = 'cle-tts-test';
+    resetTtsHealthCache();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
   afterEach(() => {
@@ -83,15 +110,17 @@ describe('Voix : routes du site et de l’application', () => {
     vi.stubGlobal('fetch', vi.fn(async () => google()));
     const res = await request(app).post(`/api/sessions/${id}/tts`).send({ sessionCode: code, text: 'Redémarrez votre ordinateur.' });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ audio: AUDIO, mime: 'audio/mpeg', voice: 'fr-FR-Neural2-A' });
-    expect((await request(app).get('/api/tts/status')).body).toEqual({ available: true });
+    expect(res.body).toMatchObject({ audio: AUDIO, mime: 'audio/mpeg', voice: 'fr-FR-Chirp3-HD-Aoede' });
+    resetTtsHealthCache();
+    expect((await request(app).get('/api/tts/status')).body).toEqual({ available: true, voice: 'fr-FR-Chirp3-HD-Aoede' });
   });
 
   it('refuse un mauvais code, et ne dit rien d’exploitable sans clé', async () => {
     const { id, code } = await startSession();
     expect((await request(app).post(`/api/sessions/${id}/tts`).send({ sessionCode: '000000000', text: 'Bonjour.' })).status).toBe(404);
     delete process.env.GOOGLE_TTS_API_KEY;
-    expect((await request(app).get('/api/tts/status')).body).toEqual({ available: false });
+    resetTtsHealthCache();
+    expect((await request(app).get('/api/tts/status')).body).toEqual({ available: false, reason: 'not_configured' });
     const res = await request(app).post(`/api/sessions/${id}/tts`).send({ sessionCode: code, text: 'Bonjour.' });
     expect(res.status).toBe(503);
     expect(res.body.code).toBe('tts_not_configured');
@@ -103,6 +132,14 @@ describe('Voix : routes du site et de l’application', () => {
     const res = await request(app).post(`/api/sessions/${id}/tts`).send({ sessionCode: code, text: 'Bonjour.' });
     expect(res.status).toBe(503);
     expect(res.body.code).toBe('tts_unavailable');
+  });
+
+  it('clé sans l’API Text-to-Speech activée : le dit (tts_forbidden) pour que l’interface ne se contente pas d’une voix de secours muette', async () => {
+    const { id, code } = await startSession();
+    vi.stubGlobal('fetch', vi.fn(async () => google({}, 403)));
+    const res = await request(app).post(`/api/sessions/${id}/tts`).send({ sessionCode: code, text: 'Bonjour.' });
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('tts_forbidden');
   });
 
   it('l’application exige une installation authentifiée', async () => {

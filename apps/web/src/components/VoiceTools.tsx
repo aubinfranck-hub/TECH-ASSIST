@@ -36,30 +36,51 @@ export async function speak(sessionId: string, sessionCode: string, text: string
   }
 }
 
-export function useTtsAvailable(): boolean {
-  const [available, setAvailable] = useState(false);
-  useEffect(() => {
-    api.get<{ available: boolean }>('/api/tts/status').then((r) => setAvailable(r.available)).catch(() => setAvailable(false));
-  }, []);
-  // Sans voix Google, la voix du navigateur reste proposée.
-  return available || typeof window !== 'undefined' && 'speechSynthesis' in window;
+export interface TtsStatus {
+  available: boolean;
+  voice?: string;
+  reason?: 'not_configured' | 'forbidden' | 'unavailable';
 }
+
+export function useTtsStatus(): TtsStatus | null {
+  const [status, setStatus] = useState<TtsStatus | null>(null);
+  useEffect(() => {
+    api.get<TtsStatus>('/api/tts/status').then(setStatus).catch(() => setStatus({ available: false, reason: 'unavailable' }));
+  }, []);
+  return status;
+}
+
+export function useTtsAvailable(): boolean {
+  const status = useTtsStatus();
+  // Sans voix Google, la voix du navigateur reste proposée (et signalée comme voix de secours).
+  return Boolean(status?.available) || (typeof window !== 'undefined' && 'speechSynthesis' in window);
+}
+
+export const TTS_REASON: Record<string, string> = {
+  not_configured: "aucune clé configurée (GOOGLE_TTS_API_KEY ou GEMINI_API_KEY)",
+  forbidden: "la clé est refusée : activez l'API « Cloud Text-to-Speech » pour cette clé dans Google Cloud",
+  unavailable: 'service Google momentanément indisponible',
+};
 
 export function SpeakButton({ sessionId, sessionCode, text }: { sessionId: string; sessionCode: string; text: string }) {
   const [busy, setBusy] = useState(false);
+  const [used, setUsed] = useState<'google' | 'browser' | null>(null);
   return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={() => {
-        setBusy(true);
-        void speak(sessionId, sessionCode, text).catch(() => undefined).finally(() => setBusy(false));
-      }}
-      className="mt-1 text-xs font-semibold text-brand-700 hover:underline disabled:opacity-50"
-      aria-label="Écouter cette réponse"
-    >
-      {busy ? '🔊 …' : '🔊 Écouter'}
-    </button>
+    <span className="mt-1 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          void speak(sessionId, sessionCode, text).then(setUsed).catch(() => undefined).finally(() => setBusy(false));
+        }}
+        className="text-xs font-semibold text-brand-700 hover:underline disabled:opacity-50"
+        aria-label="Écouter cette réponse"
+      >
+        {busy ? '🔊 …' : '🔊 Écouter'}
+      </button>
+      {used === 'browser' && <span className="text-[11px] text-amber-700">voix de secours (la voix Google n'est pas disponible)</span>}
+    </span>
   );
 }
 

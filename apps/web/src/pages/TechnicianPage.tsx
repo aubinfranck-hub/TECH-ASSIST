@@ -7,6 +7,7 @@ import { TechnicianEarningsCard } from '../components/TechnicianEarnings.js';
 import { TechnicianLoginForm } from '../components/TechnicianLoginForm.js';
 import { TechnicianRequest } from '../components/TechnicianRequest.js';
 import { ByCodeBox, TechnicianTool } from '../components/TechnicianTool.js';
+import { TTS_REASON, useTtsStatus } from '../components/VoiceTools.js';
 import { TwoFactorSettings } from '../components/TwoFactorSettings.js';
 import { api, ApiError } from '../lib/api.js';
 
@@ -20,6 +21,7 @@ export function TechnicianPage(){
  const [token,setToken]=useState<string|null>(localStorage.getItem('tech_assist_token')); const [queue,setQueue]=useState<QueueItem[]>([]);
  const [queueFilter,setQueueFilter]=useState<'all'|'urgent'|'android'|'windows'>('all');
  const [apiUp,setApiUp]=useState<boolean|null>(null);
+ const tts=useTtsStatus();
  const [queueSearch,setQueueSearch]=useState(''); const [pendingOrders,setPendingOrders]=useState<TechOrder[]>([]); const [mySessions,setMySessions]=useState<MySession[]>([]); const [error,setError]=useState<string|null>(null); const [params,setParams]=useSearchParams(); const openId=params.get('session'); useTechnicianManifest();
  const refresh=useCallback(async()=>{try{const [q,o,s]=await Promise.all([api.get<{queue:QueueItem[]}>('/api/technician/queue'),api.get<{orders:TechOrder[]}>('/api/orders/pending-payment').catch(()=>({orders:[]})),api.get<{sessions:MySession[]}>('/api/technician/my-sessions')]);setQueue(q.queue);setPendingOrders(o.orders);setMySessions(s.sessions);setError(null);}catch(e){if(e instanceof ApiError&&e.status===401){localStorage.removeItem('tech_assist_token');setToken(null);}else setError("Impossible de charger la file d'attente.");}},[]);
  useEffect(()=>{if(!token)return;const check=()=>api.get<{status:string;db:string}>('/api/health').then(h=>setApiUp(h.status==='ok'&&h.db==='ok')).catch(()=>setApiUp(false));void check();const t=setInterval(()=>void check(),30000);return()=>clearInterval(t);},[token]);
@@ -37,6 +39,8 @@ export function TechnicianPage(){
   <main className="relative z-10 ta-container max-w-[1440px] space-y-6 py-6 sm:py-8">
    {error&&<div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
    <ByCodeBox onFound={(id)=>setParams({session:id})}/>
+   {tts&&!tts.available&&<div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Voix Google inactive :</strong> {TTS_REASON[tts.reason??'unavailable']}. Les clients entendent la voix de secours de leur navigateur, beaucoup moins naturelle.</div>}
+   {tts&&tts.available&&<p className="text-xs text-slate-500">🔊 Voix Google active ({tts.voice})</p>}
    <TechnicianTool/>
    <TechnicianAlerts/>
    <nav className="sticky top-3 z-20 flex gap-2 overflow-x-auto rounded-2xl border border-white/70 bg-white/85 p-2 shadow-xl shadow-slate-200/50 backdrop-blur-xl"><a href="#" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">Vue d’ensemble</a><a href="#queue-panel" className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-50">File d’attente</a><a href="#sessions-panel" className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-50">Interventions</a><a href="#knowledge-panel" className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-50">Lexique</a><a href="#security-panel" className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-50">Sécurité</a></nav>

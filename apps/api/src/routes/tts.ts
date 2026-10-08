@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { requireAppInstall } from '../middleware/appAuth.js';
 import { validateBody } from '../middleware/validate.js';
-import { synthesize, ttsConfigured, TtsError, TTS_MAX_CHARS } from '../services/tts.js';
+import { synthesize, ttsHealth, TtsError, TTS_MAX_CHARS } from '../services/tts.js';
 
 /**
  * Lecture à voix haute des réponses de l'IA (voix neuronale Google). Deux entrées : le site (le client prouve sa session par son
@@ -33,8 +33,8 @@ async function speak(text: string, res: import('express').Response) {
     res.json({ audio: out.audioBase64, mime: out.mime, voice: out.voice, maxChars: TTS_MAX_CHARS });
   } catch (err) {
     if (err instanceof TtsError) {
-      if (err.code !== 'not_configured') console.error(`[tts] ${err.message}`);
-      res.status(503).json({ code: err.code === 'not_configured' ? 'tts_not_configured' : 'tts_unavailable', error: "La lecture à voix haute n'est pas disponible pour le moment." });
+      if (err.code !== 'not_configured') console.error(`[tts] ${err.code} : ${err.message}`);
+      res.status(503).json({ code: `tts_${err.code}`, error: "La lecture à voix haute n'est pas disponible pour le moment." });
       return;
     }
     throw err;
@@ -42,8 +42,8 @@ async function speak(text: string, res: import('express').Response) {
 }
 
 /** Le site demande si la voix est disponible (pour n'afficher le bouton que s'il peut fonctionner). */
-ttsRouter.get('/tts/status', (_req, res) => {
-  res.json({ available: ttsConfigured() });
+ttsRouter.get('/tts/status', async (_req, res) => {
+  res.json(await ttsHealth());
 });
 
 ttsRouter.post('/sessions/:id/tts', limiter, validateBody(webSchema), async (req, res) => {
