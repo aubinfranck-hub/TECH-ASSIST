@@ -131,6 +131,14 @@ describe('ChatUi — accès', () => {
     expect(String(again.headers['content-security-policy'])).not.toContain(nonce);
   });
 
+  it('la page propose la dictée au micro (avec explication si le micro est refusé) et affiche la version', async () => {
+    const ui = await start();
+    const res = await http(ui);
+    expect(res.body).toContain('webkitSpeechRecognition');
+    expect(res.body).toContain('Le micro est refusé');
+    expect(res.body).toContain('id="ver"');
+  });
+
   it('la page n’interprète jamais le texte reçu comme du HTML', async () => {
     const res = await http(await start());
     expect(res.body).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/);

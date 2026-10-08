@@ -3,14 +3,14 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkForUpdate, compareVersions, parseManifest } from '../selfUpdate.js';
+import { checkForUpdate, compareVersions, parseManifest, publishedName } from '../selfUpdate.js';
 
 const fakeExe = (tag: string) => Buffer.concat([Buffer.from('MZ'), Buffer.from(tag), Buffer.alloc(1_100_000, 7)]);
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
-function setup(opts: { version?: string; remote?: string; tamper?: boolean } = {}) {
+function setup(opts: { version?: string; remote?: string; tamper?: boolean; file?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ta-update-'));
-  const exePath = join(dir, 'tech-assist-agent.exe');
+  const exePath = join(dir, opts.file ?? 'tech-assist-agent.exe');
   writeFileSync(exePath, fakeExe('old'));
   const next = fakeExe('new');
   const manifest = { version: opts.remote ?? '0.1.60', files: { 'tech-assist-agent.exe': { sha256: sha(next) }, 'tech-assist-agent-console.exe': { sha256: sha(next) } } };
@@ -65,5 +65,13 @@ describe('mise à jour automatique', () => {
   it('hors connexion : l\'agent continue', async () => {
     const r = await checkForUpdate({ currentVersion: '0.1.1', exePath: 'x.exe', fetchImpl: (async () => { throw new Error('offline'); }) as unknown as typeof fetch });
     expect(r.status).toBe('skipped');
+  });
+
+  it('se met à jour même si le navigateur a renommé le fichier (« tech-assist-agent (1).exe »)', async () => {
+    const t = setup({ file: 'tech-assist-agent (1).exe' });
+    expect(await t.run()).toEqual({ status: 'restarting', version: '0.1.60' });
+    expect(readFileSync(t.exePath).includes('new')).toBe(true);
+    expect(publishedName('Tech Assist console.EXE')).toBe('tech-assist-agent-console.exe');
+    expect(publishedName('mon-outil.exe')).toBe('tech-assist-agent.exe');
   });
 });

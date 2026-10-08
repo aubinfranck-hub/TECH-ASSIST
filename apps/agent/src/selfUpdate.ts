@@ -73,6 +73,14 @@ export async function cleanupOldVersion(exePath: string = process.execPath): Pro
   await unlink(`${exePath}.new`).catch(() => undefined);
 }
 
+/**
+ * Nom du fichier publié qui correspond à cet exécutable. Le navigateur renomme les téléchargements répétés
+ * (« tech-assist-agent (1).exe ») et le client peut renommer le fichier : seul le type compte (technicien « console » ou client).
+ */
+export function publishedName(fileName: string): string {
+  return /console/i.test(fileName) ? 'tech-assist-agent-console.exe' : 'tech-assist-agent.exe';
+}
+
 export async function checkForUpdate(deps: UpdateDeps = {}): Promise<UpdateResult> {
   const currentVersion = deps.currentVersion ?? AGENT_VERSION;
   const exePath = deps.exePath ?? process.execPath;
@@ -96,7 +104,7 @@ export async function checkForUpdate(deps: UpdateDeps = {}): Promise<UpdateResul
   if (!manifest) return { status: 'failed', reason: 'manifeste illisible' };
   if (compareVersions(manifest.version, currentVersion) <= 0) return { status: 'current', version: currentVersion };
 
-  const name = basename(exePath).toLowerCase();
+  const name = publishedName(basename(exePath));
   const entry = manifest.files[name];
   if (!entry) return { status: 'skipped', reason: `pas de fichier ${name} dans la version ${manifest.version}` };
 

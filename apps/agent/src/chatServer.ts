@@ -26,6 +26,7 @@ type ChatEvent =
   | { seq: number; type: 'resolved'; id: string }
   | { seq: number; type: 'step'; n: number }
   | { seq: number; type: 'code'; code: string }
+  | { seq: number; type: 'version'; text: string }
   | { seq: number; type: 'tasks'; items: TaskView[]; now: number; complete: boolean }
   | { seq: number; type: 'results'; view: ResultsView }
   | { seq: number; type: 'ended'; text: string };
@@ -288,6 +289,12 @@ export class ChatUi implements ConversationUi {
   showHelpCode(code: string): void {
     if (this.closed || !/^\d{9}$/.test(code)) return;
     this.push({ type: 'code', code });
+  }
+
+  /** Version de l'exe, discrètement en bas de la fenêtre : permet de savoir si la mise à jour automatique a joué. */
+  showVersion(version: string): void {
+    if (this.closed || !/^[0-9][0-9.]{0,20}$/.test(version)) return;
+    this.push({ type: 'version', text: `Version ${version}` });
   }
 
   /** Étape affichée en haut de la fenêtre : 1 coordonnées, 2 demande, 3 intervention, 4 tout est terminé. */
@@ -805,6 +812,10 @@ form { display:flex; gap:12px; flex-wrap:wrap; }
 input[type=text] { flex:1; min-width:0; min-height:50px; padding:8px 14px; border-radius:12px; border:1px solid var(--line); font:inherit; background:var(--card); color:var(--ink); }
 input[type=text]:focus { border-color:var(--brand); }
 form button.act { flex:0 0 auto; min-width:170px; }
+button.mic { flex:0 0 auto; width:50px; min-height:50px; border-radius:12px; border:1px solid var(--line); background:var(--card); font-size:1.3rem; cursor:pointer; }
+button.mic:hover { border-color:var(--brand); }
+button.mic.on { background:var(--brand); border-color:var(--brand); color:#fff; animation:micpulse 1.2s ease-in-out infinite; }
+@keyframes micpulse { 50% { box-shadow:0 0 0 6px rgba(220,38,38,.25); } }
 .code { display:flex; gap:12px; flex-basis:100%; }
 .code input { flex:1; min-width:0; max-width:68px; height:64px; text-align:center; font:700 1.7rem "Segoe UI",system-ui,sans-serif; border:1.5px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); padding:0; }
 .code input:focus { border-color:var(--brand); box-shadow:0 0 0 4px rgba(220,38,38,.14); }
@@ -886,7 +897,7 @@ form button.act { flex:0 0 auto; min-width:170px; }
 </main>
 <section id="controls" aria-label="Votre réponse"></section>
 </div>
-<div class="foot"><span>Reste sur votre PC</span><span>Tout est noté</span><span>Arrêt à tout moment</span></div>
+<div class="foot"><span>Reste sur votre PC</span><span>Tout est noté</span><span>Arrêt à tout moment</span><span id="ver"></span></div>
 </section>
 </div>
 </div>
@@ -1204,6 +1215,43 @@ form button.act { flex:0 0 auto; min-width:170px; }
     }
     return { node: wrap, first: boxes[0], value: value };
   }
+  /* Dictée : le client parle, la phrase s'écrit dans le champ (reconnaissance vocale du navigateur, voix française). Sans prise en charge, le bouton n'apparaît pas. */
+  var MIC_ERRORS = {
+    'not-allowed': "Le micro est refusé. Cliquez sur l'icône de cadenas ou de micro dans la fenêtre, autorisez le micro, puis réessayez.",
+    'service-not-allowed': "Le micro est refusé. Autorisez le micro pour Tech Assist (Paramètres Windows > Confidentialité > Microphone), puis réessayez.",
+    'audio-capture': "Aucun micro détecté. Branchez un micro ou vérifiez qu'il est activé dans Windows (Paramètres > Système > Son > Entrée), puis réessayez.",
+    'no-speech': "Je n'ai rien entendu. Parlez plus près du micro, ou vérifiez le micro choisi dans Windows (Paramètres > Système > Son > Entrée).",
+    'network': "La dictée a besoin d'Internet et n'a pas pu joindre le service de reconnaissance vocale. Vous pouvez aussi écrire votre message."
+  };
+  function micButton(input, say) {
+    var Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Rec) return null;
+    var btn = el('button', 'mic', '🎤'); btn.type = 'button';
+    btn.title = 'Parler (dictée vocale)'; btn.setAttribute('aria-label', 'Dicter mon message au micro');
+    var rec = null;
+    function stop() { if (rec) { try { rec.stop(); } catch (e) { /* déjà arrêté */ } } }
+    btn.addEventListener('click', function () {
+      if (rec) { stop(); return; }
+      var r = new Rec(); rec = r;
+      var base = input.value ? input.value.trim() + ' ' : '';
+      var heard = false, failed = false;
+      r.lang = 'fr-FR'; r.interimResults = true; r.continuous = false;
+      r.onstart = function () { btn.classList.add('on'); say("Je vous écoute… parlez maintenant."); };
+      r.onresult = function (e) {
+        var t = ''; for (var i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+        heard = true; input.value = (base + t).slice(0, 1000);
+      };
+      r.onerror = function (e) { failed = true; say(MIC_ERRORS[e.error] || ("Le micro n'a pas fonctionné (" + (e.error || 'erreur inconnue') + "). Vous pouvez écrire votre message.")); };
+      r.onend = function () {
+        btn.classList.remove('on'); rec = null;
+        if (heard) say('Relisez votre message, puis cliquez sur « Envoyer ».');
+        else if (!failed) say(MIC_ERRORS['no-speech']);
+        input.focus();
+      };
+      try { r.start(); } catch (err) { rec = null; say("Le micro n'a pas pu démarrer. Vous pouvez écrire votre message."); }
+    });
+    return btn;
+  }
   var CODE_PROMPT = /code reçu par email|code comporte 6 chiffres/i;
   function showAsk(ev) {
     var box = el('div'); box.appendChild(el('p', '', ev.text));
@@ -1220,7 +1268,8 @@ form button.act { flex:0 0 auto; min-width:170px; }
       var code = codeBoxes(); form.appendChild(code.node); focusOn = code.first; read = code.value;
     } else {
       var input = el('input'); input.type = 'text'; input.maxLength = 1000; input.autocomplete = 'off'; input.setAttribute('aria-label', ev.text);
-      form.appendChild(input); focusOn = input; read = function () { return input.value; };
+      var mic = micButton(input, function (msg) { note.textContent = msg; });
+      form.appendChild(input); if (mic) form.appendChild(mic); focusOn = input; read = function () { return input.value; };
     }
     form.appendChild(sendButton());
     var attach = el('div', 'attach');
@@ -1266,6 +1315,7 @@ form button.act { flex:0 0 auto; min-width:170px; }
     else if (ev.type === 'choose') { hideTyping(); current = ev.id; showChoose(ev); }
     else if (ev.type === 'step') setStep(ev.n);
     else if (ev.type === 'code') { document.getElementById('helpcodeval').textContent = ev.code.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'); document.getElementById('helpcode').hidden = false; }
+    else if (ev.type === 'version') document.getElementById('ver').textContent = ev.text;
     else if (ev.type === 'tasks') setTasks(ev);
     else if (ev.type === 'results') showResults(ev.view);
     else if (ev.type === 'resolved') { if (current === ev.id) { clearControls(); current = null; showTyping(); } }
