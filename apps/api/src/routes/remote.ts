@@ -20,6 +20,13 @@ function makeBootstrapToken(sessionId: string, sessionCode: string): string {
   return createHmac('sha256', bootstrapSecret()).update(sessionId + ':' + sessionCode).digest('base64url');
 }
 
+/** Une session ouverte garde le droit de s'appairer au-delà des 10 minutes du code : le client peut attendre longtemps un technicien. */
+const PAIRING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+function pairingWindowClosed(session: { code_expires_at: Date | string; created_at: Date | string }): boolean {
+  if (new Date(session.code_expires_at).getTime() > Date.now()) return false;
+  return Date.now() - new Date(session.created_at).getTime() > PAIRING_MAX_AGE_MS;
+}
+
 function validBootstrapToken(sessionId: string, sessionCode: string, token: string): boolean {
   const expected = makeBootstrapToken(sessionId, sessionCode);
   const a = Buffer.from(expected);
@@ -65,12 +72,12 @@ remoteRouter.get('/technician/remote-config', requireAuth('technician', 'admin')
 
 remoteRouter.get('/sessions/:code/remote-bootstrap', async (req, res) => {
   const { rows } = await pool.query(
-    'SELECT id, session_code, status, code_expires_at, remote_paired_at FROM sessions WHERE session_code = $1',
+    'SELECT id, session_code, status, code_expires_at, created_at, remote_paired_at FROM sessions WHERE session_code = $1',
     [req.params.code],
   );
   const session = rows[0];
   if (!session) return res.status(404).json({ error: 'Session introuvable' });
-  if (new Date(session.code_expires_at).getTime() <= Date.now()) return res.status(410).json({ error: 'Le code de session a expiré' });
+  if (pairingWindowClosed(session)) return res.status(410).json({ error: 'Le code de session a expiré' });
   if (!['created', 'waiting_technician', 'active'].includes(session.status)) return res.status(409).json({ error: 'Cette session ne peut plus être appairée' });
   if (session.remote_paired_at) return res.status(409).json({ error: 'Cette session est déjà appairée' });
 
@@ -92,13 +99,13 @@ const pairSchema = z.object({
 remoteRouter.post('/sessions/:id/pair', validateBody(pairSchema), async (req, res) => {
   const { remotePeerId, remotePassword, bootstrapToken } = req.body as z.infer<typeof pairSchema>;
   const sessionResult = await pool.query(
-    'SELECT id, session_code, status, code_expires_at, remote_paired_at FROM sessions WHERE id = $1',
+    'SELECT id, session_code, status, code_expires_at, created_at, remote_paired_at FROM sessions WHERE id = $1',
     [req.params.id],
   );
   const session = sessionResult.rows[0];
   if (!session) return res.status(404).json({ error: 'Session introuvable' });
   if (!['created', 'waiting_technician', 'active'].includes(session.status)) return res.status(409).json({ error: 'Cette session ne peut plus être appairée' });
-  if (new Date(session.code_expires_at).getTime() <= Date.now()) return res.status(410).json({ error: 'Le code de session a expiré' });
+  if (pairingWindowClosed(session)) return res.status(410).json({ error: 'Le code de session a expiré' });
   if (session.remote_paired_at) return res.status(409).json({ error: 'Cette session est déjà appairée' });
   if (!validBootstrapToken(session.id, session.session_code, bootstrapToken)) return res.status(403).json({ error: 'Jeton d’appairage invalide ou expiré' });
 

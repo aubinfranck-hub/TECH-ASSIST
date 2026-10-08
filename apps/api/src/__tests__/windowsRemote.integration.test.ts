@@ -109,6 +109,17 @@ describe('PC Windows : l’agent partage l’écran avec le technicien (RustDesk
     expect(res.body.windows.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it('l’appairage reste possible après les 10 minutes du code tant que la session est ouverte (attente d’un technicien)', async () => {
+    const auth = await registerWindows();
+    const { sessionId } = await paidSession(auth, 'assistance_rapide', 'humain');
+    await pool.query(`UPDATE sessions SET code_expires_at = now() - interval '2 hours' WHERE id = $1`, [sessionId]);
+    const { rows } = await pool.query('SELECT session_code FROM sessions WHERE id = $1', [sessionId]);
+    expect((await request(app).get(`/api/sessions/${rows[0].session_code}/remote-bootstrap`)).status).toBe(200);
+    // Au-delà de 24 h, la fenêtre est fermée.
+    await pool.query(`UPDATE sessions SET created_at = now() - interval '25 hours' WHERE id = $1`, [sessionId]);
+    expect((await request(app).get(`/api/sessions/${rows[0].session_code}/remote-bootstrap`)).status).toBe(410);
+  });
+
   it('un autre client ne peut ni lire les réglages ni partager sur cette session', async () => {
     const owner = await registerWindows();
     const { sessionId } = await paidSession(owner, 'assistance_rapide', 'humain');

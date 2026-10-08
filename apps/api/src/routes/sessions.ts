@@ -86,7 +86,7 @@ export async function createSessionForOrder(
      VALUES ($1, $2, $3, now() + interval '${SESSION_CODE_TTL_MINUTES} minutes', $4, $5, $6, $7,
              CASE WHEN $8::boolean THEN now() END, CASE WHEN $8::boolean THEN now() + make_interval(mins => $4::int) END)
      RETURNING id, session_code, status, code_expires_at, duration_minutes, mode, human_included`,
-    [orderId, code, platform, order.duration_minutes, mode, requestedMode, humanIncluded, clockNow],
+    [orderId, code, platform, order.duration_minutes, mode, requestedMode === 'hybride' ? 'ia' : requestedMode, humanIncluded, clockNow],
   );
   const session = rows[0];
 
