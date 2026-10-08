@@ -264,12 +264,30 @@ export function SessionPage() {
 
   return (
     <div className="ta-container max-w-xl py-14">
-      <p className="ta-eyebrow mb-2">Ma session</p>
-      <h1 className="mb-1 text-2xl font-bold sm:text-3xl">Session {session.session_code}</h1>
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">{statusLabel[session.status] ?? session.status}</span>
-        <span className="text-sm text-slate-500">Code {session.session_code}</span>
+      <p className="ta-eyebrow mb-2">Ma demande d’aide</p>
+      <h1 className="mb-2 text-2xl font-bold sm:text-3xl">{statusLabel[session.status] ?? session.status}</h1>
+      <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
+        <span>
+          Votre numéro de dossier : <strong className="font-mono text-base tracking-wider text-slate-950">{session.session_code}</strong>
+        </span>
+        <button type="button" onClick={() => void navigator.clipboard?.writeText(session.session_code)} className="font-semibold text-brand-700 underline">Copier</button>
+        <span className="basis-full text-xs text-slate-500">Vous n’avez rien à saisir avec ce numéro. Notez-le seulement pour retrouver cette page si vous la fermez (menu « J’ai un code »).</span>
       </div>
+
+      {session.mode === 'humain' && ['created', 'waiting_technician', 'active'].includes(session.status) && (
+        <ol className="mb-5 space-y-2 text-sm">
+          {([
+            ['Votre demande est envoyée', true],
+            [session.technician_id ? 'Un technicien a pris votre dossier' : 'Un technicien va prendre votre dossier — gardez cette page ouverte, elle se met à jour toute seule', !!session.technician_id],
+            [session.consent_control_at ? 'Le technicien peut voir votre écran et vous aider' : 'Discutez avec lui ci-dessous ; s’il le faut, vous l’autoriserez à voir votre écran (rien ne se fait sans votre accord)', !!session.consent_control_at],
+          ] as const).map(([text, done], i) => (
+            <li key={i} className={`flex gap-3 rounded-xl border p-3 ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-white text-slate-700'}`}>
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black ${done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>{done ? '✓' : i + 1}</span>
+              <span>{text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
 
       {session.requested_mode === 'ia' && session.mode === 'humain' && session.status !== 'completed' && (
         <p className="ta-card mb-4 border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -286,19 +304,6 @@ export function SessionPage() {
           <button onClick={escalateToHuman} className="mt-3 font-semibold text-brand-700 underline">
             Passer à un technicien
           </button>
-        </div>
-      )}
-
-      {session.status === 'created' && session.mode !== 'ia' && (
-        <div className="ta-card border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <p className="font-bold">Votre demande est bien reçue.</p>
-          <p className="mt-1">Un technicien va prendre votre dossier en charge. Gardez cette page ouverte : vous pouvez déjà lui écrire ci-dessous, et il vous répondra ici.</p>
-        </div>
-      )}
-      {session.status === 'waiting_technician' && (
-        <div className="ta-card border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <p className="font-bold">Votre dossier est dans la file technicien.</p>
-          <p className="mt-1 text-sm leading-6">Le technicien reprendra les informations déjà fournies. Vous n’avez pas besoin de recommencer votre explication.</p>
         </div>
       )}
 

@@ -226,7 +226,7 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
         {open && session.technician && !session.mine && <p className="text-sm text-amber-800">Cette demande est suivie par {session.technician}.</p>}
         {session.mine && open && (
           <div className="space-y-3">
-            <RemoteAccess sessionId={session.id} controlGranted={session.consentControl} android={session.platform === 'android'} />
+            <RemoteAccess sessionId={session.id} controlGranted={session.consentControl} android={session.platform === 'android'} platform={session.platform} />
             {!confirmFinish ? (
               <button onClick={() => setConfirmFinish(true)} className="text-sm font-semibold text-slate-600 underline">
                 Terminer l'assistance
@@ -245,7 +245,7 @@ export function TechnicianRequest({ sessionId, onBack, onUnauthorized, onChanged
       {progress && <TaskProgressCard progress={progress.data} receivedAt={progress.at} live={open} />}
 
       <section className="ta-card p-4">
-        <h3 className="mb-3 font-semibold">Ce que l'agent a constaté et fait</h3>
+        <h3 className="mb-3 font-semibold">{session.platform === 'web' ? 'Historique de la demande' : "Ce que l'agent a constaté et fait"}</h3>
         {detail.timeline.length === 0 ? (
           <p className="text-sm text-slate-500">Rien d'enregistré pour le moment.</p>
         ) : (

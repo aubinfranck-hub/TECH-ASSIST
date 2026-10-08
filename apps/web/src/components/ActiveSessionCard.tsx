@@ -61,7 +61,25 @@ function TechnicianSetup() {
   );
 }
 
-export function RemoteAccess({ sessionId, controlGranted, android = false }: { sessionId: string; controlGranted: boolean; android?: boolean }) {
+/** Message prêt à envoyer : dit au client, pas à pas, comment partager son écran (la marche à suivre dépend d'où il vient). */
+export function shareInstructions(platform: string): string {
+  if (platform === 'windows') {
+    return "Bonjour, pour que je voie votre écran et vous aide directement : 1) dans la fenêtre Tech Assist sur votre PC, répondez « Oui » quand on vous propose de partager l'écran ; 2) quand une fenêtre RustDesk s'affiche, cliquez sur « Accepter ». Je reste avec vous.";
+  }
+  return "Bonjour, pour que je voie votre écran et vous aide directement : 1) sur cette page, cliquez sur « Préparer mon ordinateur » puis ouvrez le fichier téléchargé (acceptez la demande de Windows) ; 2) cliquez sur « J'autorise le partage d'écran », puis sur « J'autorise le technicien à prendre le contrôle » ; 3) quand une fenêtre RustDesk s'affiche, cliquez sur « Accepter ». Je reste avec vous.";
+}
+
+export function RemoteAccess({ sessionId, controlGranted, android = false, platform = 'web' }: { sessionId: string; controlGranted: boolean; android?: boolean; platform?: string }) {
+  const [asked, setAsked] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  async function askClient() {
+    setAsked('sending');
+    try {
+      await api.post(`/api/technician/sessions/${sessionId}/messages`, { body: shareInstructions(platform) });
+      setAsked('sent');
+    } catch {
+      setAsked('error');
+    }
+  }
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -102,11 +120,20 @@ export function RemoteAccess({ sessionId, controlGranted, android = false }: { s
 
   if (!controlGranted) {
     return (
-      <p className="text-sm text-amber-700">
-        {android
-          ? "Prise en main du téléphone : le client n'a pas encore partagé son identifiant RustDesk. Guidez-le par la discussion (l'écran « Contrôle à distance » de son application)."
-          : "Prise en main à distance : le client ne l'a pas encore autorisée."}
-      </p>
+      <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <p className="font-semibold">Pour voir l'écran du client, il doit d'abord l'autoriser.</p>
+        {android ? (
+          <p>Guidez-le par la discussion : l'écran « Contrôle à distance » de son application lui demande son identifiant RustDesk.</p>
+        ) : (
+          <>
+            <p>Envoyez-lui la marche à suivre (un clic). Dès qu'il aura accepté, l'identifiant et le mot de passe apparaîtront ici tout seuls.</p>
+            <button type="button" disabled={asked === 'sending' || asked === 'sent'} onClick={() => void askClient()} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60">
+              {asked === 'sent' ? '✓ Instructions envoyées au client' : asked === 'sending' ? 'Envoi…' : 'Envoyer au client comment partager son écran'}
+            </button>
+            {asked === 'error' && <p className="text-xs text-red-700">Envoi impossible, réessayez ou écrivez-lui dans la discussion.</p>}
+          </>
+        )}
+      </div>
     );
   }
   return (
@@ -169,7 +196,7 @@ export function ActiveSessionCard({ session }: { session: MySession }) {
           <span className="min-w-0 break-words">L'agent travaille : {session.agent_task}</span>
         </p>
       )}
-      <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} android={session.platform === 'android'} />
+      <RemoteAccess sessionId={session.id} controlGranted={!!session.consent_control_at} android={session.platform === 'android'} platform={session.platform} />
     </li>
   );
 }
