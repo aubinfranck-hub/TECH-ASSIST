@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { SITE_IMAGES } from '../lib/imageSources.js';
 import { PageHero } from '../components/PageHero.js';
 
 const windowsFeatures = [
@@ -50,7 +51,7 @@ export function DiagnosticPage() {
 
         <section className="mt-12 overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-card">
           <div className="grid lg:grid-cols-[.9fr_1.1fr]">
-            <img src="/img/office.jpg" alt="Environnement de travail avec les outils Office" className="h-72 w-full object-cover lg:h-full" loading="lazy" />
+            <img src={SITE_IMAGES.office} alt="Environnement de travail avec les outils Office" className="h-72 w-full object-cover lg:h-full" loading="lazy" />
             <div className="p-7 sm:p-10">
               <p className="ta-eyebrow">MICROSOFT OFFICE</p>
               <h2 className="mt-2 font-display text-3xl font-black">Word, Excel, Outlook : votre travail ne doit pas rester bloqué.</h2>
