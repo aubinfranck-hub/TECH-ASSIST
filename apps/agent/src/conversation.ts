@@ -92,6 +92,9 @@ function truncate(text: string, max: number): string {
  * (avec son accord à chaque modification), répond aux questions d'usage via l'assistant, et passe la
  * main à un technicien quand il le faut ou quand le client le demande.
  */
+const MAX_AI_ROUNDS = 3;
+const WANTS_TECHNICIAN = /\b(technicien|humain|quelqu'un|quelqu un|appelez|appeler)\b/i;
+
 export async function converse(deps: ConversationDeps): Promise<ConversationResult> {
   const { runner, reporter } = deps;
   let ui = deps.ui;
@@ -267,24 +270,41 @@ export async function converse(deps: ConversationDeps): Promise<ConversationResu
     return 'Urgence';
   }
 
-  /** L'IA prend le relais de la conversation quand les vérifications automatiques ne règlent rien, avant le technicien. */
+  /**
+   * L'IA prend le relais quand les vérifications automatiques ne règlent rien, AVANT le technicien. Elle ne lâche pas au premier échec :
+   * jusqu'à 3 tours (conseils, le client dit ce qu'il constate, nouveaux conseils). Si ça marche, le serveur l'apprend (« résolu »).
+   */
   async function consult(info: { skill: string; summary: string; reason: string }): Promise<boolean> {
     if (!privacyNoted) {
       privacyNoted = true;
       ui.info("Je demande l'avis de notre assistant en ligne (une IA). N'y écrivez jamais de mot de passe, de code reçu par SMS ou de numéro de carte.");
     }
-    const brief = truncate(
+    let brief = truncate(
       `Le client signale : « ${lastMessage} ». Mon diagnostic automatique (${info.skill}) : ${info.summary} Il n'a rien réglé et le problème persiste. Propose au client 2 ou 3 vérifications simples qu'il peut faire lui-même, une par une, sans toucher à ses fichiers, et dis quand un technicien est nécessaire.`,
       1000,
     );
-    const reply = await deps.assistant!.answer(brief, history.slice(-8));
-    if (!reply.available) {
-      ui.info("L'assistant en ligne ne répond pas pour le moment (connexion Internet ou service occupé). Je passe donc directement au technicien.");
-      return false;
+    for (let round = 1; round <= MAX_AI_ROUNDS; round++) {
+      const reply = await deps.assistant!.answer(brief, history.slice(-8), { topic: lastMessage });
+      if (!reply.available) {
+        ui.info(
+          round === 1
+            ? "L'assistant en ligne ne répond pas pour le moment (connexion Internet ou service occupé). Je passe donc directement au technicien."
+            : "L'assistant en ligne ne répond plus pour le moment. Je passe au technicien.",
+        );
+        return false;
+      }
+      history.push({ role: 'user', text: truncate(round === 1 ? lastMessage : brief, 500) }, { role: 'assistant', text: truncate(reply.text, 1500) });
+      ui.info(reply.text);
+      if (await ui.confirmFixed(round === 1 ? 'Est-ce que cela règle votre problème ?' : 'Est-ce réglé maintenant ?')) {
+        await deps.assistant?.feedback?.(true); // la solution qui a marché entre dans la mémoire de Tech Assist
+        return true;
+      }
+      if (round === MAX_AI_ROUNDS) break;
+      const said = await ui.ask('Dites-moi ce que vous constatez après ces vérifications, et je cherche autre chose. (Écrivez « technicien » pour être mis en relation avec quelqu\'un.)');
+      if (said === null || said === HUMAN_REQUEST_TEXT || WANTS_TECHNICIAN.test(said)) return false;
+      brief = truncate(`Le client a essayé ces conseils et répond : « ${said.trim()} ». Le problème d'origine : « ${lastMessage} ». Propose d'autres vérifications, différentes des précédentes, ou dis qu'un technicien est nécessaire.`, 1000);
     }
-    history.push({ role: 'user', text: truncate(lastMessage, 500) }, { role: 'assistant', text: truncate(reply.text, 1500) });
-    ui.info(reply.text);
-    return ui.confirmFixed('Est-ce que cela règle votre problème ?');
+    return false;
   }
 
   async function runAndNote(skill: Skill): Promise<Outcome> {

@@ -6,7 +6,7 @@ import { pool } from '../db/pool.js';
 import { requireAppInstall, signAppToken } from '../middleware/appAuth.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
-import { rememberResolved } from '../assistant/pannesLearning.js';
+import { creditConfirmations, rememberResolved } from '../assistant/pannesLearning.js';
 import { freeLaunch } from '../utils/offers.js';
 import { isDisposableEmail, normalizeEmail } from '../utils/email.js';
 import { logAudit } from '../utils/audit.js';
@@ -85,9 +85,11 @@ simpleRouter.post('/app/sessions/:id/chat/feedback', limiter, requireAppInstall,
   if (!owned.rows[0]) return res.status(404).json({ error: 'Session introuvable' });
   if (!(req.body as z.infer<typeof helpedSchema>).helped) return res.json({ remembered: false });
   const last = await pool.query(`SELECT details FROM audit_logs WHERE session_id = $1 AND action = 'agent.chat' ORDER BY id DESC LIMIT 1`, [req.params.id]);
-  const d = last.rows[0]?.details as { question?: string; answerFull?: string; answer?: string } | undefined;
+  const d = last.rows[0]?.details as { question?: string; answerFull?: string; answer?: string; usedIds?: string[] } | undefined;
   const id = d?.question && (d.answerFull ?? d.answer) ? await rememberResolved(d.question, (d.answerFull ?? d.answer)!) : null;
-  res.json({ remembered: id !== null });
+  // Les fiches de l'IA qui ont servi à cette réponse reçoivent la confirmation de ce client (2 clients différents : elles deviennent de confiance).
+  const promoted = Array.isArray(d?.usedIds) ? await creditConfirmations(d.usedIds, req.appInstall!.id).catch(() => 0) : 0;
+  res.json({ remembered: id !== null, promoted });
 });
 
 const byCodeSchema = z.object({ code: z.string().regex(/^\d{9}$/, 'Le numéro comporte 9 chiffres') });

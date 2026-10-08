@@ -385,6 +385,36 @@ describe('converse — l’IA prend le relais avant le technicien', () => {
     expect(out.handedOver).toBe(false);
   });
 
+  it('le client dit ce qu’il constate : l’IA cherche autre chose (plusieurs tours), et la solution qui marche est retenue', async () => {
+    const feedback: boolean[] = [];
+    const assistant = Object.assign(new FakeAssistant([{ available: true, text: 'Vérifiez le micro choisi dans Son > Entrée.' }, { available: true, text: 'Autorisez le micro pour les applications dans Confidentialité.' }]), {
+      feedback: async (h: boolean) => void feedback.push(h),
+    });
+    const ui = new ScriptedConversation({ asks: ['mon micro ne marche pas', "j'entends toujours rien", 'non merci'], fixed: [false, false, true] });
+    const out = await converse({ runner: noRunner, ui, reporter: new Recorder(), assistant, resolve: resolver({ drivers: stubSkill('drivers') }) });
+    expect(assistant.calls).toHaveLength(2);
+    expect(assistant.calls[1]!.message).toContain("j'entends toujours rien");
+    expect(ui.infos.join('\n')).toContain('Confidentialité');
+    expect(feedback).toEqual([true]);
+    expect(out.handedOver).toBe(false);
+  });
+
+  it('le client demande un technicien après un premier conseil : on passe la main, sans insister', async () => {
+    const assistant = new FakeAssistant([{ available: true, text: 'Vérifiez le micro.' }]);
+    const ui = new ScriptedConversation({ asks: ['mon micro ne marche pas', 'technicien'], fixed: [false, false] });
+    const out = await converse({ runner: noRunner, ui, reporter: new Recorder(), assistant, resolve: resolver({ drivers: stubSkill('drivers') }) });
+    expect(assistant.calls).toHaveLength(1);
+    expect(out.handedOver).toBe(true);
+  });
+
+  it('trois tours sans résultat : alors seulement le technicien', async () => {
+    const assistant = new FakeAssistant([{ available: true, text: 'Essayez ceci.' }]);
+    const ui = new ScriptedConversation({ asks: ['mon micro ne marche pas', 'rien', 'toujours rien'], fixed: [false, false, false, false] });
+    const out = await converse({ runner: noRunner, ui, reporter: new Recorder(), assistant, resolve: resolver({ drivers: stubSkill('drivers') }) });
+    expect(assistant.calls).toHaveLength(3);
+    expect(out.handedOver).toBe(true);
+  });
+
   it('l’IA ne répond pas : le client le sait (plus de silence), puis le technicien', async () => {
     const assistant = new FakeAssistant([{ available: false }]);
     const ui = new ScriptedConversation({ asks: ['mon micro ne marche pas'], fixed: [false] });

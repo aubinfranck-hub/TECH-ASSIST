@@ -27,6 +27,8 @@ export interface LessonRequest {
 export interface AnswerOptions {
   lesson?: LessonRequest;
   image?: Attachment;
+  /** Le problème tel que le client l'a décrit, quand le message est une consigne de l'agent : sert à chercher au lexique et à apprendre. */
+  topic?: string;
 }
 
 export type AssistantReply = { available: true; text: string } | { available: false };
@@ -60,6 +62,7 @@ export class HttpAssistant implements Assistant {
           message: message.slice(0, 1000),
           history: history.slice(-8),
           ...(options.lesson ? { lesson: options.lesson } : {}),
+          ...(options.topic ? { topic: options.topic.slice(0, 200) } : {}),
           ...(options.image && options.image.data.length <= MAX_ATTACHMENT_CHARS ? { image: options.image } : {}),
         }),
       });

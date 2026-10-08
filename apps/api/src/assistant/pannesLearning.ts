@@ -206,3 +206,26 @@ export async function enrichInBackground(query: string): Promise<void> {
     console.error('[lexique] enrichissement impossible :', err instanceof Error ? err.message : err);
   }
 }
+
+/** Nombre de clients différents qui doivent confirmer une fiche de l'IA avant qu'elle soit servie sans appeler l'IA. */
+export const CONFIRMATIONS_TO_TRUST = 2;
+
+/**
+ * Le client confirme « c'est résolu » après une réponse construite avec ces fiches : chaque fiche rédigée par l'IA reçoit sa confirmation
+ * (une par installation). À la deuxième installation différente, elle devient « de confiance » : le chat la sert ensuite sans IA.
+ * Les fiches issues de texte de clients (source « client: ») ne sont jamais promues ici : un technicien les relit. Renvoie les fiches promues.
+ */
+export async function creditConfirmations(ids: string[], installId: string): Promise<number> {
+  const valid = ids.filter((i) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(i)).slice(0, 5);
+  if (valid.length === 0) return 0;
+  const { rows } = await pool.query(
+    `UPDATE learned_pannes
+        SET confirmed_by = CASE WHEN $2::uuid = ANY(confirmed_by) THEN confirmed_by ELSE array_append(confirmed_by, $2::uuid) END,
+            status = CASE WHEN status = 'candidate' AND source LIKE 'ai:%' AND cardinality(CASE WHEN $2::uuid = ANY(confirmed_by) THEN confirmed_by ELSE array_append(confirmed_by, $2::uuid) END) >= $3 THEN 'trusted' ELSE status END,
+            updated_at = now()
+      WHERE id = ANY($1::uuid[]) AND status <> 'retired'
+      RETURNING id, status, source`,
+    [valid, installId, CONFIRMATIONS_TO_TRUST],
+  );
+  return rows.filter((r) => r.status === 'trusted' && String(r.source).startsWith('ai:')).length;
+}

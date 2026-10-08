@@ -25,7 +25,7 @@ import { TRAINING_STEPS, TRAINING_TRACK_IDS, findTrack } from '../assistant/trai
 import { JEKO_METHODS, JekoError, createJekoPayment, jekoConfigured, type JekoMethod } from '../payments/jeko.js';
 import { paymentLink } from './payments.js';
 import { selfHostedRustdesk } from './remote.js';
-import { contextFrom, searchLexique } from '../assistant/lexique.js';
+import { contextFrom, memoryAnswer, searchLexique, usedFicheIds } from '../assistant/lexique.js';
 import { enrichInBackground } from '../assistant/pannesLearning.js';
 import { createSessionForOrder } from './sessions.js';
 
@@ -800,6 +800,8 @@ appRouter.post('/app/sessions/:id/android-remote', limiter, requireAppInstall, v
 
 const chatSchema = z.object({
   message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
+  /** Le problème tel que le client l'a décrit (quand `message` est une consigne de l'agent) : sert à chercher au lexique et à apprendre. */
+  topic: z.string().trim().min(3).max(200).optional(),
   /** Mode formation : identifiants d'un catalogue fermé (le texte des consignes vient du serveur). */
   lesson: z
     .object({
@@ -862,20 +864,27 @@ appRouter.post('/app/sessions/:id/chat', chatLimiter, requireAppInstall, validat
     return res.status(400).json({ error: "L'image jointe n'est pas une capture PNG ou JPEG valide." });
   }
 
-  // Le lexique d'abord (entrées confirmées seulement) ; s'il ne sait rien, l'IA répond ET l'enrichit pour la prochaine fois.
-  const lexique = body.lesson ? { entries: [], confident: true } : await searchLexique(body.message).catch(() => ({ entries: [], confident: true }));
+  // Le lexique d'abord ; une fiche confirmée par des clients répond SANS appeler l'IA. Sinon l'IA répond ET enrichit le lexique pour la prochaine fois.
+  const subject = body.topic ?? body.message;
+  const lexique = body.lesson ? { entries: [], confident: true } : await searchLexique(subject).catch(() => ({ entries: [], confident: true }));
+  // Pas de réponse mémorisée au 2e tour d'une conversation : le client a déjà reçu la fiche et il faut autre chose.
+  const remembered = body.lesson || body.image || body.history.length > 0 ? null : memoryAnswer(lexique.entries);
   let answer: { text: string; model: string };
-  try {
-    answer = await askOfficeAssistant(body.message, body.history, {
-      image: body.image,
-      context: contextFrom(lexique.entries),
-      platform: install.platform === 'android' ? 'android' : 'windows',
-      lesson: body.lesson ? { track: findTrack(body.lesson.track)!, level: body.lesson.level, step: body.lesson.step, index: body.lesson.index } : undefined,
-    });
-  } catch (err) {
-    if (!(err instanceof AssistantUnavailableError)) throw err;
-    console.error(`[assistant] indisponible : ${err.message}`);
-    return res.status(503).json({ code: 'assistant_unavailable', error: "L'assistant en ligne n'est pas disponible pour le moment." });
+  if (remembered) {
+    answer = { text: remembered.text, model: 'memoire' };
+  } else {
+    try {
+      answer = await askOfficeAssistant(body.message, body.history, {
+        image: body.image,
+        context: contextFrom(lexique.entries),
+        platform: install.platform === 'android' ? 'android' : 'windows',
+        lesson: body.lesson ? { track: findTrack(body.lesson.track)!, level: body.lesson.level, step: body.lesson.step, index: body.lesson.index } : undefined,
+      });
+    } catch (err) {
+      if (!(err instanceof AssistantUnavailableError)) throw err;
+      console.error(`[assistant] indisponible : ${err.message}`);
+      return res.status(503).json({ code: 'assistant_unavailable', error: "L'assistant en ligne n'est pas disponible pour le moment." });
+    }
   }
 
   await logAudit(pool, {
@@ -885,14 +894,15 @@ appRouter.post('/app/sessions/:id/chat', chatLimiter, requireAppInstall, validat
     orderId: session.order_id,
     action: 'agent.chat',
     details: {
-      question: body.message.slice(0, 300),
+      question: subject.slice(0, 300),
       answer: answer.text.slice(0, 500),
+      usedIds: remembered ? [remembered.id] : usedFicheIds(lexique.entries),
       answerFull: answer.text.slice(0, 2500),
       model: answer.model,
       ...(body.lesson ? { lesson: body.lesson } : {}),
       ...(body.image ? { image: true } : {}), // l'image elle-même n'est jamais conservée
     },
   });
-  if (!lexique.confident && !body.lesson && body.message.trim().length >= 6) void enrichInBackground(body.message);
+  if (!lexique.confident && !body.lesson && subject.trim().length >= 6) void enrichInBackground(subject);
   res.json({ answer: answer.text });
 });

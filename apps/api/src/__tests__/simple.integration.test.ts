@@ -110,7 +110,7 @@ describe('Parcours simple comme AnyDesk : numéro d’aide, sans inscription', (
     await request(app).post(`/api/app/sessions/${c.sessionId}/chat`).set(c.auth).send({ message: 'Ma clé USB bleue ne marche plus', history: [] });
     expect((await request(app).post(`/api/app/sessions/${c.sessionId}/chat/feedback`).set(c.auth).send({ helped: false })).body).toEqual({ remembered: false });
     const yes = await request(app).post(`/api/app/sessions/${c.sessionId}/chat/feedback`).set(c.auth).send({ helped: true });
-    expect(yes.body).toEqual({ remembered: true });
+    expect(yes.body).toMatchObject({ remembered: true });
     const row = await pool.query(`SELECT status, source, title FROM learned_pannes WHERE source = 'client:resolved'`);
     expect(row.rows[0]).toMatchObject({ status: 'candidate' });
     expect(row.rows[0].title).toContain('clé USB bleue');

@@ -213,3 +213,49 @@ describe('Réponses tronquées par la limite de sortie (cas « …dire ce qui es
     expect(trimToLastSentence('Première phrase. Seconde phrase qui est coupée')).toBe('Première phrase.');
   });
 });
+
+describe('askOfficeAssistant — DeepSeek d’abord, puis Gemini', () => {
+  const deepseek = (text: string) => ({ choices: [{ finish_reason: 'stop', message: { content: text } }] });
+  const env = { DEEPSEEK_API_KEY: 'ds-secret', GEMINI_API_KEY: 'gm-secret' };
+
+  it('DeepSeek répond en premier ; la clé est dans l’en-tête, les règles dans le message « system »', async () => {
+    const { impl, calls } = fakeFetch(() => json(deepseek('  Ouvrez Paramètres > Système > Son.  ')));
+    const out = await askOfficeAssistant('mon micro ne marche pas', [], { env, fetchImpl: impl });
+    expect(out.text).toBe('Ouvrez Paramètres > Système > Son.');
+    expect(out.model).toBe('deepseek-chat');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('https://api.deepseek.com/chat/completions');
+    expect((calls[0]!.init.headers as Record<string, string>).Authorization).toBe('Bearer ds-secret');
+    const body = JSON.parse(String(calls[0]!.init.body)) as { messages: { role: string; content: string }[] };
+    expect(body.messages[0]).toMatchObject({ role: 'system' });
+    expect(body.messages[0]!.content.startsWith(SYSTEM_PROMPT)).toBe(true);
+    expect(body.messages.at(-1)).toEqual({ role: 'user', content: 'mon micro ne marche pas' });
+  });
+
+  it('DeepSeek en panne (crédit épuisé, 402) : Gemini prend le relais', async () => {
+    const { impl, calls } = fakeFetch((url) => (url.includes('deepseek') ? json({ error: 'Insufficient Balance' }, 402) : json(gemini('Réponse de Gemini.'))));
+    const out = await askOfficeAssistant('Q', [], { env, fetchImpl: impl });
+    expect(out.text).toBe('Réponse de Gemini.');
+    expect(calls.map((c) => c.url.includes('deepseek'))).toEqual([true, false]);
+  });
+
+  it('une capture d’écran ne passe pas par DeepSeek (texte seul)', async () => {
+    const { impl, calls } = fakeFetch(() => json(gemini('Je vois une fenêtre.')));
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]).toString('base64');
+    await askOfficeAssistant('Que voyez-vous ?', [], { env, fetchImpl: impl, image: { mime: 'image/jpeg', data: jpeg } });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toContain('generativelanguage');
+  });
+
+  it('seule la clé DeepSeek est configurée : elle suffit', async () => {
+    const { impl } = fakeFetch(() => json(deepseek('Voici.')));
+    expect((await askOfficeAssistant('Q', [], { env: { DEEPSEEK_API_KEY: 'k' }, fetchImpl: impl })).text).toBe('Voici.');
+  });
+
+  it('toutes les IA échouent : indisponible, sans divulguer aucune clé', async () => {
+    const { impl } = fakeFetch(() => json({}, 500));
+    const err = await askOfficeAssistant('Q', [], { env, fetchImpl: impl }).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(AssistantUnavailableError);
+    expect(String((err as Error).message)).not.toMatch(/secret/);
+  });
+});

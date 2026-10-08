@@ -56,13 +56,22 @@ export function providerConfigured(provider: ProviderName, env: Env = process.en
   return !!env[keyEnv[provider]]?.trim();
 }
 
-/** Fournisseurs à essayer, dans l'ordre, parmi ceux qui ont une clé. */
-export function providerChain(env: Env = process.env): ProviderName[] {
-  const wanted = (env.LEARNING_PROVIDERS ?? 'deepseek,gemini,claude')
+function chainFrom(order: string | undefined, env: Env): ProviderName[] {
+  const wanted = (order ?? 'deepseek,gemini,claude')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter((s): s is ProviderName => (PROVIDER_NAMES as readonly string[]).includes(s));
   return [...new Set(wanted)].filter((p) => providerConfigured(p, env));
+}
+
+/** Fournisseurs à essayer pour rédiger des fiches (apprentissage), dans l'ordre, parmi ceux qui ont une clé. */
+export function providerChain(env: Env = process.env): ProviderName[] {
+  return chainFrom(env.LEARNING_PROVIDERS, env);
+}
+
+/** Fournisseurs à essayer pour le chat avec le client (variable CHAT_PROVIDERS, défaut : deepseek, gemini, claude). */
+export function chatChain(env: Env = process.env): ProviderName[] {
+  return chainFrom(env.CHAT_PROVIDERS, env);
 }
 
 export interface CallOptions {

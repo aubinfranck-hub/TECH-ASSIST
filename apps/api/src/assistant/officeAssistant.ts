@@ -20,6 +20,7 @@ export const MAX_ANSWER_CHARS = 3000;
 
 import { lessonInstruction, type TrainingStep, type TrainingTrack } from './trainingCatalog.js';
 import { referenceFor } from './pannes.js';
+import { chatChain, modelFor, type ProviderName } from '../learning/providers.js';
 
 /** gemini-2.0-flash a été arrêté par Google le 1er juin 2026 : tout appel renvoyait une erreur. */
 const DEFAULT_MODEL = 'gemini-3.5-flash';
@@ -139,11 +140,107 @@ export interface AssistantAnswer {
   model: string;
 }
 
+function systemFor(message: string, options: AskOptions): string {
+  return (
+    (options.platform === 'android' ? PHONE_SYSTEM_PROMPT : SYSTEM_PROMPT) +
+    '\n\nTu es le premier niveau IA de TechAssist. Tu analyses et guides ; tu ne prétends jamais avoir vérifié ou réparé un appareil sans outil réel. Si les informations sont insuffisantes ou si le problème persiste, recommande clairement le technicien.\n' +
+    (options.context ? `\nCONTEXTE VALIDÉ DE LA MÉMOIRE TECHASSIST :\n${options.context.slice(0, 5000)}\nUtilise-le comme piste sans prétendre avoir exécuté ses actions.\n` : '') +
+    (options.lesson ? lessonInstruction(options.lesson.track, options.lesson.level, options.lesson.step, options.lesson.index) : '') +
+    (options.image ? IMAGE_RULES : '') +
+    (options.platform !== 'android' && !options.lesson ? referenceFor(message) : '')
+  );
+}
+
+const asMessages = (history: ChatTurn[], message: string) =>
+  buildContents(history, message).map((c) => ({ role: c.role === 'model' ? ('assistant' as const) : ('user' as const), content: c.parts.map((p) => p.text ?? '').join('') }));
+
+/** DeepSeek (API compatible OpenAI) : texte seul, pas d'image. */
+async function askDeepseek(message: string, history: ChatTurn[], options: AskOptions, system: string, apiKey: string): Promise<AssistantAnswer> {
+  const env = options.env ?? process.env;
+  const base = (env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/$/, '');
+  const model = modelFor('deepseek', env);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 25_000);
+  try {
+    const response = await (options.fetchImpl ?? fetch)(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+      body: JSON.stringify({ model, messages: [{ role: 'system', content: system }, ...asMessages(history, message)], temperature: 0.3, max_tokens: options.lesson ? 2500 : 1500 }),
+    });
+    if (!response.ok) throw new AssistantUnavailableError(`DeepSeek a répondu ${response.status}`);
+    const data = (await response.json()) as { choices?: { finish_reason?: string; message?: { content?: string } }[] };
+    let text = (data.choices?.[0]?.message?.content ?? '').trim();
+    if (!text) throw new AssistantUnavailableError('DeepSeek : réponse vide');
+    if (data.choices?.[0]?.finish_reason === 'length') text = trimToLastSentence(text);
+    return { text: text.length > MAX_ANSWER_CHARS ? `${text.slice(0, MAX_ANSWER_CHARS - 1)}…` : text, model };
+  } catch (err) {
+    if (err instanceof AssistantUnavailableError) throw err;
+    throw new AssistantUnavailableError(err instanceof Error && err.name === 'AbortError' ? 'DeepSeek : délai dépassé' : 'DeepSeek injoignable');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Claude (API Anthropic), avec image possible. */
+async function askClaude(message: string, history: ChatTurn[], options: AskOptions, system: string, apiKey: string): Promise<AssistantAnswer> {
+  const env = options.env ?? process.env;
+  const model = modelFor('claude', env);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 25_000);
+  try {
+    const messages: { role: 'user' | 'assistant'; content: unknown }[] = asMessages(history, message);
+    if (options.image && messages.length > 0) {
+      const last = messages[messages.length - 1]!;
+      last.content = [{ type: 'image', source: { type: 'base64', media_type: options.image.mime, data: options.image.data } }, { type: 'text', text: String(last.content) }];
+    }
+    const response = await (options.fetchImpl ?? fetch)('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      signal: controller.signal,
+      body: JSON.stringify({ model, max_tokens: options.lesson ? 2500 : 1500, system, messages }),
+    });
+    if (!response.ok) throw new AssistantUnavailableError(`Claude a répondu ${response.status}`);
+    const data = (await response.json()) as { content?: { type?: string; text?: string }[]; stop_reason?: string };
+    let text = (data.content ?? []).map((b) => (b.type === 'text' && typeof b.text === 'string' ? b.text : '')).join('').trim();
+    if (!text) throw new AssistantUnavailableError('Claude : réponse vide');
+    if (data.stop_reason === 'max_tokens') text = trimToLastSentence(text);
+    return { text: text.length > MAX_ANSWER_CHARS ? `${text.slice(0, MAX_ANSWER_CHARS - 1)}…` : text, model };
+  } catch (err) {
+    if (err instanceof AssistantUnavailableError) throw err;
+    throw new AssistantUnavailableError(err instanceof Error && err.name === 'AbortError' ? 'Claude : délai dépassé' : 'Claude injoignable');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Répond avec la première IA disponible : DeepSeek d'abord (le moins cher), puis Gemini, puis Claude (ordre de LEARNING_PROVIDERS).
+ * Une IA qui échoue (clé refusée, crédit épuisé, délai) laisse la suivante essayer ; une capture d'écran ne passe que par Gemini/Claude.
+ */
 export async function askOfficeAssistant(message: string, history: ChatTurn[], options: AskOptions = {}): Promise<AssistantAnswer> {
   const env = options.env ?? process.env;
-  const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) throw new AssistantUnavailableError('GEMINI_API_KEY non configurée');
+  const chain = chatChain(env).filter((p) => !(options.image && p === 'deepseek'));
+  if (chain.length === 0) throw new AssistantUnavailableError('Aucune clé d\'IA configurée (DEEPSEEK_API_KEY, GEMINI_API_KEY ou ANTHROPIC_API_KEY)');
+  const system = systemFor(message, options);
+  let last: AssistantUnavailableError = new AssistantUnavailableError('aucune réponse');
+  for (const provider of chain as ProviderName[]) {
+    try {
+      const key = (provider === 'deepseek' ? env.DEEPSEEK_API_KEY : provider === 'gemini' ? env.GEMINI_API_KEY : env.ANTHROPIC_API_KEY)!.trim();
+      if (provider === 'deepseek') return await askDeepseek(message, history, options, system, key);
+      if (provider === 'claude') return await askClaude(message, history, options, system, key);
+      return await askGemini(message, history, options, system, key);
+    } catch (err) {
+      if (!(err instanceof AssistantUnavailableError)) throw err;
+      console.error(`[assistant] ${provider} indisponible : ${err.message}`);
+      last = err;
+    }
+  }
+  throw last;
+}
 
+async function askGemini(message: string, history: ChatTurn[], options: AskOptions, system: string, apiKey: string): Promise<AssistantAnswer> {
+  const env = options.env ?? process.env;
   const model = modelName(env);
   const doFetch = options.fetchImpl ?? fetch;
   const controller = new AbortController();
@@ -156,17 +253,7 @@ export async function askOfficeAssistant(message: string, history: ChatTurn[], o
       signal: controller.signal,
       body: JSON.stringify({
         systemInstruction: {
-          parts: [
-            {
-              text:
-                (options.platform === 'android' ? PHONE_SYSTEM_PROMPT : SYSTEM_PROMPT) +
-                '\n\nTu es le premier niveau IA de TechAssist. Tu analyses et guides ; tu ne prétends jamais avoir vérifié ou réparé un appareil sans outil réel. Si les informations sont insuffisantes ou si le problème persiste, recommande clairement le technicien.\n' +
-                (options.context ? `\nCONTEXTE VALIDÉ DE LA MÉMOIRE TECHASSIST :\n${options.context.slice(0, 5000)}\nUtilise-le comme piste sans prétendre avoir exécuté ses actions.\n` : '') +
-                (options.lesson ? lessonInstruction(options.lesson.track, options.lesson.level, options.lesson.step, options.lesson.index) : '') +
-                (options.image ? IMAGE_RULES : '') +
-                (options.platform !== 'android' && !options.lesson ? referenceFor(message) : ''),
-            },
-          ],
+          parts: [{ text: system }],
         },
         contents: buildContents(history, message, options.image),
         // Les modèles Gemini « réfléchissants » comptent leur réflexion dans maxOutputTokens : avec 800, il ne restait que quelques mots

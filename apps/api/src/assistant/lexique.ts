@@ -98,11 +98,34 @@ const COMMAND = /\b(net (stop|start)|netsh|sfc|dism|chkdsk|w32tm|powercfg|regedi
  * (ni matériel, ni BIOS, ni registre, ni commande). Une proposition non relue n'est jamais ressortie à d'autres clients.
  */
 export function contextFrom(entries: LexiqueEntry[]): string {
+  // Confirmées (technicien, ou 2 clients différents), et fiches rédigées par l'IA elle-même (« ia ») même si elles ne sont pas encore
+  // confirmées : ce n'est pas du texte de client, et c'est ainsi qu'elles gagnent leurs confirmations. Jamais un retour brut de client non relu.
   const usable = entries
-    .filter((e) => e.origin !== 'base' && e.status === 'trusted' && !e.advanced && !COMMAND.test(e.solution))
+    .filter((e) => e.origin !== 'base' && (e.status === 'trusted' || e.origin === 'ia') && !e.advanced && !COMMAND.test(e.solution))
     .slice(0, 3);
   if (usable.length === 0) return '';
-  return usable.map((e) => `Fiche du lexique : ${e.title} — cause : ${e.cause || 'non précisée'} — piste : ${e.solution.slice(0, 600)}`).join('\n');
+  return usable
+    .map((e) => `Fiche du lexique${e.status === 'trusted' ? '' : ' (pas encore confirmée)'} : ${e.title} — cause : ${e.cause || 'non précisée'} — piste : ${e.solution.slice(0, 600)}`)
+    .join('\n');
+}
+
+/** Les fiches apprises (IA) qui ont servi de contexte : leurs identifiants, pour créditer la confirmation du client. */
+export function usedFicheIds(entries: LexiqueEntry[]): string[] {
+  return entries
+    .filter((e) => e.origin === 'ia' && !e.advanced && !COMMAND.test(e.solution) && typeof e.id === 'string')
+    .slice(0, 3)
+    .map((e) => e.id as string);
+}
+
+/**
+ * Réponse DIRECTE de la mémoire, sans appel d'IA : une fiche de l'IA confirmée par des clients (« de confiance ») qui correspond à la demande
+ * (la recherche exige déjà 75 % des mots), faisable par le client lui-même (ni matériel, ni BIOS, ni commande).
+ */
+export function memoryAnswer(entries: LexiqueEntry[]): { text: string; id: string } | null {
+  const hit = entries.find((e) => e.origin === 'ia' && e.status === 'trusted' && !e.advanced && !COMMAND.test(e.solution) && typeof e.id === 'string');
+  if (!hit) return null;
+  const cause = hit.cause ? `Cause probable : ${hit.cause}\n\n` : '';
+  return { id: hit.id as string, text: `${cause}${hit.solution}\n\nCette solution a déjà réglé le même problème chez d'autres clients. Si elle ne règle pas le vôtre, dites-le-moi : je chercherai autre chose.`.slice(0, 2900) };
 }
 
 export async function lexiqueContext(query: string): Promise<string> {
