@@ -16,6 +16,8 @@ android {
         // Chaque fabrication a un numéro plus grand (obligatoire pour qu'Android accepte la mise à jour par-dessus la version installée).
         versionCode = prop("versionCode")?.toInt() ?: 1
         versionName = prop("versionName") ?: "1.0.0"
+        // Essai sur émulateur : le faux serveur parle en http (10.0.2.2 = l'ordinateur hôte) ; jamais en production.
+        manifestPlaceholders["cleartext"] = prop("testCleartext") ?: "false"
         buildConfigField("String", "SITE_URL", "\"${prop("siteUrl") ?: "https://tech-assist-web.onrender.com"}\"")
         buildConfigField("String", "API_URL", "\"${prop("apiUrl") ?: "https://tech-assist-api.onrender.com"}\"")
     }
