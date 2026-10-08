@@ -8,7 +8,7 @@ export function PhonePage() {
       <PageHero
         eyebrow="APPLICATION ANDROID"
         title="Votre assistance dans votre poche."
-        text="L’APK TechAssist transforme votre téléphone en point d’entrée direct vers le diagnostic IA et le technicien."
+        text="L’application TechAssist vous donne des conseils écrits de l’IA, puis vous met en relation avec un technicien (l’IA ne peut pas modifier votre téléphone)."
         image={SITE_IMAGES.office}
         imageAlt="Ordinateur et téléphone utilisés pour une assistance informatique"
         action={{ label: 'Demander de l’aide', to: '/demander-aide' }}
@@ -17,7 +17,7 @@ export function PhonePage() {
       <div className="ta-container py-10 sm:py-14">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ['🤖','IA','Analyse et conseils guidés.'],
+            ['🤖','IA','Conseils écrits, pas d’action sur le téléphone.'],
             ['🧠','Historique','Le dossier reste disponible.'],
             ['👨‍🔧','Technicien','Escalade sans répéter le problème.'],
             ['🛑','Contrôle','Vous arrêtez la session quand vous voulez.'],

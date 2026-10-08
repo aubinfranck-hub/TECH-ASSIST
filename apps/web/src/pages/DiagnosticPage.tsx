@@ -3,8 +3,8 @@ import { SITE_IMAGES } from '../lib/imageSources.js';
 import { PageHero } from '../components/PageHero.js';
 
 const windowsFeatures = [
-  ['🖥️', 'Diagnostic PC', 'Analyse guidée des problèmes Windows, performances, démarrage et périphériques.'],
-  ['🧰', 'Dépannage', 'Des étapes concrètes, expliquées simplement, avant l’intervention humaine.'],
+  ['🖥️', 'Agent Windows', 'À installer sur le PC : il analyse vraiment l’ordinateur (disque, réseau, démarrage, pilotes…) et répare, avec votre accord à chaque étape.'],
+  ['🧰', 'Conseils de l’IA', 'Depuis le site, l’IA vous répond par écrit : elle ne voit pas votre PC et ne peut rien y modifier.'],
   ['🔐', 'Accès contrôlé', 'Une intervention distante n’est possible qu’avec votre autorisation.'],
   ['👨‍🔧', 'Technicien', 'Si l’IA ne suffit pas, le dossier et son historique passent au technicien.'],
 ];
@@ -21,7 +21,7 @@ export function DiagnosticPage() {
       <PageHero
         eyebrow="WINDOWS & OFFICE"
         title="Un PC qui fonctionne. Un travail qui continue."
-        text="TechAssist vous accompagne sur Windows et les outils Office avec une première analyse IA, puis un technicien reprend le dossier lorsque la situation l’exige."
+        text="Sur le site, une IA vous conseille par écrit. Pour analyser et réparer votre PC, installez l’agent Windows. Un technicien peut ensuite prendre la main si nécessaire."
         image={SITE_IMAGES.pc}
         imageAlt="Ordinateur Windows utilisé pour une assistance informatique"
         action={{ label: 'Démarrer mon assistance', to: '/demander-aide' }}

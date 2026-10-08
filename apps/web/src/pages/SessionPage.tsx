@@ -257,7 +257,7 @@ export function SessionPage() {
   const statusLabel: Record<string, string> = {
     created: 'Demande reçue',
     waiting_technician: 'En attente d’un technicien',
-    active: session.mode === 'ia' ? 'Analyse en cours' : 'Assistance en cours',
+    active: session.mode === 'ia' ? 'Conversation avec l’IA' : 'Assistance en cours',
     completed: 'Terminée',
     cancelled: 'Arrêtée',
   };
@@ -317,7 +317,7 @@ export function SessionPage() {
           <div className="mb-4">
             <p className="font-bold text-slate-900">🤖 Assistant IA TechAssist</p>
             <p className="mt-1 text-sm text-slate-500">
-              J'analyse votre problème. Si je ne peux pas le résoudre, je passe la main à un technicien.
+              Je vous conseille par écrit. <strong>Je ne vois pas votre ordinateur</strong> et je ne peux rien y modifier depuis cette page. Pour que votre PC soit analysé et réparé avec votre accord, utilisez l’<a href="https://github.com/aubinfranck-hub/TECH-ASSIST/releases/download/agent-latest/tech-assist-agent.exe" className="font-semibold text-brand-700 underline">agent Windows</a> ; sinon, demandez un technicien.
             </p>
           </div>
           <div className="max-h-80 space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-3">
@@ -329,7 +329,7 @@ export function SessionPage() {
               </div>
             ))}
             {messages.filter((m) => m.sender === 'client' || m.sender === 'assistant').length === 0 && (
-              <p className="py-6 text-center text-sm text-slate-500">🤖 Analyse de votre demande par TechAssist IA…</p>
+              <p className="py-6 text-center text-sm text-slate-500">{chatLoading ? '🤖 L’IA rédige sa réponse…' : 'Écrivez votre question ci-dessous : l’IA vous répondra par écrit.'}</p>
             )}
           </div>
           {chatError && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{chatError}</p>}

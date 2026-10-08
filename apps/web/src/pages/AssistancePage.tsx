@@ -3,7 +3,7 @@ import { PageHero } from '../components/PageHero.js';
 import { SITE_IMAGES } from '../lib/imageSources.js';
 
 const benefits = [
-  ['🤖', 'IA TechAssist', 'Une première analyse claire avant de faire intervenir un technicien.'],
+  ['🤖', 'IA TechAssist', 'Des conseils clairs par écrit avant de faire intervenir un technicien (elle ne voit pas votre PC).'],
   ['🧑‍🔧', 'Technicien humain', 'Le dossier, l’historique et les échanges suivent le même parcours.'],
   ['🔐', 'Assistance sécurisée', 'Vous gardez le contrôle et autorisez l’accès distant lorsque nécessaire.'],
   ['⚡', 'Résolution', 'Une seule continuité de dossier, de la première question à l’intervention.'],
@@ -11,7 +11,7 @@ const benefits = [
 
 const products = [
   ['📱', 'Android', 'APK natif pour le diagnostic IA, le suivi du dossier et le passage au technicien.', '/telephone', SITE_IMAGES.office],
-  ['💻', 'Windows', 'Assistance PC, diagnostic local et intervention distante lorsque nécessaire.', '/diagnostic', SITE_IMAGES.pc],
+  ['💻', 'Windows', 'L’agent analyse et répare votre PC avec votre accord ; un technicien peut prendre la main à distance.', '/diagnostic', SITE_IMAGES.pc],
   ['📄', 'Office', 'Accompagnement Word, Excel, Outlook et problèmes courants de productivité.', '/diagnostic', SITE_IMAGES.office],
 ];
 
@@ -73,7 +73,7 @@ export function AssistancePage() {
               <div className="mt-7 space-y-5">
                 {[
                   ['01', 'Décrire', 'Vous indiquez le problème et le contexte.'],
-                  ['02', 'Analyser', 'TechAssist recherche une piste et vous guide.'],
+                  ['02', 'Conseiller', 'L’IA vous guide par écrit ; l’agent Windows peut analyser votre PC.'],
                   ['03', 'Valider', 'Vous confirmez si la solution fonctionne.'],
                   ['04', 'Transmettre', 'Si nécessaire, le technicien récupère le dossier complet.'],
                 ].map(([n, t, d]) => (

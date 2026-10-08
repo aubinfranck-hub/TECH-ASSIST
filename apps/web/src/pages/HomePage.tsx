@@ -8,7 +8,7 @@ import { VisitRequestForm } from '../components/VisitRequestForm.js';
 
 const STEPS = [
   { n: '01', title: 'Vous lancez l’assistance', text: 'Lancez votre demande directement depuis le site ou l’application.' },
-  { n: '02', title: 'L’agent analyse, vous validez', text: 'L’assistant analyse votre problème, vous explique les étapes et demande votre accord lorsque l’intervention nécessite une action.' },
+  { n: '02', title: 'L’IA vous guide, vous validez', text: 'L’IA vous conseille par écrit. L’agent Windows, installé sur votre PC, peut l’analyser et le réparer, mais seulement avec votre accord à chaque étape.' },
   { n: '03', title: 'Votre dossier est résolu ou transmis', text: 'Vous confirmez le résultat. Si le problème persiste, un technicien reprend le dossier avec l’historique.' },
 ];
 
@@ -38,7 +38,7 @@ export function HomePage() {
               Votre support IT partout <span className="text-brand-500">en Afrique</span>
             </h1>
             <p className="mt-4 max-w-md text-base leading-7 text-slate-200 sm:text-lg">
-              Assistance à distance et sur site pour particuliers, PME et entreprises. Nos techniciens vous accompagnent en temps réel pour résoudre tous vos problèmes informatiques.
+              Assistance à distance et sur site pour particuliers, PME et entreprises. Une IA vous guide par écrit, puis un technicien peut prendre la main sur votre écran, avec votre accord, pour résoudre votre problème informatique.
             </p>
             <ul className="mt-6 grid gap-4 sm:grid-cols-3">
               {[
@@ -63,7 +63,7 @@ export function HomePage() {
             [SITE_IMAGES.pc, 'PC & Laptop', 'Dépannage, optimisation, mises à jour, remplacement de pièces, installation…'],
             [SITE_IMAGES.network, 'Réseau & Internet', 'Configuration, Wi-Fi, routeurs, partage de connexion, VPN, serveur…'],
             [SITE_IMAGES.office, 'Windows & Office', 'Installation, configuration, formation, dépannage de vos logiciels…'],
-            [SITE_IMAGES.security, 'Sécurité & Maintenance', 'Suppression de virus, sauvegarde de données, surveillance, maintenance…'],
+            [SITE_IMAGES.security, 'Sécurité & Maintenance', 'Suppression de virus, sauvegarde de données, maintenance… (avec un technicien ou l’agent Windows)'],
           ].map(([image, title, text]) => (
             <Link key={title} to="/assistance" className="group flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card sm:flex-col">
               <img src={image} alt="" loading="lazy" className="h-auto w-32 shrink-0 object-cover sm:aspect-[343/103] sm:w-full" />
