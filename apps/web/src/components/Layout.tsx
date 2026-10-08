@@ -1,4 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { isAppMode } from '../lib/appMode.js';
 
 function Brand({ dark = false }: { dark?: boolean }) {
   return (
@@ -14,6 +15,8 @@ function Brand({ dark = false }: { dark?: boolean }) {
 export function Layout() {
   const location = useLocation();
   const isHome = location.pathname === '/';
+  // Application technicien (Windows/Android) : la console occupe toute la fenêtre, sans l'en-tête ni le pied du site.
+  if (isAppMode(window.location, sessionStorage)) return <Outlet />;
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f7f8fa]">
