@@ -6,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: apps/android
@@ -26,3 +28,14 @@ jobs:
         with:
           name: techassist-android-debug
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+      # Téléchargement direct depuis le site : la dernière version de l'application Android est toujours à la même adresse.
+      - name: Nom stable de l'APK
+        run: cp apps/android/app/build/outputs/apk/debug/app-debug.apk tech-assist-android.apk
+        working-directory: .
+      - name: Publier
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          target_commitish: ${{ github.sha }}
+          name: Application Android (dernière version)
+          files: tech-assist-android.apk

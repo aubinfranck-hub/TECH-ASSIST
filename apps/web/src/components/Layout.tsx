@@ -22,13 +22,10 @@ export function Layout() {
           <Link to="/" aria-label="Tech Assist - Accueil" className="shrink-0"><Brand /></Link>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Navigation principale">
-            <Link to="/assistance" className={`ta-nav-link ${location.pathname === '/assistance' || location.pathname === '/demander-aide' ? 'ta-nav-link-active' : ''}`}>Comment ça marche</Link>
-            <Link to="/demander-aide" className="ta-nav-link">Demander de l’aide</Link>
-            <Link to="/session" className={`ta-nav-link ${location.pathname === '/session' ? 'ta-nav-link-active' : ''}`}>J’ai un code</Link>
-            <Link to="/entreprise" className={`ta-nav-link ${location.pathname === '/entreprise' ? 'ta-nav-link-active' : ''}`}>Entreprises</Link>
-            <Link to="/partenaire" className={`ta-nav-link ${location.pathname === '/partenaire' ? 'ta-nav-link-active' : ''}`}>Partenaires</Link>
+            <a href="/#comment" className="ta-nav-link">Comment ça marche</a>
+            <a href="/#suivre" className="ta-nav-link">Suivre ma demande</a>
             <Link to="/technicien" className="ml-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">Espace technicien</Link>
-            <Link to="/demander-aide" className="ml-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-brand-700">Demander de l’aide</Link>
+            <a href="/#telecharger" className="ml-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-brand-700">Télécharger</a>
           </nav>
 
           <details className="group relative md:hidden">
@@ -36,12 +33,9 @@ export function Layout() {
               <svg width="19" height="19" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 5h12M3 9h12M3 13h12" /></svg>
             </summary>
             <nav className="absolute right-0 top-12 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-soft" aria-label="Navigation mobile">
-              <Link to="/" className="block rounded-xl px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50">Accueil</Link>
-              <Link to="/demander-aide" className="block rounded-xl px-4 py-3 font-semibold text-brand-700 hover:bg-brand-50">Demander de l’aide</Link>
-              <Link to="/assistance" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Comment ça marche</Link>
-              <Link to="/session" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">J’ai un code</Link>
-              <Link to="/entreprise" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Entreprises</Link>
-              <Link to="/partenaire" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Techniciens partenaires</Link>
+              <a href="/#telecharger" className="block rounded-xl px-4 py-3 font-semibold text-brand-700 hover:bg-brand-50">Télécharger</a>
+              <a href="/#comment" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Comment ça marche</a>
+              <a href="/#suivre" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Suivre ma demande</a>
               <Link to="/technicien" className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50">Espace technicien</Link>
             </nav>
           </details>
@@ -63,13 +57,11 @@ export function Layout() {
             </div>
           </div>
           <div>
-            <p className="text-sm font-bold text-white">Services</p>
+            <p className="text-sm font-bold text-white">Tech Assist</p>
             <div className="mt-4 space-y-2.5 text-sm">
-              <Link to="/demander-aide" className="block transition hover:text-white">Demander de l’aide</Link>
-              <Link to="/assistance" className="block transition hover:text-white">Comment ça marche</Link>
-              <Link to="/session" className="block transition hover:text-white">Suivre ma session</Link>
-              <Link to="/entreprise" className="block transition hover:text-white">Espace entreprise</Link>
-              <Link to="/partenaire" className="block transition hover:text-white">Techniciens partenaires</Link>
+              <a href="/#telecharger" className="block transition hover:text-white">Télécharger</a>
+              <a href="/#suivre" className="block transition hover:text-white">Suivre ma demande</a>
+              <Link to="/technicien" className="block transition hover:text-white">Espace technicien</Link>
             </div>
           </div>
           <div>

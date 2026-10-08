@@ -1,146 +1,127 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { SITE_IMAGES } from '../lib/imageSources.js';
-import { PmeRequestForm } from '../components/PmeRequestForm.js';
-import { PricingTable } from '../components/PricingTable.js';
-import { TechnicianApplyForm } from '../components/TechnicianApplyForm.js';
-import { VisitRequestForm } from '../components/VisitRequestForm.js';
 
+const RELEASES = 'https://github.com/aubinfranck-hub/TECH-ASSIST/releases/download';
+export const WINDOWS_URL = `${RELEASES}/agent-latest/tech-assist-agent.exe`;
+export const ANDROID_URL = `${RELEASES}/android-latest/tech-assist-android.apk`;
 
 const STEPS = [
-  { n: '01', title: 'Vous lancez l’assistance', text: 'Lancez votre demande directement depuis le site ou l’application.' },
-  { n: '02', title: 'L’IA vous guide, vous validez', text: 'L’IA vous conseille par écrit. L’agent Windows, installé sur votre PC, peut l’analyser et le réparer, mais seulement avec votre accord à chaque étape.' },
-  { n: '03', title: 'Votre dossier est résolu ou transmis', text: 'Vous confirmez le résultat. Si le problème persiste, un technicien reprend le dossier avec l’historique.' },
+  { title: 'Vous téléchargez et vous ouvrez', text: 'Sur votre ordinateur Windows ou votre téléphone Android. Pas de compte à créer : un numéro d’aide s’affiche tout de suite.' },
+  { title: 'L’IA vous aide, tout de suite', text: 'Décrivez votre problème comme à un technicien, par écrit ou à voix haute. Elle cherche, vous guide et, sur Windows, répare avec votre accord.' },
+  { title: 'Un technicien prend le relais', text: 'Si elle n’y arrive pas, un technicien est alerté. Vous lui donnez votre numéro, vous acceptez, et il règle le problème avec vous, à distance.' },
 ];
 
 const FAQ = [
-  ['Le technicien peut-il voir mes fichiers personnels ?', 'Non, sauf nécessité explicite liée au problème signalé et avec votre accord. Les actions sont journalisées.'],
-  ['Comment puis-je arrêter une session ?', 'Un bouton « Arrêter » permet de couper immédiatement l’assistance pendant la session.'],
-  ['Et si mon problème est matériel ?', 'Une panne matérielle peut nécessiter une intervention sur place. Vous pouvez demander un déplacement.'],
-  ['Comment se fait le paiement ?', 'Le lancement actuel est gratuit. Les tarifs habituels sont affichés à titre indicatif : 500 FCFA pour l’agent IA seul ou 2 000 FCFA avec un technicien. Les modalités de paiement seront proposées lorsque la facturation sera activée.'],
+  ['Est-ce que c’est gratuit ?', 'Oui pendant le lancement. Les prix habituels seront annoncés avant toute facturation.'],
+  ['Le technicien voit-il mes fichiers ?', 'Il ne voit votre écran qu’après votre accord, et vous pouvez tout arrêter à tout moment. Il n’accède ni à vos documents, ni à vos photos, ni à vos mots de passe.'],
+  ['Et si mon problème est matériel ?', 'Un technicien peut vous orienter, ou intervenir sur place si nécessaire.'],
 ];
 
+function DownloadCard({ icon, title, text, href, action, note }: { icon: string; title: string; text: string; href: string; action: string; note: string }) {
+  return (
+    <div className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+      <span className="text-4xl" aria-hidden>{icon}</span>
+      <h3 className="mt-4 font-display text-xl font-extrabold">{title}</h3>
+      <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">{text}</p>
+      <a href={href} className="ta-button-primary mt-5 w-full">{action}</a>
+      <p className="mt-2 text-center text-xs text-slate-500">{note}</p>
+    </div>
+  );
+}
+
+/**
+ * Le site n'est qu'une vitrine : il explique et fait télécharger. Tout le reste (aide de l'IA, demande de technicien, partage d'écran)
+ * se passe dans l'application, comme avec AnyDesk ou TeamViewer.
+ */
 export function HomePage() {
+  const navigate = useNavigate();
+  const [code, setCode] = useState('');
+  const digits = code.replace(/\D/g, '');
+
   return (
     <div>
       <section className="relative overflow-hidden bg-[#07101d] text-white">
-        <img
-          src={SITE_IMAGES.hero}
-          alt="Technicien Tech Assist au casque, devant un ordinateur, dans un centre d’assistance"
-          className="h-56 w-full object-cover object-[70%_center] sm:h-72 lg:absolute lg:inset-y-0 lg:right-0 lg:h-full lg:w-[66%] lg:object-center"
-          fetchPriority="high"
-        />
-        <div className="pointer-events-none absolute inset-x-0 top-0 hidden h-full bg-gradient-to-r from-[#07101d] from-35% via-[#07101d]/70 to-transparent lg:block" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-transparent via-transparent to-[#07101d] sm:h-72 lg:hidden" />
+        <img src={SITE_IMAGES.hero} alt="" className="h-48 w-full object-cover object-[70%_center] sm:h-64 lg:absolute lg:inset-y-0 lg:right-0 lg:h-full lg:w-[60%] lg:object-center" fetchPriority="high" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 hidden h-full bg-gradient-to-r from-[#07101d] from-40% via-[#07101d]/70 to-transparent lg:block" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-transparent via-transparent to-[#07101d] sm:h-64 lg:hidden" />
         <div className="ta-container relative">
-          <div className="max-w-xl pb-10 pt-2 lg:py-16">
-            <p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-300 sm:text-sm">Assistance informatique professionnelle</p>
-            <h1 className="mt-3 font-display text-[2.5rem] font-extrabold leading-[1.02] sm:text-6xl">
-              Votre support IT partout <span className="text-brand-500">en Afrique</span>
+          <div className="max-w-xl pb-10 pt-2 lg:py-20">
+            <p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-300 sm:text-sm">Assistance informatique à distance</p>
+            <h1 className="mt-3 font-display text-[2.4rem] font-extrabold leading-[1.04] sm:text-5xl">
+              Un technicien dans votre ordinateur et votre téléphone.
             </h1>
-            <p className="mt-4 max-w-md text-base leading-7 text-slate-200 sm:text-lg">
-              Assistance à distance et sur site pour particuliers, PME et entreprises. Une IA vous guide par écrit, puis un technicien peut prendre la main sur votre écran, avec votre accord, pour résoudre votre problème informatique.
+            <p className="mt-4 text-base leading-7 text-slate-200 sm:text-lg">
+              Téléchargez Tech Assist et ouvrez-le. Une IA vous aide tout de suite ; si elle n’y arrive pas, un technicien prend la main à distance, avec votre accord.
             </p>
-            <ul className="mt-6 grid gap-4 sm:grid-cols-3">
-              {[
-                ['Sécurisé', 'Connexions chiffrées'],
-                ['Rapide', 'Mise en relation en quelques minutes'],
-                ['Techniciens africains', 'Disponibles et qualifiés'],
-              ].map(([t, d]) => (
-                <li key={t} className="text-sm"><p className="font-bold">{t}</p><p className="mt-0.5 text-xs text-slate-400">{d}</p></li>
-              ))}
-            </ul>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Link to="/demander-aide" className="ta-button bg-brand-600 text-white hover:bg-brand-500 sm:px-7">🆘 Demander de l’aide — gratuit <span aria-hidden className="ml-2">→</span></Link>
-              <Link to="/assistance" className="ta-button border border-white/30 text-white hover:bg-white/10 sm:px-7">Voir comment ça marche</Link>
+              <a href={WINDOWS_URL} className="ta-button bg-brand-600 text-white hover:bg-brand-500 sm:px-7">↓ Windows</a>
+              <a href={ANDROID_URL} className="ta-button border border-white/30 text-white hover:bg-white/10 sm:px-7">↓ Android</a>
             </div>
+            <p className="mt-3 text-xs text-slate-400">Gratuit pendant le lancement · aucun compte à créer</p>
           </div>
         </div>
       </section>
 
-      <section className="ta-container pt-8 sm:pt-10">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            [SITE_IMAGES.pc, 'PC & Laptop', 'Dépannage, optimisation, mises à jour, remplacement de pièces, installation…'],
-            [SITE_IMAGES.network, 'Réseau & Internet', 'Configuration, Wi-Fi, routeurs, partage de connexion, VPN, serveur…'],
-            [SITE_IMAGES.office, 'Windows & Office', 'Installation, configuration, formation, dépannage de vos logiciels…'],
-            [SITE_IMAGES.security, 'Sécurité & Maintenance', 'Suppression de virus, sauvegarde de données, maintenance… (avec un technicien ou l’agent Windows)'],
-          ].map(([image, title, text]) => (
-            <Link key={title} to="/assistance" className="group flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card sm:flex-col">
-              <img src={image} alt="" loading="lazy" className="h-auto w-32 shrink-0 object-cover sm:aspect-[343/103] sm:w-full" />
-              <div className="flex flex-1 items-start justify-between gap-3 p-4">
-                <div><h3 className="font-extrabold">{title}</h3><p className="mt-1 text-sm leading-5 text-slate-600">{text}</p></div>
-                <span aria-hidden className="mt-0.5 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-brand-600 transition group-hover:bg-brand-600 group-hover:text-white sm:flex">›</span>
+      <section id="telecharger" className="ta-container ta-section">
+        <h2 className="font-display text-3xl font-extrabold">Téléchargez l’application</h2>
+        <p className="mt-2 max-w-2xl text-slate-600">Tout se passe dans l’application : vous ne revenez plus sur le site.</p>
+        <div className="mt-8 grid gap-5 md:grid-cols-3">
+          <DownloadCard icon="🖥️" title="Windows" text="L’IA analyse et répare votre PC avec votre accord. Un technicien peut prendre la main si besoin." href={WINDOWS_URL} action="Télécharger pour Windows" note="Fichier .exe · ouvrez-le, acceptez la demande de Windows" />
+          <DownloadCard icon="📱" title="Android" text="Conseils de l’IA pas à pas sur votre téléphone, puis un technicien si nécessaire." href={ANDROID_URL} action="Télécharger pour Android" note="Fichier .apk · autorisez l’installation depuis ce navigateur" />
+          <div className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50 p-6">
+            <span className="text-4xl" aria-hidden>🧑‍💻</span>
+            <h3 className="mt-4 font-display text-xl font-extrabold">Vous êtes technicien ?</h3>
+            <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">Ouvrez votre espace : dès qu’un client demande de l’aide, un signal sonore (ding-dong) vous alerte. Vous tapez son numéro et vous vous connectez.</p>
+            <Link to="/technicien" className="ta-button-secondary mt-5 w-full">Ouvrir mon espace technicien</Link>
+            <p className="mt-2 text-center text-xs text-slate-500">Accès réservé aux techniciens Tech Assist</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="comment" className="bg-white">
+        <div className="ta-container ta-section">
+          <h2 className="font-display text-3xl font-extrabold">Comment ça marche ?</h2>
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            {STEPS.map((step, i) => (
+              <div key={step.title} className="rounded-2xl border border-slate-200 bg-[#f7f8fa] p-6">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-600 font-display text-lg font-extrabold text-white">{i + 1}</span>
+                <h3 className="mt-5 font-extrabold">{step.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{step.text}</p>
               </div>
-            </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="suivre" className="ta-container ta-section">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (digits.length === 9) navigate(`/session?code=${digits}`);
+          }}
+          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card sm:flex sm:items-end sm:gap-6"
+        >
+          <div className="sm:flex-1">
+            <h2 className="font-display text-xl font-extrabold">Suivre ma demande</h2>
+            <p className="mt-1 text-sm text-slate-600">Vous avez déjà ouvert l’application ? Tapez votre numéro d’aide pour voir où en est votre demande.</p>
+          </div>
+          <div className="mt-4 flex gap-2 sm:mt-0">
+            <input inputMode="numeric" autoComplete="off" placeholder="123 456 789" value={code} onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, '').slice(0, 11))} className="ta-input w-44 text-center font-mono text-lg tracking-[0.15em]" aria-label="Votre numéro d’aide" />
+            <button disabled={digits.length !== 9} className="ta-button-secondary !w-auto px-5 disabled:opacity-50">Voir</button>
+          </div>
+        </form>
+      </section>
+
+      <section className="ta-container pb-4">
+        <h2 className="font-display text-2xl font-extrabold">Questions fréquentes</h2>
+        <div className="mt-5 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
+          {FAQ.map(([q, a]) => (
+            <details key={q} className="group p-5">
+              <summary className="cursor-pointer list-none font-bold text-slate-900 marker:hidden">{q}</summary>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{a}</p>
+            </details>
           ))}
-        </div>
-      </section>
-
-      <section className="ta-container ta-section">
-        <h2 className="font-display text-3xl font-extrabold">Comment ça marche ?</h2>
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          {STEPS.map((step, i) => (
-            <div key={step.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-600 font-display text-lg font-extrabold text-white">{i + 1}</span>
-              <h3 className="mt-5 font-extrabold">{step.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{step.text}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
-          <div><p className="font-extrabold text-slate-950">Vous êtes une entreprise ?</p><p className="mt-1 text-sm leading-6 text-slate-600">Un espace séparé permet de suivre les demandes, les postes et les interventions de votre équipe.</p></div>
-          <Link to="/entreprise" className="mt-4 inline-flex shrink-0 font-bold text-brand-700 sm:mt-0">Découvrir l’espace entreprise →</Link>
-        </div>
-      </section>
-
-      <section className="bg-[#07101d] text-white">
-        <div className="ta-container grid grid-cols-2 gap-x-4 gap-y-5 py-6 lg:grid-cols-[repeat(4,1fr)_auto] lg:items-center">
-          {[
-            ['Sécurisé', 'Connexions protégées'],
-            ['Techniciens qualifiés', 'Disponibles en Afrique'],
-            ['Assistance rapide', 'En quelques minutes'],
-            ['Support humain', 'Un technicien reprend le dossier'],
-          ].map(([t, d]) => (
-            <div key={t}><p className="font-extrabold">{t}</p><p className="mt-0.5 text-xs text-slate-400">{d}</p></div>
-          ))}
-          <Link to="/demander-aide" className="ta-button col-span-2 bg-brand-600 text-white hover:bg-brand-500 lg:col-span-1">Demander de l’aide →</Link>
-        </div>
-      </section>
-
-      <section className="ta-container ta-section" id="tarifs">
-        <div className="mx-auto max-w-2xl text-center"><p className="ta-eyebrow">Tarifs transparents</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Commencez sans engagement.</h2><p className="mt-3 text-slate-600">Le lancement actuel rend les assistances gratuites. Les tarifs habituels restent affichés à titre indicatif.</p></div>
-        <div className="mt-9"><PricingTable /></div>
-      </section>
-
-      <section className="bg-[#11151b] py-16 text-white sm:py-20 lg:py-24" id="pme">
-        <div className="ta-container grid gap-10 lg:grid-cols-2 lg:items-start">
-          <div><p className="text-sm font-bold text-brand-400">POUR LES PME</p><h2 className="mt-2 max-w-lg font-display text-3xl font-extrabold sm:text-4xl">Un seul espace pour suivre tous vos postes.</h2><p className="mt-4 max-w-md leading-7 text-slate-300">Vos employés rejoignent avec un code. Vous suivez les demandes d’aide, l’état des postes et les interventions depuis un même espace.</p><Link to="/entreprise" className="mt-7 inline-flex rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-950 hover:bg-slate-100">Découvrir l’espace entreprise →</Link></div>
-          <div className="rounded-2xl bg-white p-5 text-slate-900 shadow-2xl sm:p-7"><PmeRequestForm /></div>
-        </div>
-      </section>
-
-      <section id="visite" className="ta-container ta-section">
-        <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
-          <div><p className="ta-eyebrow">Intervention sur place</p><h2 className="mt-2 max-w-md font-display text-3xl font-extrabold sm:text-4xl">Le problème est matériel ?</h2><p className="mt-4 max-w-md leading-7 text-slate-600">Écran, clavier, disque, câblage : décrivez la panne et votre quartier. Nous vous répondons avec un devis.</p></div>
-          <div className="ta-card p-5 sm:p-7"><VisitRequestForm /></div>
-        </div>
-      </section>
-
-      <section id="technicien" className="border-t border-slate-200 bg-white py-16 sm:py-20 lg:py-24">
-        <div className="ta-container grid gap-10 lg:grid-cols-2">
-          <div><p className="ta-eyebrow">Rejoindre le réseau</p><h2 className="mt-2 max-w-md font-display text-3xl font-extrabold sm:text-4xl">Vous êtes technicien informatique ?</h2><p className="mt-4 max-w-md leading-7 text-slate-600">Reprenez les dossiers que l’agent ne peut pas résoudre et intervenez depuis la console technicien.</p></div>
-          <div className="ta-card p-5 sm:p-7"><TechnicianApplyForm /></div>
-        </div>
-      </section>
-
-      <section className="ta-container ta-section">
-        <div className="mx-auto max-w-3xl"><p className="ta-eyebrow">Besoin de réponses ?</p><h2 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Questions fréquentes</h2><div className="mt-8 divide-y divide-slate-200 border-y border-slate-200">{FAQ.map(([q,a]) => <details key={q} className="group py-5"><summary className="cursor-pointer list-none pr-8 font-bold marker:hidden">{q}<span className="float-right text-xl font-normal text-brand-600 transition group-open:rotate-45">+</span></summary><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{a}</p></details>)}</div></div>
-      </section>
-
-      <section className="bg-brand-600">
-        <div className="ta-container flex flex-col gap-6 py-12 text-white sm:flex-row sm:items-center sm:justify-between sm:py-14">
-          <div><h2 className="font-display text-2xl font-extrabold sm:text-3xl">Un problème informatique ?</h2><p className="mt-1 text-sm text-red-100">Décrivez-le. Tech Assist commence l’analyse et fait intervenir un technicien si nécessaire.</p></div>
-          <Link to="/demander-aide" className="ta-button shrink-0 bg-white text-brand-700 hover:bg-red-50">🆘 Demander de l’aide →</Link>
         </div>
       </section>
     </div>
