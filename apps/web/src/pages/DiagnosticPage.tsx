@@ -65,7 +65,16 @@ export function DiagnosticPage() {
                   </div>
                 ))}
               </div>
-              <Link to="/demander-aide" className="ta-button-primary mt-7">Obtenir de l’aide →</Link>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link to="/demander-aide" className="ta-button-primary">Obtenir de l’aide →</Link>
+                <a
+                  href="https://github.com/aubinfranck-hub/TECH-ASSIST/releases/download/agent-latest/tech-assist-agent.exe"
+                  className="inline-flex min-h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 font-black text-slate-900 hover:bg-slate-50"
+                >
+                  ↓ Télécharger l’agent Windows
+                </a>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">Téléchargez l’agent sur le PC à assister, ouvrez-le puis connectez-vous. Il ouvre automatiquement l’assistant TechAssist et peut reprendre un dossier transmis par l’IA.</p>
             </div>
           </div>
         </section>
