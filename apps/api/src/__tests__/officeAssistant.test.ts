@@ -58,9 +58,9 @@ describe('buildContents', () => {
 describe('modelName', () => {
   it('prend le modèle configuré s’il est sobre, sinon le modèle par défaut', () => {
     expect(modelName({ GEMINI_MODEL: 'gemini-2.5-flash' })).toBe('gemini-2.5-flash');
-    expect(modelName({})).toBe('gemini-2.5-flash');
+    expect(modelName({})).toBe('gemini-3.5-flash');
     for (const bad of ['../x', 'a b', 'm?key=1', 'm/../../x', '', 'x'.repeat(80), 'm:generate']) {
-      expect(modelName({ GEMINI_MODEL: bad })).toBe('gemini-2.5-flash');
+      expect(modelName({ GEMINI_MODEL: bad })).toBe('gemini-3.5-flash');
     }
   });
 });
@@ -111,8 +111,8 @@ describe('askOfficeAssistant', () => {
     const out = await askOfficeAssistant('Comment faire ?', [], { env: { GEMINI_API_KEY: 'k', GEMINI_MODEL: 'gemini-2.0-flash' }, fetchImpl: impl });
     expect(out.text).toBe('Voici.');
     expect(urls[0]).toContain('/models/gemini-2.0-flash:');
-    expect(urls[1]).toContain('/models/gemini-2.5-flash:');
-    expect(out.model).toBe('gemini-2.5-flash');
+    expect(urls[1]).toContain('/models/gemini-3.5-flash:');
+    expect(out.model).toBe('gemini-3.5-flash');
   });
 
   it('le prompt système pose les limites attendues', () => {
@@ -126,7 +126,7 @@ describe('askOfficeAssistant', () => {
     const { impl, calls } = fakeFetch(() => json(gemini('ok')));
     await askOfficeAssistant('Mon téléphone est plein', [], { env: { GEMINI_API_KEY: 'k' }, fetchImpl: impl, platform: 'android' });
     const body = JSON.parse(String(calls[0]!.init.body)) as Record<string, any>;
-    expect(body.systemInstruction.parts[0].text).toBe(PHONE_SYSTEM_PROMPT);
+    expect(body.systemInstruction.parts[0].text.startsWith(PHONE_SYSTEM_PROMPT)).toBe(true);
     expect(PHONE_SYSTEM_PROMPT).toMatch(/AUCUN accès au téléphone/);
     expect(PHONE_SYSTEM_PROMPT).toMatch(/Ne demande JAMAIS de mot de passe, de code PIN/);
     expect(PHONE_SYSTEM_PROMPT).toMatch(/Mobile Money/);

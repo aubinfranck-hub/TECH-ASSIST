@@ -22,9 +22,9 @@ import { lessonInstruction, type TrainingStep, type TrainingTrack } from './trai
 import { referenceFor } from './pannes.js';
 
 /** gemini-2.0-flash a été arrêté par Google le 1er juin 2026 : tout appel renvoyait une erreur. */
-const DEFAULT_MODEL = 'gemini-3.8-flash';
+const DEFAULT_MODEL = 'gemini-3.5-flash';
 /** Modèles Flash de secours. */
-const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 /** Levée pour toute indisponibilité (clé absente, erreur du fournisseur, délai, réponse vide ou bloquée). */
