@@ -144,14 +144,19 @@ adminRouter.get('/companies', async (_req, res) => {
   res.json({ companies: rows });
 });
 
+const companyPhoneSchema = z.string()
+  .trim()
+  .transform((value) => value.replace(/[\\s().-]/g, ''))
+  .refine((value) => /^\\+?[0-9]{8,15}$/.test(value), 'Numéro de téléphone invalide (8 à 15 chiffres).');
+
 const createCompanySchema = z.object({
-  name: z.string().min(2).max(200),
-  phone: z.string().regex(/^\+?[0-9]{8,15}$/),
-  email: z.string().email().optional(),
+  name: z.string().trim().min(2).max(200),
+  phone: companyPhoneSchema,
+  email: z.string().trim().email().optional(),
   subscriptionPlanId: z.string().min(1),
-  adminFullName: z.string().min(2).max(120),
-  adminPhone: z.string().regex(/^\+?[0-9]{8,15}$/),
-  adminUsername: z.string().min(3).max(60),
+  adminFullName: z.string().trim().min(2).max(120),
+  adminPhone: companyPhoneSchema,
+  adminUsername: z.string().trim().min(3).max(60),
 });
 
 /**
