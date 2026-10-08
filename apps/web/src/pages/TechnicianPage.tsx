@@ -39,7 +39,7 @@ export function TechnicianPage(){
   <main className="relative z-10 ta-container max-w-[1440px] space-y-6 py-6 sm:py-8">
    {error&&<div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
    <ByCodeBox onFound={(id)=>setParams({session:id})}/>
-   {tts&&!tts.available&&<div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Voix Google inactive :</strong> {TTS_REASON[tts.reason??'unavailable']}. Les clients entendent la voix de secours de leur navigateur, beaucoup moins naturelle.</div>}
+   {tts&&!tts.available&&<div role="status" className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">🔊 <strong>Voix :</strong> la voix gratuite du navigateur du client est utilisée (très bonne sur Edge « Natural » et sur Chrome). Pour une voix Google encore plus naturelle, il faudrait activer un compte Google Cloud — facultatif ({TTS_REASON[tts.reason??'unavailable']}).</div>}
    {tts&&tts.available&&<p className="text-xs text-slate-500">🔊 Voix Google active ({tts.voice})</p>}
    <TechnicianTool/>
    <TechnicianAlerts/>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../lib/api.js';
+import { pickFrenchVoice } from '../lib/frenchVoice.js';
 
 /**
  * Voix de l'assistant IA : lecture à voix haute (voix neuronale Google via notre serveur, sinon la voix du navigateur), dictée au
@@ -14,8 +15,26 @@ export function stopSpeaking(): void {
   window.speechSynthesis?.cancel();
 }
 
-/** Lit un texte : voix Google d'abord, voix du navigateur en secours. Renvoie 'google' ou 'browser'. */
-export async function speak(sessionId: string, sessionCode: string, text: string): Promise<'google' | 'browser'> {
+/** Les voix du navigateur arrivent parfois après le chargement de la page : on attend un instant si la liste est vide. */
+async function browserVoices(): Promise<SpeechSynthesisVoice[]> {
+  const synth = window.speechSynthesis;
+  const now = synth.getVoices();
+  if (now.length > 0) return now;
+  return new Promise((resolve) => {
+    const done = () => resolve(synth.getVoices());
+    synth.addEventListener('voiceschanged', done, { once: true });
+    setTimeout(done, 600);
+  });
+}
+
+export interface SpokeWith {
+  source: 'google' | 'browser';
+  /** Nom de la voix du navigateur utilisée (voix gratuite : « Denise Online (Natural) » sur Edge, « Google français » sur Chrome). */
+  voiceName?: string;
+}
+
+/** Lit un texte : voix Google si le serveur la propose, sinon la MEILLEURE voix française gratuite du navigateur. */
+export async function speak(sessionId: string, sessionCode: string, text: string): Promise<SpokeWith> {
   stopSpeaking();
   try {
     const res = await api.post<{ audio: string; mime: string }>(`/api/sessions/${sessionId}/tts`, { sessionCode, text });
@@ -25,14 +44,17 @@ export async function speak(sessionId: string, sessionCode: string, text: string
       if (current === audio) current = null;
     };
     await audio.play();
-    return 'google';
+    return { source: 'google' };
   } catch (err) {
     if (!(err instanceof ApiError) && !(err instanceof DOMException)) throw err;
     if (!window.speechSynthesis) throw err;
+    const voice = pickFrenchVoice(await browserVoices());
     const u = new SpeechSynthesisUtterance(text.replace(/[*_`#]/g, '').slice(0, 900));
-    u.lang = 'fr-FR';
+    u.lang = voice?.lang ?? 'fr-FR';
+    if (voice) u.voice = voice;
+    u.rate = 0.98;
     window.speechSynthesis.speak(u);
-    return 'browser';
+    return { source: 'browser', voiceName: voice?.name };
   }
 }
 
@@ -64,7 +86,7 @@ export const TTS_REASON: Record<string, string> = {
 
 export function SpeakButton({ sessionId, sessionCode, text }: { sessionId: string; sessionCode: string; text: string }) {
   const [busy, setBusy] = useState(false);
-  const [used, setUsed] = useState<'google' | 'browser' | null>(null);
+  const [used, setUsed] = useState<SpokeWith | null>(null);
   return (
     <span className="mt-1 flex flex-wrap items-center gap-2">
       <button
@@ -79,7 +101,7 @@ export function SpeakButton({ sessionId, sessionCode, text }: { sessionId: strin
       >
         {busy ? '🔊 …' : '🔊 Écouter'}
       </button>
-      {used === 'browser' && <span className="text-[11px] text-amber-700">voix de secours (la voix Google n'est pas disponible)</span>}
+      {used?.source === 'browser' && <span className="text-[11px] text-slate-500">voix gratuite de votre navigateur{used.voiceName ? ` : ${used.voiceName.replace(/^Microsoft /, '')}` : ''}</span>}
     </span>
   );
 }

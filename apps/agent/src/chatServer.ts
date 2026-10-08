@@ -1047,6 +1047,24 @@ form button.act { flex:0 0 auto; min-width:170px; }
     scrollDown();
   }
   var audioNow = null;
+  /* Meilleure voix française GRATUITE du navigateur : voix « Natural/Online » (Edge), « Google » (Chrome), sinon la voix installée. */
+  function voiceScore(v) {
+    var l = String(v.lang || '').toLowerCase().replace('_', '-'), n = String(v.name || '').toLowerCase();
+    if (l.indexOf('fr') !== 0) return -1000;
+    var s = 0;
+    if (n.indexOf('natural') >= 0 || n.indexOf('neural') >= 0) s += 100;
+    if (n.indexOf('online') >= 0) s += 40;
+    if (n.indexOf('google') >= 0) s += 60;
+    if (l === 'fr-fr') s += 20;
+    if (v.localService === false) s += 15;
+    if (n.indexOf('hortense') >= 0 || n.indexOf('julie') >= 0 || n.indexOf('paul') >= 0) s -= 30;
+    return s;
+  }
+  function bestFrenchVoice() {
+    var best = null, bs = -999;
+    (window.speechSynthesis ? window.speechSynthesis.getVoices() : []).forEach(function (v) { var sc = voiceScore(v); if (sc > bs) { bs = sc; best = v; } });
+    return bs > -1000 ? best : null;
+  }
   function speakButton(text) {
     var btn = el('button', 'speak', '\uD83D\uDD0A Écouter');
     btn.type = 'button';
@@ -1058,7 +1076,11 @@ form button.act { flex:0 0 auto; min-width:170px; }
         .then(function (r) { if (!r.ok) throw new Error('voix'); return r.json(); })
         .then(function (d) { audioNow = new Audio('data:' + d.mime + ';base64,' + d.audio); return audioNow.play(); })
         .catch(function () {
-          if (window.speechSynthesis) { var u = new SpeechSynthesisUtterance(text.slice(0, 900)); u.lang = 'fr-FR'; window.speechSynthesis.speak(u); btn.textContent = '\uD83D\uDD0A Écouter (voix de secours)'; }
+          if (window.speechSynthesis) {
+            var u = new SpeechSynthesisUtterance(text.slice(0, 900)); var v = bestFrenchVoice();
+            u.lang = v ? v.lang : 'fr-FR'; if (v) u.voice = v; u.rate = 0.98;
+            window.speechSynthesis.speak(u);
+          }
         })
         .then(function () { btn.disabled = false; });
     });
