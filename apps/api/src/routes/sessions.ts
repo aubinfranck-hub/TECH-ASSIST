@@ -213,11 +213,11 @@ const publicChatLimiter = rateLimit({
 });
 
 const publicSessionCodeSchema = z.object({
-  sessionCode: z.string().regex(/^\\d{9}$/),
+  sessionCode: z.string().regex(/^\d{9}$/),
 });
 
 const publicChatSchema = z.object({
-  sessionCode: z.string().regex(/^\\d{9}$/),
+  sessionCode: z.string().regex(/^\d{9}$/),
   message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
   initial: z.boolean().optional(),
 });
@@ -248,7 +248,7 @@ sessionsRouter.get('/sessions/:id/messages', publicChatLimiter, async (req, res)
 });
 
 const publicClientMessageSchema = z.object({
-  sessionCode: z.string().regex(/^\\d{9}$/),
+  sessionCode: z.string().regex(/^\d{9}$/),
   message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
 });
 
@@ -347,7 +347,7 @@ sessionsRouter.post('/sessions/:id/chat', publicChatLimiter, validateBody(public
   }
 });
 
-const aiFeedbackSchema = z.object({ sessionCode: z.string().regex(/^\\d{9}$/), procedureId: z.string().uuid().optional(), result: z.enum(['resolved', 'not_resolved']), note: z.string().max(200).optional() });
+const aiFeedbackSchema = z.object({ sessionCode: z.string().regex(/^\d{9}$/), procedureId: z.string().uuid().optional(), result: z.enum(['resolved', 'not_resolved']), note: z.string().max(200).optional() });
 
 sessionsRouter.post('/sessions/:id/ai-feedback', publicChatLimiter, validateBody(aiFeedbackSchema), async (req, res) => {
   const body = req.body as z.infer<typeof aiFeedbackSchema>;
@@ -464,8 +464,7 @@ sessionsRouter.post('/sessions/:id/escalate', validateBody(escalateSchema), asyn
   const { rows } = await pool.query(
     `UPDATE sessions
      SET mode = 'humain',
-         status = 'waiting_technician',
-         human_requested_at = COALESCE(human_requested_at, now())
+         status = 'waiting_technician'
      WHERE id = $1 AND status IN ('created', 'waiting_technician', 'active')
      RETURNING id, mode, status`,
     [req.params.id],
@@ -479,6 +478,7 @@ sessionsRouter.post('/sessions/:id/escalate', validateBody(escalateSchema), asyn
     sessionId: req.params.id,
     action: 'session.escalated_to_human',
   });
+  // L'alerte réserve elle-même `human_requested_at` (une seule alerte par demande) : ne pas le renseigner ici, sinon elle ne part jamais.
   alertInBackground(req.params.id!);
 
   res.json({ session: rows[0] });

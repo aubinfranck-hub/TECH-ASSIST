@@ -23,7 +23,7 @@ export function CreateCompanyForm({ pmePlans, onCreated }: Props) {
   const [created, setCreated] = useState<{ adminUsername: string; adminPassword: string } | null>(null);
 
   function normalizePhone(value: string) {
-    return value.trim().replace(/[\\s().-]/g, '');
+    return value.trim().replace(/[\s().-]/g, '');
   }
 
   async function submit(e: React.FormEvent) {
@@ -32,7 +32,7 @@ export function CreateCompanyForm({ pmePlans, onCreated }: Props) {
 
     const companyPhone = normalizePhone(phone);
     const managerPhone = normalizePhone(adminPhone);
-    const phonePattern = /^\\+?[0-9]{8,15}$/;
+    const phonePattern = /^\+?[0-9]{8,15}$/;
 
     if (!phonePattern.test(companyPhone)) {
       setError('Le téléphone de l’entreprise doit contenir 8 à 15 chiffres (ex. +2250700000000).');
