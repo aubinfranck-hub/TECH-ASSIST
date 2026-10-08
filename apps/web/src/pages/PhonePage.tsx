@@ -9,7 +9,7 @@ export function PhonePage() {
         eyebrow="APPLICATION ANDROID"
         title="Votre assistance dans votre poche."
         text="L’APK TechAssist transforme votre téléphone en point d’entrée direct vers le diagnostic IA et le technicien."
-        image="/img/office.jpg"
+        image={SITE_IMAGES.office}
         imageAlt="Ordinateur et téléphone utilisés pour une assistance informatique"
         action={{ label: 'Demander de l’aide', to: '/demander-aide' }}
         dark
