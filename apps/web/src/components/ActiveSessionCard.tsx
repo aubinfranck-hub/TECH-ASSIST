@@ -41,11 +41,15 @@ export function RemoteAccess({ sessionId, controlGranted, android = false }: { s
   }
 
   useEffect(() => {
-    if (!controlGranted || credentials || loading) return;
+    if (!controlGranted || credentials) return;
     void loadCredentials();
-    // Le parent rafraîchit la session toutes les quelques secondes. Dès que le
-    // client valide le contrôle, les identifiants sont donc récupérés sans clic.
-  }, [controlGranted]);
+    const retry = window.setInterval(() => {
+      if (!credentials && !loading) void loadCredentials();
+    }, 2500);
+    // Si l'autorisation arrive avant l'appairage, on réessaie automatiquement
+    // jusqu'à ce que le poste distant soit prêt.
+    return () => window.clearInterval(retry);
+  }, [controlGranted, credentials, loading]);
 
   async function copy(value: string, label: string) {
     try {
