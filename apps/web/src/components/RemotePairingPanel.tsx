@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../lib/api.js';
 import { downloadCmd } from '../lib/cmdLauncher.js';
+import { clientScriptLines } from '../lib/rustdeskScripts.js';
 
 interface Props {
   sessionId: string;
@@ -53,58 +54,12 @@ export function RemotePairingPanel({ sessionId, sessionCode, alreadyPaired, onPa
 
   function downloadAndRun() {
     if (!bootstrap) return;
-    const apiBase = import.meta.env.VITE_API_BASE_URL ?? window.location.origin;
-    const server = bootstrap.rustdesk;
-    // Les valeurs viennent de notre API ; on refuse tout ce qui n'a pas la forme d'un nom de serveur ou d'une clé.
-    const safeHost = (v: string) => /^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$/.test(v);
-    const safeKey = (v: string) => /^[A-Za-z0-9+/=_-]{20,100}$/.test(v);
-    if (server && !(safeHost(server.idServer) && safeHost(server.relayServer) && safeKey(server.key))) {
-      setError("Configuration du serveur d'assistance invalide. Contactez Tech Assist.");
-      return;
+    try {
+      const apiBase = import.meta.env.VITE_API_BASE_URL ?? window.location.origin;
+      downloadCmd('TechAssist-Connexion.cmd', clientScriptLines({ apiBase, sessionId: bootstrap.sessionId, bootstrapToken: bootstrap.bootstrapToken, windows: bootstrap.windows, rustdesk: bootstrap.rustdesk }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Préparation impossible.');
     }
-    // Format d'import de RustDesk : {host, relay, key, api} en base64, à l'envers.
-    const configString = server
-      ? btoa(JSON.stringify({ host: server.idServer, relay: server.relayServer, key: server.key, api: '' })).split('').reverse().join('')
-      : null;
-    // RustDesk doit être INSTALLÉ (service Windows) : en mode portable, le mot de passe n'est pas appliqué.
-    const lines = [
-      '$ErrorActionPreference = "Stop"',
-      '$ProgressPreference = "SilentlyContinue"',
-      '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12',
-      '$dir = Join-Path $env:ProgramData "TechAssist\\rustdesk"',
-      'New-Item -ItemType Directory -Force -Path $dir | Out-Null',
-      '$setup = Join-Path $dir "rustdesk-setup.exe"',
-      '$url = ' + JSON.stringify(bootstrap.windows.url),
-      '$expectedSha = ' + JSON.stringify(bootstrap.windows.sha256),
-      '$apiBase = ' + JSON.stringify(apiBase),
-      '$sessionId = ' + JSON.stringify(bootstrap.sessionId),
-      '$token = ' + JSON.stringify(bootstrap.bootstrapToken),
-      'Write-Host "Tech Assist - préparation de votre assistance (une minute environ)..."',
-      '$ok = (Test-Path $setup) -and ((Get-FileHash -Algorithm SHA256 -Path $setup).Hash.ToLowerInvariant() -eq $expectedSha)',
-      'if (-not $ok) { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $setup }',
-      'if ((Get-FileHash -Algorithm SHA256 -Path $setup).Hash.ToLowerInvariant() -ne $expectedSha) { Remove-Item $setup -Force; throw "Vérification de l\u2019outil échouée." }',
-      '$rd = Join-Path $env:ProgramFiles "RustDesk\\rustdesk.exe"',
-      'if (-not (Test-Path $rd)) { Start-Process -FilePath $setup -ArgumentList "--silent-install" -Wait; for ($i = 0; $i -lt 30 -and -not (Test-Path $rd); $i++) { Start-Sleep -Seconds 2 } }',
-      'if (-not (Test-Path $rd)) { throw "Installation de l\u2019outil impossible." }',
-      'Start-Service -Name "RustDesk" -ErrorAction SilentlyContinue',
-      'Start-Sleep -Seconds 3',
-      ...(configString ? [`& $rd --config '${configString}' | Out-Null`, 'Start-Sleep -Seconds 2'] : []),
-      'if (-not (Get-Process -Name "rustdesk" -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -ne 0 })) { Start-Process -FilePath $rd }',
-      '$id = ""',
-      'for ($i = 0; $i -lt 20; $i++) { Start-Sleep -Seconds 2; $id = ((& $rd --get-id | Out-String).Trim()); if ($id -match "^\\d{6,12}$") { break } }',
-      'if ($id -notmatch "^\\d{6,12}$") { throw "Connexion sécurisée impossible." }',
-      '$bytes = New-Object byte[] 9; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes); $password = ([Convert]::ToBase64String($bytes) -replace "[^A-Za-z0-9]", "").PadRight(8, "k").Substring(0,8)',
-      '$out = (& $rd --password $password | Out-String)',
-      'if ($out -match "required|denied|disabled|error") { throw ("Mot de passe non appliqué : " + $out.Trim()) }',
-      '& $rd --option approve-mode password-click | Out-Null',
-      '& $rd --option verification-method use-permanent-password | Out-Null',
-      '$payload = @{ remotePeerId = $id; remotePassword = $password; bootstrapToken = $token } | ConvertTo-Json -Compress',
-      'Invoke-RestMethod -Uri "$apiBase/api/sessions/$sessionId/pair" -Method Post -ContentType "application/json" -Body $payload | Out-Null',
-      'Write-Host ""',
-      'Write-Host "Tech Assist est prêt. Connexion sécurisée établie."',
-      'Write-Host "Le technicien pourra se connecter après votre consentement."',
-    ];
-    downloadCmd('TechAssist-Connexion.cmd', lines);
   }
 
   if (alreadyPaired) {
