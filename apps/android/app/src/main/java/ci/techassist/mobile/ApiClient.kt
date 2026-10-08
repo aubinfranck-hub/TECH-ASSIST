@@ -21,6 +21,10 @@ class ApiClient(private val baseUrl: String) {
     fun feedback(id: String, code: String, procedureId: String?, result: String) = request("POST", "/api/sessions/$id/ai-feedback", JSONObject().put("sessionCode", code).put("procedureId", procedureId).put("result", result))
     fun escalate(id: String, code: String) = request("POST", "/api/sessions/$id/escalate", JSONObject().put("sessionCode", code))
     fun stop(id: String, code: String) = request("POST", "/api/sessions/$id/stop", JSONObject().put("sessionCode", code).put("stoppedBy", "client"))
+    fun session(code: String) = request("GET", "/api/sessions/$code")
+    fun messages(id: String, code: String) = request("GET", "/api/sessions/$id/messages?sessionCode=$code")
+    fun sendMessage(id: String, code: String, message: String) =
+        request("POST", "/api/sessions/$id/messages", JSONObject().put("sessionCode", code).put("message", message))
     fun remoteBootstrap(code: String) = request("GET", "/api/sessions/$code/remote-bootstrap")
     fun pairRemote(id: String, peerId: String, password: String, token: String) =
         request("POST", "/api/sessions/$id/pair", JSONObject().put("remotePeerId", peerId).put("remotePassword", password).put("bootstrapToken", token))
