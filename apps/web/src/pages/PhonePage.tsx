@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { SITE_IMAGES } from '../lib/imageSources.js';
 import { PageHero } from '../components/PageHero.js';
 
 export function PhonePage() {
@@ -24,7 +25,7 @@ export function PhonePage() {
         </div>
         <section className="mt-10 overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-card">
           <div className="grid lg:grid-cols-2">
-            <img src="/img/securite.jpg" alt="Sécurité informatique" className="h-64 w-full object-cover lg:h-full" loading="lazy" />
+            <img src={SITE_IMAGES.security} alt="Sécurité informatique" className="h-64 w-full object-cover lg:h-full" loading="lazy" />
             <div className="p-7 sm:p-9"><p className="text-xs font-extrabold uppercase tracking-wider text-brand-700">APK Android</p><h2 className="mt-2 font-display text-3xl font-black">Une application native, pas une simple page web.</h2><p className="mt-4 text-sm leading-6 text-slate-600">Le client Android est intégré au projet TechAssist et son APK est construit automatiquement. Le site sert de portail et l’application porte l’assistance.</p><div className="mt-6 flex flex-wrap gap-3"><Link to="/demander-aide" className="ta-button-primary">Accéder au parcours →</Link><Link to="/" className="ta-button-secondary">Accueil</Link></div></div>
           </div>
         </section>
