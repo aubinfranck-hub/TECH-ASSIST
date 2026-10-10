@@ -168,9 +168,11 @@ appRouter.post('/app/register', limiter, validateBody(registerSchema), async (re
            client_name = COALESCE(EXCLUDED.client_name, app_installs.client_name),
            -- la première empreinte enregistrée reste liée à l'installation (on ne la remplace pas)
            hardware_hash = COALESCE(app_installs.hardware_hash, EXCLUDED.hardware_hash),
+           -- une nouvelle inscription invalide tout ancien jeton de cette installation
+           token_version = app_installs.token_version + 1,
            last_seen_at = now()
        WHERE app_installs.client_email = EXCLUDED.client_email
-     RETURNING id, platform, hardware_hash`,
+     RETURNING id, platform, hardware_hash, token_version`,
     [body.installId, body.platform, body.hardwareHash ?? null, email, body.phone ?? '', body.name ?? null],
   );
   const install = rows[0];
@@ -181,7 +183,7 @@ appRouter.post('/app/register', limiter, validateBody(registerSchema), async (re
   await logAudit(pool, { actorType: 'client', actorId: email, action: 'app.registered', details: { platform: body.platform } });
 
   const entitlements = await entitlementsFor({ id: install.id, email, hardwareHash: install.hardware_hash });
-  res.status(201).json({ token: signAppToken(install.id), entitlements });
+  res.status(201).json({ token: signAppToken(install.id, install.token_version), entitlements });
 });
 
 /** Droits actuels de cette installation (offre disponible, abonnement en cours). */

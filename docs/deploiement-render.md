@@ -47,9 +47,11 @@ Web Service, runtime Node, région Frankfurt, plan free.
 
 | Champ | Valeur |
 |---|---|
-| Dépôt / branche | `aubinfranck-hub/TECH-ASSIST` / `claude/ecstatic-maxwell-z0gk4g` |
-| Build Command | `npm install && npm run build --workspace apps/api && npm run migrate --workspace apps/api` |
+| Dépôt / branche | `aubinfranck-hub/TECH-ASSIST` / `main` |
+| Build Command | `npm ci && npm run build --workspace apps/api` |
+| Pre-Deploy Command | `npm run migrate --workspace apps/api` |
 | Start Command | `npm run start --workspace apps/api` |
+| Health Check Path | `/api/health` |
 
 Variables d'environnement :
 
@@ -83,5 +85,6 @@ Optionnel : `VITE_APP_WINDOWS_URL` / `VITE_APP_ANDROID_URL` (liens de téléchar
 - Le serveur RustDesk (`infra/rustdesk/`) et les futurs clients
   Windows/Android ne sont pas concernés par ce déploiement — voir
   `docs/lot-l2-remote.md`.
-- Branche déployée : `claude/ecstatic-maxwell-z0gk4g` (basculer sur `main`
-  dans les paramètres du service une fois la PR fusionnée).
+- La branche de production est `main`. Les migrations s'exécutent dans
+  **Pre-Deploy**, jamais pendant le build : un build défaillant ne modifie donc
+  pas la base de données active. Le health check doit rester `/api/health`.

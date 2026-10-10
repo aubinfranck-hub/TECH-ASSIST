@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -58,7 +58,7 @@ describe.skipIf(!has)('Scripts téléchargés : vérifiés par le vrai PowerShel
     const dir = mkdtempSync(join(tmpdir(), 'ta-cmd-'));
     const file = join(dir, 'Téléchargements (1)', 'test.cmd'); // un dossier « (1) » ne doit rien casser
     const folder = join(dir, 'Téléchargements (1)');
-    spawnSync('mkdir', ['-p', folder]);
+    mkdirSync(folder, { recursive: true });
     writeFileSync(file, cmd, 'utf8');
     // La ligne PowerShell du lanceur, telle que Windows la passerait (entre les guillemets de -Command).
     const line = cmd.split('\r\n').find((l) => l.startsWith('powershell -NoProfile -ExecutionPolicy Bypass -Command "'))!;

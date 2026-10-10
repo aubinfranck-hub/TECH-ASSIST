@@ -43,11 +43,14 @@ simpleRouter.post('/app/anonymous', limiter, validateBody(anonymousSchema), asyn
   const { rows } = await pool.query(
     `INSERT INTO app_installs (install_id, platform, hardware_hash, client_email, client_phone)
      VALUES ($1, $2, $3, $4, '')
-     ON CONFLICT (install_id) DO UPDATE SET hardware_hash = COALESCE(app_installs.hardware_hash, EXCLUDED.hardware_hash), last_seen_at = now()
-     RETURNING id`,
+     ON CONFLICT (install_id) DO UPDATE SET
+       hardware_hash = COALESCE(app_installs.hardware_hash, EXCLUDED.hardware_hash),
+       token_version = app_installs.token_version + 1,
+       last_seen_at = now()
+     RETURNING id, token_version`,
     [body.installId, body.platform, body.hardwareHash ?? null, anonymousEmail(body.installId)],
   );
-  res.status(201).json({ token: signAppToken(rows[0].id), anonymous: true, freeLaunch: freeLaunch() });
+  res.status(201).json({ token: signAppToken(rows[0].id, rows[0].token_version), anonymous: true, freeLaunch: freeLaunch() });
 });
 
 const contactSchema = z.object({

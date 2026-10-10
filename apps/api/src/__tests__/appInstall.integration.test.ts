@@ -141,6 +141,14 @@ describe('Application : inscription par email, assistance offerte en base, abonn
       const res = await request(app).get('/api/app/me').set('Authorization', `Bearer ${tech}`);
       expect(res.status).toBe(401);
     });
+
+    it('une réinscription invalide le jeton précédent de la même installation', async () => {
+      const first = await register({ email: 'renew@example.com' });
+      const renewed = await register({ email: first.email, installId: first.installId });
+
+      expect((await request(app).get('/api/app/me').set(auth(first))).status).toBe(401);
+      expect((await request(app).get('/api/app/me').set(auth(renewed))).status).toBe(200);
+    });
   });
 
   describe('forfaits à l\'usage', () => {
