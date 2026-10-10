@@ -1,0 +1,336 @@
+import { describe, expect, it } from 'vitest';
+import { AppApi, ensureContact, readHardwareHash, signIn, startCovered, type AccountStore, type SavedAccount } from '../appAccount.js';
+import { ScriptedConversation, ScriptedRunner } from './fakeScripts.js';
+
+function memoryStore(initial: SavedAccount = { installId: 'install-0123456789abcdef' }): AccountStore & { data: SavedAccount } {
+  const box = { data: initial } as AccountStore & { data: SavedAccount };
+  box.load = () => box.data;
+  box.save = (a) => {
+    box.data = a;
+  };
+  return box;
+}
+
+type Route = (body: Record<string, unknown>, auth: string | null) => { status: number; json: unknown };
+function fakeFetch(routes: Record<string, Route>, calls: { path: string; body: Record<string, unknown> }[] = []): typeof fetch {
+  return (async (url: string, init?: RequestInit) => {
+    const path = new URL(url).pathname.replace(/^\/api/, '');
+    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+    calls.push({ path, body });
+    const route = routes[path];
+    if (!route) return new Response('{}', { status: 404 });
+    const headers = init?.headers as Record<string, string> | undefined;
+    const r = route(body, headers?.Authorization ?? null);
+    return new Response(JSON.stringify(r.json), { status: r.status });
+  }) as unknown as typeof fetch;
+}
+
+const ENT = { freeOfferAvailable: true, subscription: null, aiAgentAvailable: true };
+
+describe('démarrage sans inscription (comme AnyDesk)', () => {
+  it('première utilisation : aucun e-mail ni téléphone demandé, jeton mémorisé', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/anonymous': () => ({ status: 201, json: { token: 'ANON', anonymous: true } }),
+      '/app/me': (_b, auth) => (auth === 'Bearer ANON' ? { status: 200, json: { email: 'anonyme@x.invalid', entitlements: ENT } } : { status: 401, json: {} }),
+    }, calls));
+    const store = memoryStore();
+    const ui = new ScriptedConversation();
+    const login = await signIn({ ui, api, store, hardwareHash: 'h'.repeat(64) });
+    expect(login?.token).toBe('ANON');
+    expect(ui.prompts).toEqual([]);
+    expect(store.data.token).toBe('ANON');
+    expect(store.data.email).toBeUndefined();
+    expect(calls[0]).toEqual({ path: '/app/anonymous', body: { platform: 'windows', installId: 'install-0123456789abcdef', hardwareHash: 'h'.repeat(64) } });
+  });
+
+  it('installation déjà inscrite côté serveur : retour à la connexion par code', async () => {
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/anonymous': () => ({ status: 409, json: { error: 'déjà enregistrée', code: 'registered' } }),
+      '/app/email-code': () => ({ status: 200, json: { sent: true } }),
+      '/app/register': () => ({ status: 201, json: { token: 'T9', entitlements: ENT } }),
+    }));
+    const ui = new ScriptedConversation({ asks: ['a@b.co', '0707123456', '123456'] });
+    expect((await signIn({ ui, api, store: memoryStore() }))?.token).toBe('T9');
+  });
+
+  it('réseau coupé : message clair, pas d’inscription forcée', async () => {
+    const api = new AppApi('https://x.test', (async () => { throw new Error('net'); }) as unknown as typeof fetch);
+    const ui = new ScriptedConversation();
+    expect(await signIn({ ui, api, store: memoryStore() })).toBeNull();
+    expect(ui.infos.join(' ')).toMatch(/Internet/);
+  });
+});
+
+describe('coordonnées demandées seulement pour un technicien', () => {
+  it('anonyme : e-mail demandé (téléphone facultatif), puis mémorisé', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({ '/app/contact': () => ({ status: 200, json: { saved: true } }) }, calls));
+    const store = memoryStore({ installId: 'install-0123456789abcdef', token: 'ANON' });
+    const ui = new ScriptedConversation({ asks: ['Awa@Exemple.com', '07 07 12 34 56'] });
+    expect(await ensureContact({ ui, api, store }, 'ANON')).toBe(true);
+    expect(calls[0]).toEqual({ path: '/app/contact', body: { email: 'awa@exemple.com', phone: '0707123456' } });
+    expect(store.data.email).toBe('awa@exemple.com');
+  });
+
+  it('téléphone facultatif : « non » le saute', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({ '/app/contact': () => ({ status: 200, json: { saved: true } }) }, calls));
+    const ui = new ScriptedConversation({ asks: ['a@b.co', 'non'] });
+    expect(await ensureContact({ ui, api, store: memoryStore() }, 'T')).toBe(true);
+    expect(calls[0]!.body).toEqual({ email: 'a@b.co' });
+  });
+
+  it('déjà connues : rien n’est demandé', async () => {
+    const ui = new ScriptedConversation();
+    const api = new AppApi('https://x.test', fakeFetch({}));
+    expect(await ensureContact({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'a@b.co' }) }, 'T')).toBe(true);
+    expect(ui.prompts).toEqual([]);
+  });
+
+  it('le client renonce : false, rien d’envoyé', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({}, calls));
+    const ui = new ScriptedConversation({ asks: [null] });
+    expect(await ensureContact({ ui, api, store: memoryStore() }, 'T')).toBe(false);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('connexion par email', () => {
+  it('envoie le code, inscrit l\'appareil et mémorise le jeton', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/email-code': () => ({ status: 200, json: { sent: true } }),
+      '/app/register': () => ({ status: 201, json: { token: 'T1', entitlements: ENT } }),
+    }, calls));
+    const store = memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' });
+    const ui = new ScriptedConversation({ asks: ['Franck@Exemple.com', '0707 12 34 56', '123456'] });
+    const login = await signIn({ ui, api, store, hardwareHash: 'h'.repeat(64) });
+    expect(login?.token).toBe('T1');
+    expect(store.data.token).toBe('T1');
+    expect(calls[0]).toEqual({ path: '/app/email-code', body: { email: 'franck@exemple.com' } });
+    const reg = calls[1]!.body;
+    expect(reg).toMatchObject({ platform: 'windows', email: 'franck@exemple.com', code: '123456', phone: '0707123456', installId: 'install-0123456789abcdef' });
+    expect(reg.hardwareHash).toBe('h'.repeat(64));
+  });
+
+  it('réutilise le jeton enregistré sans redemander l\'email', async () => {
+    const api = new AppApi('https://x.test', fakeFetch({ '/app/me': (_b, auth) => (auth === 'Bearer OLD' ? { status: 200, json: { email: 'a@b.co', entitlements: ENT } } : { status: 401, json: {} }) }));
+    const ui = new ScriptedConversation();
+    const login = await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', token: 'OLD' }) });
+    expect(login?.token).toBe('OLD');
+    expect(ui.prompts).toEqual([]);
+  });
+
+  it('refuse une adresse invalide après trois essais, sans rien envoyer', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({}, calls));
+    const ui = new ScriptedConversation({ asks: ['abc', 'def', 'ghi'] });
+    expect(await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' }) })).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('redemande le code s\'il est faux, puis abandonne après trois essais', async () => {
+    let tries = 0;
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/email-code': () => ({ status: 200, json: { sent: true } }),
+      '/app/register': () => {
+        tries++;
+        return { status: 400, json: { error: 'Code invalide ou expiré.' } };
+      },
+    }));
+    const ui = new ScriptedConversation({ asks: ['a@b.co', '0707123456', '111111', '222222', '333333'] });
+    expect(await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' }) })).toBeNull();
+    expect(tries).toBe(3);
+    expect(ui.said).toContain('Code invalide');
+  });
+
+  it('s\'arrête sur une erreur définitive (déjà inscrit avec un autre email)', async () => {
+    let tries = 0;
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/email-code': () => ({ status: 200, json: { sent: true } }),
+      '/app/register': () => {
+        tries++;
+        return { status: 409, json: { error: 'Cette installation est déjà enregistrée avec une autre adresse email.' } };
+      },
+    }));
+    const ui = new ScriptedConversation({ asks: ['a@b.co', '0707123456', '111111', '222222'] });
+    expect(await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' }) })).toBeNull();
+    expect(tries).toBe(1);
+  });
+
+  it('explique clairement quand le serveur est injoignable', async () => {
+    const api = new AppApi('https://x.test', (async () => {
+      throw new Error('réseau');
+    }) as unknown as typeof fetch);
+    const ui = new ScriptedConversation({ asks: ['a@b.co'] });
+    expect(await signIn({ ui, api, store: memoryStore({ installId: 'install-0123456789abcdef', email: 'ancien@exemple.com' }) })).toBeNull();
+    expect(ui.said).toContain('Impossible de joindre Tech Assist');
+  });
+});
+
+describe('démarrage de l\'assistance', () => {
+  it('démarre l\'offerte après accord du client', async () => {
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/assistance': () => ({ status: 201, json: { session: { id: 'S1' }, coverage: 'free_offer', fallbackToHuman: false } }),
+    }));
+    const ui = new ScriptedConversation({ picks: [0] });
+    const started = await startCovered({ ui, api, store: memoryStore() }, { token: 'T', entitlements: ENT });
+    expect(started).toMatchObject({ sessionId: 'S1', coverage: 'free_offer', token: 'T' });
+  });
+
+  it('ne consomme PAS l\'offerte si le client dit non', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({}, calls));
+    const ui = new ScriptedConversation({ picks: [1] });
+    expect(await startCovered({ ui, api, store: memoryStore() }, { token: 'T', entitlements: ENT })).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('abonné : démarre sans poser de question', async () => {
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/assistance': () => ({ status: 201, json: { session: { id: 'S2' }, coverage: 'subscription', fallbackToHuman: true } }),
+    }));
+    const ui = new ScriptedConversation();
+    const started = await startCovered({ ui, api, store: memoryStore() }, { token: 'T', entitlements: { ...ENT, freeOfferAvailable: false, subscription: { endsAt: '2099-01-01' } } });
+    expect(started?.fallbackToHuman).toBe(true);
+    expect(ui.choices).toEqual([]);
+  });
+
+  const USED = { ...ENT, freeOfferAvailable: false };
+  const noWait = { wait: async () => undefined, pollMs: 1, maxWaitMs: 3 };
+
+  it('offerte utilisée : propose les 2 forfaits, attend la confirmation du paiement puis démarre avec la bonne portée', async () => {
+    let polls = 0;
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/orders/ord-1': () => ({ status: 200, json: { order: { status: ++polls >= 2 ? 'paid' : 'pending_payment', used: false } } }),
+      '/app/orders': () => ({ status: 201, json: { order: { id: 'ord-1', amount_fcfa: 2000 }, plan: { name: 'Dépannage', scope: 'fix' }, payment: { amountFcfa: 2000, reference: 'ABCDEF12', instructions: 'Payez par Mobile Money.' } } }),
+      '/app/assistance': () => ({ status: 201, json: { session: { id: 'S9' }, coverage: 'paid_forfait', scope: 'fix', fallbackToHuman: false } }),
+    }, calls));
+    const ui = new ScriptedConversation({ picks: [1] });
+    const started = await startCovered({ ui, api, store: memoryStore(), ...noWait }, { token: 'T', entitlements: USED });
+    expect(started).toMatchObject({ sessionId: 'S9', coverage: 'paid_forfait', scope: 'fix' });
+    expect(ui.choices[0]!.options).toHaveLength(3);
+    expect(ui.choices[0]!.options[0]).toContain('500 FCFA');
+    expect(ui.choices[0]!.options[0]).toContain('sans technicien');
+    expect(ui.choices[0]!.options[1]).toContain('2 000 FCFA');
+    expect(ui.choices[0]!.options[2]).toBe('Plus tard');
+    expect(started?.humanIncluded).toBe(true);
+    expect(ui.said).toContain('ABCDEF12');
+    expect(calls.find((c) => c.path === '/app/orders')!.body.planId).toBe('assistance_rapide');
+    expect(calls.find((c) => c.path === '/app/assistance')!.body.orderId).toBe('ord-1');
+  });
+
+  it('paiement automatique : choix de la méthode, lien Jèko affiché et ouvert, démarrage dès la confirmation', async () => {
+    const opened: string[] = [];
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/orders/ord-5/pay': () => ({ status: 200, json: { url: 'https://pay.jeko.africa/zz' } }),
+      '/app/orders/ord-5': () => ({ status: 200, json: { order: { status: 'paid', used: false } } }),
+      '/app/orders': () => ({ status: 201, json: { order: { id: 'ord-5', amount_fcfa: 2000 }, plan: { name: 'Dépannage', scope: 'fix' }, payment: { amountFcfa: 2000, reference: 'R5', instructions: '', url: null, automatic: true, methods: ['wave', 'orange'] } } }),
+      '/app/assistance': () => ({ status: 201, json: { session: { id: 'S5' }, coverage: 'paid_forfait', scope: 'fix', fallbackToHuman: false } }),
+    }, calls));
+    const ui = new ScriptedConversation({ picks: [1, 1] }); // Dépannage, puis Orange Money
+    const started = await startCovered({ ui, api, store: memoryStore(), ...noWait, openUrl: (u) => opened.push(u) }, { token: 'T', entitlements: USED });
+    expect(started).toMatchObject({ sessionId: 'S5', scope: 'fix' });
+    expect(calls.find((c) => c.path === '/app/orders/ord-5/pay')!.body.method).toBe('orange');
+    expect(opened).toEqual(['https://pay.jeko.africa/zz']);
+    expect(ui.said).toContain('démarre toute seule');
+    expect(ui.said).not.toContain('technicien');
+  });
+
+  it('paiement jamais confirmé : rend la main sans démarrer, et le dit', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/orders/ord-2': () => ({ status: 200, json: { order: { status: 'pending_payment', used: false } } }),
+      '/app/orders': () => ({ status: 201, json: { order: { id: 'ord-2', amount_fcfa: 500 }, plan: { name: 'Diagnostic', scope: 'diagnostic' }, payment: { amountFcfa: 500, reference: 'R', instructions: 'Payez.' } } }),
+    }, calls));
+    const ui = new ScriptedConversation({ picks: [0] });
+    expect(await startCovered({ ui, api, store: memoryStore(), ...noWait }, { token: 'T', entitlements: USED })).toBeNull();
+    expect(ui.said).toContain('Relancez le programme');
+    expect(calls.some((c) => c.path === '/app/assistance')).toBe(false);
+  });
+
+  it('« Plus tard » : aucune commande créée', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({}, calls));
+    const ui = new ScriptedConversation({ picks: [2] });
+    expect(await startCovered({ ui, api, store: memoryStore(), ...noWait }, { token: 'T', entitlements: USED })).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('forfait déjà payé : démarre sans repayer, avec sa portée', async () => {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const api = new AppApi('https://x.test', fakeFetch({
+      '/app/assistance': () => ({ status: 201, json: { session: { id: 'S3' }, coverage: 'paid_forfait', scope: 'diagnostic', fallbackToHuman: false } }),
+    }, calls));
+    const ui = new ScriptedConversation();
+    const started = await startCovered({ ui, api, store: memoryStore() }, { token: 'T', entitlements: { ...USED, paidForfait: { orderId: 'ord-3', name: 'Diagnostic', scope: 'diagnostic' } } });
+    expect(started?.scope).toBe('diagnostic');
+    expect(calls[0]!.body.orderId).toBe('ord-3');
+  });
+});
+
+describe('empreinte de l\'appareil', () => {
+  it('hache l\'identifiant machine (jamais envoyé en clair)', async () => {
+    const runner = { runPowerShell: async () => ({ stdout: '{"id":"3F2504E0-4F89-11D3-9A0C-0305E82C3301"}', stderr: '', exitCode: 0 }) };
+    const hash = await readHardwareHash(runner);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hash).not.toContain('3f2504e0');
+  });
+  it('rend undefined si la lecture échoue ou rend n\'importe quoi', async () => {
+    expect(await readHardwareHash({ runPowerShell: async () => ({ stdout: '{"id":"; rm -rf"}', stderr: '', exitCode: 0 }) })).toBeUndefined();
+    expect(await readHardwareHash({ runPowerShell: async () => { throw new Error('x'); } })).toBeUndefined();
+  });
+});
+
+describe('demande de diagnostic de l’entreprise', () => {
+  it('refus : rien n’est analysé ni envoyé, le refus est transmis', async () => {
+    const { answerCompanyRequest } = await import('../appAccount.js');
+    const answers: unknown[] = [];
+    const api = { pendingRequest: async () => ({ id: 'r1', companyName: 'Kassy SARL' }), answerRequest: async (_t: string, _id: string, b: unknown) => { answers.push(b); return { ok: true }; } };
+    const runner = new ScriptedRunner([]);
+    const ui = new ScriptedConversation({ picks: [1] });
+    expect(await answerCompanyRequest({ ui, api: api as never, runner }, 'tok')).toBe('declined');
+    expect(answers).toEqual([{ status: 'declined' }]);
+    expect(runner.calls).toHaveLength(0);
+  });
+
+  it('aucune demande : ne pose aucune question', async () => {
+    const { answerCompanyRequest } = await import('../appAccount.js');
+    const api = { pendingRequest: async () => null };
+    const ui = new ScriptedConversation();
+    expect(await answerCompanyRequest({ ui, api: api as never, runner: new ScriptedRunner([]) }, 'tok')).toBe('none');
+    expect(ui.choices).toEqual([]);
+  });
+
+  it('accord : analyse en lecture seule puis résumé envoyé (une analyse qui échoue est signalée, pas cachée)', async () => {
+    const { answerCompanyRequest } = await import('../appAccount.js');
+    const answers: { status: string; worst?: string; summary?: string }[] = [];
+    const api = { pendingRequest: async () => ({ id: 'r1', companyName: 'Kassy SARL' }), answerRequest: async (_t: string, _id: string, b: never) => { answers.push(b); return { ok: true }; } };
+    const ui = new ScriptedConversation({ picks: [0] });
+    expect(await answerCompanyRequest({ ui, api: api as never, runner: new ScriptedRunner([]) }, 'tok')).toBe('done');
+    expect(answers).toHaveLength(1);
+    expect(answers[0]!.status).toBe('done');
+    expect(answers[0]!.worst).toBe('unknown');
+    expect(answers[0]!.summary).toMatch(/Analyse impossible/);
+    expect(ui.said).toContain('Résumé envoyé à Kassy SARL');
+  });
+});
+
+describe('demande de réparation de l’entreprise', () => {
+  it('le texte annonce l’accord par action ; un refus ne lance rien', async () => {
+    const { answerCompanyRequest } = await import('../appAccount.js');
+    const answers: unknown[] = [];
+    const api = { pendingRequest: async () => ({ id: 'r2', kind: 'repair', companyName: 'Kassy SARL' }), answerRequest: async (_t: string, _id: string, b: unknown) => { answers.push(b); return { ok: true }; } };
+    const runner = new ScriptedRunner([]);
+    const ui = new ScriptedConversation({ picks: [1] });
+    expect(await answerCompanyRequest({ ui, api: api as never, runner }, 'tok')).toBe('declined');
+    expect(ui.choices[0]!.question).toMatch(/chaque correction vous est expliquée/);
+    expect(ui.choices[0]!.options[0]).toBe('Oui, réparer');
+    expect(answers).toEqual([{ status: 'declined' }]);
+    expect(runner.calls).toHaveLength(0);
+  });
+});

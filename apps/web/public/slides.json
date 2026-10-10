@@ -1,0 +1,31 @@
+{
+  "slides": [
+    {
+      "title": "Tech Assist, votre assistance informatique",
+      "text": "Des techniciens africains, disponibles et qualifiés. Je m'occupe de votre ordinateur pendant que vous continuez votre journée.",
+      "image": "/img/hero.jpg"
+    },
+    {
+      "title": "Ce que nous réglons pour vous",
+      "text": "PC lent, Internet, imprimante, Outlook, Teams, virus… à distance, sans déplacement.",
+      "items": [
+        { "image": "/img/pc.jpg", "label": "PC et portable" },
+        { "image": "/img/reseau.jpg", "label": "Réseau et Internet" },
+        { "image": "/img/office.jpg", "label": "Windows et Office" },
+        { "image": "/img/securite.jpg", "label": "Sécurité et virus" }
+      ]
+    },
+    {
+      "title": "Vos fichiers restent chez vous",
+      "text": "Nous ne touchons jamais à vos documents, photos ni mots de passe. Tout ce que nous faisons est noté dans un rapport."
+    },
+    {
+      "title": "Une entreprise ? Un contrat pour tous vos PC",
+      "text": "Un abonnement mensuel pour votre parc d'ordinateurs : dépannage, suivi et rapports pour votre équipe."
+    },
+    {
+      "title": "Paiement simple par Mobile Money",
+      "text": "Wave, Orange Money, MTN, Moov Money, Djamo. Vous ne payez que pour l'assistance dont vous avez besoin."
+    }
+  ]
+}

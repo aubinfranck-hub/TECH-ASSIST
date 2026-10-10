@@ -1,0 +1,59 @@
+#cloud-config
+# Lot L2 — amorçage automatique du serveur RustDesk auto-hébergé sur Hetzner
+# Cloud (ou tout hébergeur acceptant un "cloud-init"/"user data" à la
+# création du serveur). Colle ce fichier tel quel dans le champ "Cloud
+# config" / "User data" au moment de créer le serveur : tout se met en
+# place seul, sans connexion SSH manuelle.
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - ufw
+
+write_files:
+  - path: /opt/rustdesk/docker-compose.yml
+    content: |
+      services:
+        hbbs:
+          container_name: hbbs
+          image: rustdesk/rustdesk-server:latest
+          command: hbbs -r RUSTDESK_HOST_PLACEHOLDER:21117
+          volumes:
+            - ./data:/root
+          ports:
+            - "21115:21115"
+            - "21116:21116/tcp"
+            - "21116:21116/udp"
+            - "21118:21118"
+          restart: unless-stopped
+          networks: [rustdesk-net]
+          depends_on: [hbbr]
+        hbbr:
+          container_name: hbbr
+          image: rustdesk/rustdesk-server:latest
+          command: hbbr
+          volumes:
+            - ./data:/root
+          ports:
+            - "21117:21117"
+            - "21119:21119"
+          restart: unless-stopped
+          networks: [rustdesk-net]
+      networks:
+        rustdesk-net: {}
+
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+  - export PUBLIC_IP=$(curl -s https://ifconfig.me)
+  - sed -i "s/RUSTDESK_HOST_PLACEHOLDER/$PUBLIC_IP/" /opt/rustdesk/docker-compose.yml
+  - cd /opt/rustdesk && docker compose up -d
+  - ufw allow OpenSSH
+  - ufw allow 21115:21119/tcp
+  - ufw allow 21116/udp
+  - ufw --force enable
+  - sleep 8
+  - echo "=== CLE PUBLIQUE RUSTDESK (a copier) ===" > /opt/rustdesk/READ_ME.txt
+  - cat /opt/rustdesk/data/id_ed25519.pub >> /opt/rustdesk/READ_ME.txt
+  - echo "=== IP PUBLIQUE ===" >> /opt/rustdesk/READ_ME.txt
+  - echo "$PUBLIC_IP" >> /opt/rustdesk/READ_ME.txt

@@ -1,0 +1,79 @@
+name: Agent Windows (.exe)
+
+# Se déclenche quand le code de l'agent change sur la branche de production, ou à la main.
+# Le fichier est publié dans la release fixe « agent-latest » : le lien de téléchargement ne change jamais.
+on:
+  push:
+    branches: [claude/ecstatic-maxwell-z0gk4g]
+    paths: ['apps/agent/**', '.github/workflows/build-agent-windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      # Numéro de version = numéro de la fabrication : chaque fabrication est plus récente que la précédente (mise à jour automatique).
+      AGENT_VERSION: 0.1.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --workspace apps/agent --include-workspace-root
+      - name: Empaqueter en un seul fichier
+        shell: bash
+        run: npx --yes esbuild@0.24.0 apps/agent/src/cli.ts --bundle --platform=node --format=cjs --target=node22 --outfile=agent.cjs "--define:__AGENT_VERSION__=\"${AGENT_VERSION}\""
+      - name: Fabriquer l'exécutable (Node SEA)
+        shell: bash
+        run: |
+          echo '{"main":"agent.cjs","output":"sea.blob","disableExperimentalSEAWarning":true}' > sea-config.json
+          node --experimental-sea-config sea-config.json
+          node -e "require('fs').copyFileSync(process.execPath,'tech-assist-agent.exe')"
+          npm install --no-save --prefix "$RUNNER_TEMP/rc" rcedit@4.0.1
+          node -e "require(process.env.RUNNER_TEMP + '/rc/node_modules/rcedit')('tech-assist-agent.exe', {icon: 'apps/agent/assets/icon.ico', 'version-string': {ProductName: 'Tech Assist', FileDescription: 'Tech Assist - votre technicien informatique IA', CompanyName: 'NTIC Strategy', LegalCopyright: 'NTIC Strategy', OriginalFilename: 'tech-assist-agent.exe', InternalName: 'tech-assist'}, 'file-version': process.env.AGENT_VERSION + '.0', 'product-version': process.env.AGENT_VERSION + '.0'}).catch(e => { console.error(e); process.exit(1); })"
+          npx --yes postject@1.0.0-alpha.6 tech-assist-agent.exe NODE_SEA_BLOB sea.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+      # Version pour les techniciens : garde la fenêtre de terminal (affiche les messages quand on la lance avec --skill, --console…).
+      - name: Copie avec fenêtre de terminal (technicien)
+        shell: bash
+        run: cp tech-assist-agent.exe tech-assist-agent-console.exe
+      # Version client : plus de fenêtre noire. On change seulement le « sous-système » de l'exécutable (2 octets), sans outil externe.
+      - name: Masquer la fenêtre noire (version client)
+        shell: bash
+        run: node apps/agent/scripts/pe-subsystem.mjs tech-assist-agent.exe gui
+      # Le programme doit toujours démarrer : une compétence inconnue doit se terminer avec le code 2 (sans console, on teste le code, pas l'affichage).
+      - name: Test de démarrage (version client)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\tech-assist-agent.exe -ArgumentList '--skill','inconnu','--no-elevate' -Wait -PassThru -RedirectStandardOutput out.txt -RedirectStandardError err.txt
+          Get-Content out.txt, err.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 2) { throw "Demarrage anormal : code $($p.ExitCode) (2 attendu)" }
+      - name: Test de démarrage (version technicien)
+        shell: bash
+        run: |
+          code=0
+          ./tech-assist-agent-console.exe --skill inconnu --no-elevate || code=$?
+          test "$code" -eq 2
+      # Manifeste lu par les agents installés : version + empreinte SHA-256 de chaque .exe (vérifiée avant tout remplacement).
+      - name: Manifeste de mise à jour
+        shell: bash
+        run: |
+          node -e "
+          const c=require('crypto'),fs=require('fs');
+          const h=f=>c.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+          fs.writeFileSync('latest.json',JSON.stringify({version:process.env.AGENT_VERSION,files:{'tech-assist-agent.exe':{sha256:h('tech-assist-agent.exe')},'tech-assist-agent-console.exe':{sha256:h('tech-assist-agent-console.exe')}}},null,2));
+          "
+          cat latest.json
+      - name: Publier
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: agent-latest
+          target_commitish: ${{ github.sha }}
+          name: Agent Windows (dernière version)
+          files: |
+            tech-assist-agent.exe
+            tech-assist-agent-console.exe
+            latest.json
+          make_latest: true

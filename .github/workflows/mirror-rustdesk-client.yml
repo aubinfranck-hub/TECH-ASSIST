@@ -1,0 +1,110 @@
+name: Mirroir client RustDesk (Lot L2/L3)
+
+# Publie une release GitHub de ce dépôt contenant les derniers binaires
+# officiels RustDesk (Windows portable, Android APK), avec leur empreinte
+# SHA-256 — pour que le portail Tech Assist ne renvoie jamais vers un lien
+# tiers non maîtrisé (cf. cahier des charges, section Distribution : "le site
+# est la seule porte d'entrée", "empreinte SHA-256 affichée pour chaque
+# fichier"). Le client reste l'officiel, non reconfiguré — voir
+# docs/lot-l2-remote.md pour ce qui manque encore pour un client personnalisé
+# pré-configuré et signé.
+#
+# ⚠️ Non exécuté ni vérifié depuis l'environnement de développement qui a
+# écrit ce fichier (pas d'accès à GitHub Actions depuis ce bac à sable) — à
+# tester au premier déclenchement manuel avant de compter dessus.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 6 * * 1' # chaque lundi 06:00 UTC
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Récupérer la dernière release RustDesk officielle
+        id: latest
+        run: |
+          set -euo pipefail
+          data=$(curl -sS -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/rustdesk/rustdesk/releases/latest)
+          tag=$(echo "$data" | jq -r '.tag_name')
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          win_url=$(echo "$data" | jq -r '.assets[] | select(.name | test("x86_64\\.exe$")) | .browser_download_url' | head -n1)
+          apk_url=$(echo "$data" | jq -r '.assets[] | select(.name | test("\\.apk$") and (test("arm64") or test("aarch64"))) | .browser_download_url' | head -n1)
+
+          if [ -z "$win_url" ] || [ -z "$apk_url" ]; then
+            echo "Impossible de trouver les assets Windows/Android attendus dans la release $tag" >&2
+            echo "$data" | jq '.assets[].name' >&2
+            exit 1
+          fi
+
+          echo "win_url=$win_url" >> "$GITHUB_OUTPUT"
+          echo "apk_url=$apk_url" >> "$GITHUB_OUTPUT"
+
+      - name: Télécharger les binaires
+        run: |
+          set -euo pipefail
+          curl -sSL -o rustdesk-windows.exe "${{ steps.latest.outputs.win_url }}"
+          curl -sSL -o rustdesk-android.apk "${{ steps.latest.outputs.apk_url }}"
+
+      - name: Calculer les empreintes SHA-256
+        id: hashes
+        run: |
+          set -euo pipefail
+          win_sha=$(sha256sum rustdesk-windows.exe | cut -d' ' -f1)
+          apk_sha=$(sha256sum rustdesk-android.apk | cut -d' ' -f1)
+          echo "win_sha=$win_sha" >> "$GITHUB_OUTPUT"
+          echo "apk_sha=$apk_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Écrire le manifeste
+        run: |
+          cat > downloads-manifest.json <<EOF
+          {
+            "windows": {
+              "version": "${{ steps.latest.outputs.tag }}",
+              "sha256": "${{ steps.hashes.outputs.win_sha }}",
+              "filename": "rustdesk-windows.exe"
+            },
+            "android": {
+              "version": "${{ steps.latest.outputs.tag }}",
+              "sha256": "${{ steps.hashes.outputs.apk_sha }}",
+              "filename": "rustdesk-android.apk"
+            },
+            "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Publier la release miroir
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: rustdesk-mirror-${{ steps.latest.outputs.tag }}
+          name: Miroir RustDesk ${{ steps.latest.outputs.tag }}
+          body: |
+            Miroir non modifié du client RustDesk officiel ${{ steps.latest.outputs.tag }},
+            republié pour que les téléchargements Tech Assist passent par notre propre
+            domaine plutôt qu'un lien tiers.
+
+            SHA-256 Windows : `${{ steps.hashes.outputs.win_sha }}`
+            SHA-256 Android : `${{ steps.hashes.outputs.apk_sha }}`
+          files: |
+            rustdesk-windows.exe
+            rustdesk-android.apk
+            downloads-manifest.json
+
+      - name: Committer le manifeste sur main
+        run: |
+          set -euo pipefail
+          git config user.name "tech-assist-ci"
+          git config user.email "ci@techassist.local"
+          mkdir -p apps/web/public
+          cp downloads-manifest.json apps/web/public/downloads-manifest.json
+          git add apps/web/public/downloads-manifest.json
+          git diff --cached --quiet || git commit -m "chore: mise à jour du manifeste de téléchargement RustDesk (${{ steps.latest.outputs.tag }})"
+          git push

@@ -1,0 +1,144 @@
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
+// Deux espaces d'authentification distincts (technicien/admin vs entreprise) :
+// des clés localStorage séparées évitent qu'un jeton de l'un fuite vers l'autre.
+const TECHNICIAN_TOKEN_KEY = 'tech_assist_token';
+const COMPANY_TOKEN_KEY = 'tech_assist_company_token';
+
+function makeClient(tokenKey: string) {
+  async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const token = localStorage.getItem(tokenKey);
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+
+    const body = res.status === 204 ? null : await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const message = body?.error ?? `Erreur ${res.status}`;
+      throw new ApiError(message, res.status);
+    }
+
+    return body as T;
+  }
+
+  return {
+    get: <T>(path: string) => request<T>(path),
+    post: <T>(path: string, data?: unknown) =>
+      request<T>(path, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+    put: <T>(path: string, data?: unknown) =>
+      request<T>(path, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
+    patch: <T>(path: string, data?: unknown) =>
+      request<T>(path, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
+  };
+}
+
+export const api = makeClient(TECHNICIAN_TOKEN_KEY);
+export const companyApi = makeClient(COMPANY_TOKEN_KEY);
+export { TECHNICIAN_TOKEN_KEY, COMPANY_TOKEN_KEY };
+
+export type AssistanceMode = 'ia' | 'humain' | 'hybride';
+
+export interface PricingPlan {
+  id: string;
+  name: string;
+  segment: 'particulier' | 'pme' | 'visite';
+  price_fcfa: number;
+  duration_minutes: number | null;
+  description: string;
+  metadata?: {
+    subscription?: boolean;
+    periodDays?: number;
+    scope?: 'diagnostic' | 'fix' | 'full';
+    /** Un technicien humain fait-il partie de l'offre ? (particuliers : faux pour « Assistance IA ») */
+    humanIncluded?: boolean;
+    aiIncluded?: boolean;
+    /** Forfaits entreprise : nombre de postes couverts, quotas et engagements. */
+    maxDevices?: number;
+    includedAssistances?: number | null;
+    responseTimeHours?: number;
+    dedicatedTechnician?: boolean;
+    monthlyReport?: boolean;
+  };
+}
+
+export interface Order {
+  id: string;
+  status: 'pending_payment' | 'paid' | 'refunded' | 'cancelled';
+  amount_fcfa: number;
+  platform?: 'web' | 'windows' | 'android';
+  created_at: string;
+  paid_at?: string | null;
+  plan_id?: string;
+  plan_name?: string;
+  duration_minutes?: number | null;
+}
+
+export interface SessionInfo {
+  id: string;
+  session_code: string;
+  status: string;
+  code_expires_at: string;
+  duration_minutes: number;
+  started_at?: string | null;
+  ends_at?: string | null;
+  consent_screen_at?: string | null;
+  consent_control_at?: string | null;
+  technician_id?: string | null;
+  remote_peer_id?: string | null;
+  remote_paired_at?: string | null;
+  mode?: AssistanceMode;
+  requested_mode?: AssistanceMode | null;
+}
+
+export interface RemoteConfig {
+  idServer: string;
+  relayServer: string;
+  key: string;
+}
+
+export type ViewerState = 'waiting_client' | 'ready' | 'free' | 'payment_required' | 'paid' | 'ended';
+
+export interface ViewerSession {
+  id: string;
+  code: string | null;
+  label: string | null;
+  state: ViewerState;
+  freeLeft: number | null;
+  cutIn: number | null;
+  amountFcfa: number;
+  paid: boolean;
+  createdAt: string;
+  clientPaired: boolean;
+  clientConsented: boolean;
+}
+
+export interface PartnerOffer {
+  freeSeconds: number;
+  graceSeconds: number;
+  priceFcfa: number | null;
+  methods: string[];
+}
+
+export type EarningStatus = 'pending' | 'approved' | 'paid' | 'cancelled';
+
+export interface TechnicianEarnings {
+  balance: { pending: number; approved: number; paid: number };
+  payout: { phone: string | null; operator: string | null };
+  earnings: { id: string; label: string; amountFcfa: number; status: EarningStatus; createdAt: string; approvedAt: string | null; code: string }[];
+  payouts: { id: string; amountFcfa: number; reference: string; paidAt: string }[];
+}
