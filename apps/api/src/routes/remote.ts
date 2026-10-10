@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -9,6 +10,25 @@ import { expireOverdueSessions } from '../utils/sessionClock.js';
 import { decryptSecret, encryptSecret } from '../utils/crypto.js';
 
 export const remoteRouter = Router();
+
+// Le code de session est un secret temporaire : cette limite empêche de le
+// deviner à grande échelle. Elle couvre aussi le jeton d'appairage émis après
+// un code valide et la route qui enregistre les identifiants RustDesk.
+const remoteBootstrapLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
+const remotePairLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
 
 function bootstrapSecret(): string {
   const secret = process.env.REMOTE_BOOTSTRAP_SECRET ?? process.env.JWT_SECRET;
@@ -70,7 +90,7 @@ remoteRouter.get('/technician/remote-config', requireAuth('technician', 'admin')
   res.json(server ? { custom: true, ...server, configString: rustdeskConfigString(server), windows: RUSTDESK_WINDOWS } : { custom: false, windows: RUSTDESK_WINDOWS });
 });
 
-remoteRouter.get('/sessions/:code/remote-bootstrap', async (req, res) => {
+remoteRouter.get('/sessions/:code/remote-bootstrap', remoteBootstrapLimiter, async (req, res) => {
   const { rows } = await pool.query(
     'SELECT id, session_code, status, code_expires_at, created_at, remote_paired_at FROM sessions WHERE session_code = $1',
     [req.params.code],
@@ -96,7 +116,7 @@ const pairSchema = z.object({
   bootstrapToken: z.string().min(20).max(200),
 });
 
-remoteRouter.post('/sessions/:id/pair', validateBody(pairSchema), async (req, res) => {
+remoteRouter.post('/sessions/:id/pair', remotePairLimiter, validateBody(pairSchema), async (req, res) => {
   const { remotePeerId, remotePassword, bootstrapToken } = req.body as z.infer<typeof pairSchema>;
   const sessionResult = await pool.query(
     'SELECT id, session_code, status, code_expires_at, created_at, remote_paired_at FROM sessions WHERE id = $1',

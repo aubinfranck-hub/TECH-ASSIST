@@ -30,8 +30,8 @@ function getSecret(): string {
 }
 
 /** Jeton longue durée remis à l'application après inscription ; l'audience le rend inutilisable ailleurs. */
-export function signAppToken(appInstallId: string): string {
-  return jwt.sign({ kind: 'app', sub: appInstallId }, getSecret(), { expiresIn: '180d', audience: AUDIENCE });
+export function signAppToken(appInstallId: string, tokenVersion = 1): string {
+  return jwt.sign({ kind: 'app', sub: appInstallId, ver: tokenVersion }, getSecret(), { expiresIn: '30d', audience: AUDIENCE });
 }
 
 /**
@@ -44,24 +44,30 @@ export async function requireAppInstall(req: Request, res: Response, next: NextF
     return res.status(401).json({ error: 'Application non enregistrée' });
   }
   let sub: string;
+  let tokenVersion: number | undefined;
   try {
     const payload = jwt.verify(header.slice('Bearer '.length), getSecret(), { audience: AUDIENCE }) as {
       kind?: string;
       sub?: string;
+      ver?: number;
     };
     if (payload.kind !== 'app' || !payload.sub) throw new Error('jeton invalide');
     sub = payload.sub;
+    tokenVersion = payload.ver;
   } catch {
     return res.status(401).json({ error: 'Session application invalide ou expirée' });
   }
 
   const { rows } = await pool.query(
     `UPDATE app_installs SET last_seen_at = now() WHERE id = $1
-     RETURNING id, platform, client_email, client_phone, client_name, hardware_hash`,
+     RETURNING id, platform, client_email, client_phone, client_name, hardware_hash, token_version`,
     [sub],
   );
   const row = rows[0];
   if (!row) return res.status(401).json({ error: 'Installation inconnue' });
+  if (!Number.isInteger(tokenVersion) || tokenVersion !== row.token_version) {
+    return res.status(401).json({ error: 'Session application révoquée. Reconnectez l’application.' });
+  }
 
   req.appInstall = {
     id: row.id,
