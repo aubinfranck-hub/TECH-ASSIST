@@ -4,18 +4,23 @@ Plateforme d'assistance informatique à distance pour particuliers et PME
 (Côte d'Ivoire) : diagnostic IA, commande et paiement Mobile Money, sessions
 assistées avec un technicien, console technicien et administration.
 
-Ce dépôt contient le **Lot L1 — le portail** (site, API, base de données) et
-le début du **Lot L2 — service Remote**, qui s'appuie sur RustDesk
-auto-hébergé (décision D1, voir `docs/lot-l2-remote.md`) plutôt que de
-réinventer WebRTC/capture d'écran/injection d'entrées. Le parcours
-d'appairage (code de session, consentement, identifiants chiffrés) est
-implémenté ; le client Windows sur mesure et signé reste à construire.
+Ce dépôt regroupe le portail, l'API, l'agent Windows et l'application Android.
+L'assistance à distance s'appuie sur RustDesk auto-hébergé (décision D1) plutôt
+que de réinventer WebRTC, la capture d'écran et l'injection d'entrées. Le
+parcours d'appairage (code de session, consentement, identifiants chiffrés) est
+implémenté.
+
+La [bibliothèque Tech Assist](docs/bibliotheque/README.md) est le point d'entrée
+pour découvrir les modules livrés, leur rôle, leur statut et les documents de
+référence.
 
 ## Structure
 
 ```
 apps/api        API Node.js/Express + TypeScript, PostgreSQL
 apps/web        Site React + TypeScript + Vite + Tailwind
+apps/agent      Agent Windows local de diagnostic, réparation et formation
+apps/android    Application Android native client / technicien
 infra/rustdesk  Docker Compose du serveur RustDesk auto-hébergé (Lot L2)
 docs/           Notes d'architecture par lot
 ```
@@ -51,6 +56,20 @@ npm run test --workspace apps/api
 
 Les tests d'intégration utilisent une base PostgreSQL dédiée
 (`DATABASE_URL` pointant vers une base de test, migrée au préalable).
+
+## Produits inclus
+
+- **Portail web** : présentation, commande, espace client, console technicien,
+  administration, partenaires et entreprises.
+- **Agent Windows** : diagnostic, maintenance guidée, réparation avec accord,
+  chat local, formation et passage de main à un technicien.
+- **Application Android** : création et suivi d'assistance, chat et contrôle
+  d'accès à distance avec consentement.
+- **API** : sessions, paiements, comptes, abonnement, IA, notifications,
+  audit et intégration RustDesk.
+
+Consultez la [bibliothèque fonctionnelle](docs/bibliotheque/README.md) pour le
+catalogue détaillé et les limites connues.
 
 ## Ce qui est fait (Lot L1)
 
