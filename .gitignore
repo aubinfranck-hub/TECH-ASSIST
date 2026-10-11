@@ -12,3 +12,4 @@ apps/api/dist/
 
 # sauvegardes produites par infra/render/consolidate-into-ntic.sh (données réelles)
 ntic-db-backups/
+ntic-migration.env

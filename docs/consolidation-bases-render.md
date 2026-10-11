@@ -40,47 +40,59 @@ réseau interne de Render. Dashboard → la base → *Networking* → *Inbound I
 Rules* → ajouter ton IP publique en `/32` (voir `https://ifconfig.me`).
 `ntic-shared-db` est déjà ouverte.
 
-**2. Récupérer les URL.** Dashboard → la base → *Connect* → **External**
-Database URL, pour `ntic-shared-db` et pour chaque source. Ne les colle ni dans
-le dépôt ni dans une conversation.
+**2. Récupérer les URL et les mettre dans un fichier local.** Dashboard → la
+base → *Connect* → **External** Database URL, pour `ntic-shared-db` et pour
+chaque source. À la racine du dépôt, créer le fichier `ntic-migration.env`
+(ignoré par git, ne jamais le commiter ni coller son contenu dans une
+conversation) : une ligne `NOM=valeur` par URL, **sans guillemets** :
 
-**3. Lancer la migration** depuis la racine du dépôt, dans un terminal bash
-(macOS, Linux, ou Windows avec WSL / Git Bash). Le client `pg_dump` doit avoir
-une version **≥ à celle de la base source** : 16 suffit pour `juriscoach`,
-`diagassist` et `skindiag` ; il faut **18** pour `etravail` et `foncier360`
-(sinon, variante Docker ci-dessous). Les deux groupes se lancent séparément.
+```
+NTIC_ADMIN_URL=postgresql://ntic_shared_db_user:…@dpg-dag1uq67bikc73e1gisg-a.frankfurt-postgres.render.com/ntic_shared_db
+SRC_JURISCOACH_URL=postgresql://juriscoach_db_user:…@dpg-dai2gumq1p3s73aqfca0-a.frankfurt-postgres.render.com/juriscoach_db
+SRC_DIAGASSIST_URL=postgresql://diagassist_db_user:…@dpg-dacrg2e1egvs73f3hdjg-a.frankfurt-postgres.render.com/diagassist_db
+SRC_SKINDIAG_URL=postgresql://skindiag_db_user:…@dpg-dag9jb6q1p3s73c77gn0-a.frankfurt-postgres.render.com/skindiag_db
+SRC_ETRAVAIL_URL=postgresql://etravail_db_user:…@dpg-daptqa2jnfac73e07670-a.frankfurt-postgres.render.com/etravail_db
+SRC_FONCIER360_URL=postgresql://foncier360_db_user:…@dpg-db12ml2d0e5s73dqnbd0-a.frankfurt-postgres.render.com/foncier360_db
+```
 
-```bash
-export NTIC_ADMIN_URL='postgresql://…@…frankfurt-postgres.render.com/ntic_shared_db'
+(Les noms d'hôte ci-dessus suivent le format Render habituel : copier l'URL
+exacte du dashboard plutôt que de la reconstruire.)
 
-# Groupe A — sources en PostgreSQL 16 (commencer par juriscoach)
-export SRC_JURISCOACH_URL='…' SRC_DIAGASSIST_URL='…' SRC_SKINDIAG_URL='…'
-infra/render/consolidate-into-ntic.sh --check juriscoach diagassist skindiag   # n'écrit rien
-infra/render/consolidate-into-ntic.sh juriscoach diagassist skindiag           # migre
+**3. Lancer la migration avec Docker** (rien d'autre à installer ; l'image
+`postgres:18` fournit un client compatible avec toutes les sources). Depuis la
+racine du dépôt, **un projet à la fois pour commencer**, d'abord à blanc :
 
-# Groupe B — sources en PostgreSQL 18 (client 18 ou Docker)
-export SRC_ETRAVAIL_URL='…' SRC_FONCIER360_URL='…'
-infra/render/consolidate-into-ntic.sh --check etravail foncier360
-infra/render/consolidate-into-ntic.sh etravail foncier360
+PowerShell (Windows) :
+
+```powershell
+docker run --rm --env-file ntic-migration.env -v "${PWD}:/work" -w /work postgres:18 bash infra/render/consolidate-into-ntic.sh --check juriscoach
+docker run --rm --env-file ntic-migration.env -v "${PWD}:/work" -w /work postgres:18 bash infra/render/consolidate-into-ntic.sh juriscoach
+```
+
+bash (macOS, Linux, WSL, Git Bash) : identique, avec `-v "$PWD":/work` à la place de `-v "${PWD}:/work"`.
+
+Puis, une fois `juriscoach` terminé, les quatre autres en une commande
+(`--check` d'abord, puis sans) :
+
+```powershell
+docker run --rm --env-file ntic-migration.env -v "${PWD}:/work" -w /work postgres:18 bash infra/render/consolidate-into-ntic.sh --check diagassist skindiag etravail foncier360
+docker run --rm --env-file ntic-migration.env -v "${PWD}:/work" -w /work postgres:18 bash infra/render/consolidate-into-ntic.sh diagassist skindiag etravail foncier360
 ```
 
 Succès = chaque projet affiche `OK : toutes les tables ont le même nombre de
 lignes`, puis `Terminé`. Toute ligne `ERREUR` = rien n'est à basculer pour ce
-projet ; la source n'a pas été modifiée.
+projet ; la source n'a pas été modifiée. Si le dépôt a été cloné sous Windows **avant** le commit qui ajoute
+`.gitattributes`, le script peut avoir des fins de ligne CRLF et échouer dans le
+conteneur (`$'\r': command not found`) : le plus simple est de
+recloner le dépôt une fois ce commit présent sur la branche.
 
-Variante Docker (si Docker est installé, évite d'installer un client 18 ;
-exemple pour le groupe B, les variables `export` ci-dessus doivent être définies ;
-pour `--check`, ajouter `--check` avant les noms de projets) :
-
-```bash
-docker run --rm -it -v "$PWD":/work -w /work \
-  -e NTIC_ADMIN_URL -e SRC_ETRAVAIL_URL -e SRC_FONCIER360_URL \
-  postgres:18 bash infra/render/consolidate-into-ntic.sh etravail foncier360
-```
+Sans Docker : le script tourne aussi directement dans un terminal bash avec un
+client `psql`/`pg_dump` en version ≥ 18 (≥ 16 suffit pour `juriscoach`,
+`diagassist`, `skindiag`), avec les mêmes variables en `export`.
 
 Le script s'arrête avec un message clair au moindre écart (connexion, version,
 base cible déjà remplie, comptage différent). Il ne modifie jamais la source et
-n'écrase jamais une base cible non vide. Les sauvegardes restent dans
+n'écrase jamais une base cible non vide. Les sauvegardes `.dump` restent dans
 `ntic-db-backups/` (ignoré par git).
 
 **4. Basculer chaque service.** Dashboard → le service → *Environment* →
