@@ -115,9 +115,18 @@ normal) :
 - supprimer les anciennes bases : *Settings* → *Delete Database* ;
 - retirer les règles IP ajoutées à l'étape 1 ; conserver les `.dump` quelque part.
 
-**6. Optionnel : `diagassist-production` Starter → Free** (*Settings* →
-*Instance Type*), −7 $/mois. Contrepartie : mise en veille après 15 min sans
-trafic, premier appel suivant lent (~30-60 s).
+**6. `diagassist-production` : on le laisse en Starter (7 $/mois).** Il est en
+production avec un nom de domaine : en Free, il se mettrait en veille après
+15 min sans trafic et le premier visiteur attendrait 30 à 60 s. Coût total visé :
+≈ 10,50 $ (ntic-shared-db) + 7 $ = **≈ 17,50 $/mois** (contre ≈ 67 $).
+
+**`diagassist-db` est une base de production : la migrer en dernier**, une fois
+les quatre autres projets validés (même procédure, déjà rodée). Pour ne perdre
+aucune écriture entre la copie et la bascule : activer le *Maintenance Mode* de
+`diagassist-production` (*Settings*), lancer la migration, basculer
+`DATABASE_URL`, vérifier le site sur son domaine, puis désactiver le mode
+maintenance. Faire de même pour `diagassist-hpweb-gateway` s'il écrit dans cette
+base.
 
 ## Limites
 
