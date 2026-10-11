@@ -14,17 +14,20 @@ pas être réduit, d'où le regroupement dans l'instance existante.
 
 ## Les bases concernées
 
-| Base source | PG | Service à basculer¹ | Base cible |
+| Base source (identifiant dans l'URL) | PG | Service à basculer¹ | Base cible |
 |---|---|---|---|
-| `juriscoach-db` (**gratuite, expire le 11/10/2026 à 16:12 UTC**) | 16 | `juriscoach-production` | `juriscoach` |
-| `diagassist-db` | 16 | `diagassist-production` (+ `diagassist-hpweb-gateway` si son `DATABASE_URL` pointe dessus) | `diagassist` |
-| `skindiag-db` | 16 | `skindiag-production` | `skindiag` |
-| `etravail-db` | 18 | `etravail-api` | `etravail` |
-| `foncier360-db` | 18 | `foncier360-production` | `foncier360` |
-| `E.travail` | 18 | aucun : **vide** (0 table) → à supprimer | — |
+| [`juriscoach-db`](https://dashboard.render.com/d/dpg-dai2gumq1p3s73aqfca0-a) `dpg-dai2gumq1p3s73aqfca0-a` (**gratuite, expire le 11/10/2026 à 16:12 UTC**) | 16 | [`juriscoach-production`](https://dashboard.render.com/web/srv-dag5culbedkc73fkifc0) | `juriscoach` |
+| [`diagassist-db`](https://dashboard.render.com/d/dpg-dacrg2e1egvs73f3hdjg-a) `dpg-dacrg2e1egvs73f3hdjg-a` | 16 | [`diagassist-production`](https://dashboard.render.com/web/srv-dacmsrh5efls73f0hg20) ; voir aussi [`diagassist-hpweb-gateway`](https://dashboard.render.com/web/srv-dasn0m3bc2fs73fvufd0) | `diagassist` |
+| [`skindiag-db`](https://dashboard.render.com/d/dpg-dag9jb6q1p3s73c77gn0-a) `dpg-dag9jb6q1p3s73c77gn0-a` | 16 | [`skindiag-production`](https://dashboard.render.com/web/srv-dag5shijnfac73bq4ud0) | `skindiag` |
+| [`etravail-db`](https://dashboard.render.com/d/dpg-daptqa2jnfac73e07670-a) `dpg-daptqa2jnfac73e07670-a` | 18 | [`etravail-api`](https://dashboard.render.com/web/srv-daptqe2d0e5s73add4a0) | `etravail` |
+| [`foncier360-db`](https://dashboard.render.com/d/dpg-db12ml2d0e5s73dqnbd0-a) `dpg-db12ml2d0e5s73dqnbd0-a` | 18 | [`foncier360-production`](https://dashboard.render.com/web/srv-db12mf8u01pc73ci5ihg) | `foncier360` |
+| [`E.travail`](https://dashboard.render.com/d/dpg-dapur3rncjis73fpumtg-a) `dpg-dapur3rncjis73fpumtg-a` | 18 | aucun : **vide** (0 table) → à supprimer | — |
+| [`ntic-shared-db`](https://dashboard.render.com/d/dpg-dag1uq67bikc73e1gisg-a) `dpg-dag1uq67bikc73e1gisg-a` | 18 | **cible** de toutes les migrations | — |
 
-¹ Association déduite des noms : vérifier dans l'onglet *Environment* de chaque
-service que le `DATABASE_URL` contient bien l'identifiant (`dpg-…`) de la base.
+¹ Association déduite des noms, non vérifiée : ouvrir l'onglet *Environment* du
+service, regarder le `DATABASE_URL` ; l'identifiant `dpg-…` situé après le `@`
+dit sur quelle base il pointe. Si le service utilise un autre nom de variable
+(ex. `DB_URL`), c'est celle-là qu'il faut changer.
 
 ## Étapes
 
@@ -41,27 +44,38 @@ Rules* → ajouter ton IP publique en `/32` (voir `https://ifconfig.me`).
 Database URL, pour `ntic-shared-db` et pour chaque source. Ne les colle ni dans
 le dépôt ni dans une conversation.
 
-**3. Lancer la migration** depuis la racine du dépôt (client PostgreSQL ≥ 18
-requis pour les sources en 18 ; sinon voir la variante Docker) :
+**3. Lancer la migration** depuis la racine du dépôt, dans un terminal bash
+(macOS, Linux, ou Windows avec WSL / Git Bash). Le client `pg_dump` doit avoir
+une version **≥ à celle de la base source** : 16 suffit pour `juriscoach`,
+`diagassist` et `skindiag` ; il faut **18** pour `etravail` et `foncier360`
+(sinon, variante Docker ci-dessous). Les deux groupes se lancent séparément.
 
 ```bash
-export NTIC_ADMIN_URL='postgres://…ntic-shared-db…'
-export SRC_JURISCOACH_URL='…' SRC_DIAGASSIST_URL='…' SRC_SKINDIAG_URL='…' \
-       SRC_ETRAVAIL_URL='…' SRC_FONCIER360_URL='…'
+export NTIC_ADMIN_URL='postgresql://…@…frankfurt-postgres.render.com/ntic_shared_db'
 
-# 1) à blanc : connexions, versions, tables — n'écrit rien
-infra/render/consolidate-into-ntic.sh --check juriscoach diagassist skindiag etravail foncier360
-# 2) migration (sauvegarde .dump + recomptage des lignes table par table)
-infra/render/consolidate-into-ntic.sh juriscoach diagassist skindiag etravail foncier360
+# Groupe A — sources en PostgreSQL 16 (commencer par juriscoach)
+export SRC_JURISCOACH_URL='…' SRC_DIAGASSIST_URL='…' SRC_SKINDIAG_URL='…'
+infra/render/consolidate-into-ntic.sh --check juriscoach diagassist skindiag   # n'écrit rien
+infra/render/consolidate-into-ntic.sh juriscoach diagassist skindiag           # migre
+
+# Groupe B — sources en PostgreSQL 18 (client 18 ou Docker)
+export SRC_ETRAVAIL_URL='…' SRC_FONCIER360_URL='…'
+infra/render/consolidate-into-ntic.sh --check etravail foncier360
+infra/render/consolidate-into-ntic.sh etravail foncier360
 ```
 
-Variante Docker (n'exige aucune installation, client en version 18) :
+Succès = chaque projet affiche `OK : toutes les tables ont le même nombre de
+lignes`, puis `Terminé`. Toute ligne `ERREUR` = rien n'est à basculer pour ce
+projet ; la source n'a pas été modifiée.
+
+Variante Docker (si Docker est installé, évite d'installer un client 18 ;
+exemple pour le groupe B, les variables `export` ci-dessus doivent être définies ;
+pour `--check`, ajouter `--check` avant les noms de projets) :
 
 ```bash
 docker run --rm -it -v "$PWD":/work -w /work \
-  -e NTIC_ADMIN_URL -e SRC_JURISCOACH_URL -e SRC_DIAGASSIST_URL \
-  -e SRC_SKINDIAG_URL -e SRC_ETRAVAIL_URL -e SRC_FONCIER360_URL \
-  postgres:18 bash infra/render/consolidate-into-ntic.sh juriscoach diagassist skindiag etravail foncier360
+  -e NTIC_ADMIN_URL -e SRC_ETRAVAIL_URL -e SRC_FONCIER360_URL \
+  postgres:18 bash infra/render/consolidate-into-ntic.sh etravail foncier360
 ```
 
 Le script s'arrête avec un message clair au moindre écart (connexion, version,
@@ -70,10 +84,17 @@ n'écrase jamais une base cible non vide. Les sauvegardes restent dans
 `ntic-db-backups/` (ignoré par git).
 
 **4. Basculer chaque service.** Dashboard → le service → *Environment* →
-`DATABASE_URL` = l'URL **Internal** de `ntic-shared-db`, en remplaçant le nom de
-base final (`ntic_shared_db`) par le nom de la base cible du tableau. Enregistrer
-redéploie le service ; tester l'application ensuite. Retour arrière : remettre
-l'ancienne URL tant que l'ancienne base existe.
+`DATABASE_URL` = l'URL **Internal** de `ntic-shared-db` (*Connect* → *Internal*),
+en remplaçant **uniquement** le nom de base à la fin :
+
+```
+postgresql://ntic_shared_db_user:MOT_DE_PASSE@dpg-dag1uq67bikc73e1gisg-a/ntic_shared_db
+                                                                        └─ remplacer par juriscoach, diagassist, skindiag, etravail ou foncier360
+```
+
+Enregistrer redéploie le service ; tester l'application ensuite (ouvrir le site,
+se connecter, vérifier une donnée connue). Retour arrière : remettre l'ancienne
+URL tant que l'ancienne base existe.
 
 **5. Nettoyer** (économies réelles, seulement après 24-48 h de fonctionnement
 normal) :
