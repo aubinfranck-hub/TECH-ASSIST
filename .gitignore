@@ -9,3 +9,6 @@ coverage/
 apps/web/dist/
 apps/api/dist/
 *.tsbuildinfo
+
+# sauvegardes produites par infra/render/consolidate-into-ntic.sh (données réelles)
+ntic-db-backups/
