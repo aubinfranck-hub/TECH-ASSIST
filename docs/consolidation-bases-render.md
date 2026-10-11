@@ -62,7 +62,26 @@ exacte du dashboard plutôt que de la reconstruire.)
 `postgres:18` fournit un client compatible avec toutes les sources). Depuis la
 racine du dépôt, **un projet à la fois pour commencer**, d'abord à blanc :
 
-PowerShell (Windows) :
+**Windows PowerShell (le plus simple) : `infra/render/migrate.ps1`.** Il demande
+les URL au clavier (saisie masquée, rien n'est écrit sur le disque), vérifie que
+ce sont bien des URL *External* et lance Docker. Depuis la racine du dépôt, dans
+une fenêtre PowerShell normale (pas l'ISE) ; `-ExecutionPolicy Bypass` évite le
+blocage « l'exécution de scripts est désactivée » sans changer ta configuration :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\infra\render\migrate.ps1 -Check juriscoach
+powershell -NoProfile -ExecutionPolicy Bypass -File .\infra\render\migrate.ps1 juriscoach
+powershell -NoProfile -ExecutionPolicy Bypass -File .\infra\render\migrate.ps1 skindiag etravail foncier360
+```
+
+(Ce wrapper PowerShell n'a pas pu être exécuté lors de sa rédaction : `-Check`
+d'abord. La partie qui touche aux bases, `consolidate-into-ntic.sh`, est testée.)
+
+Alternative sans le script PowerShell, avec le fichier `ntic-migration.env` :
+sous Windows PowerShell 5.1, ne **jamais** le créer avec `>` ou `Out-File` (UTF‑16,
+illisible par Docker) : utiliser `notepad ntic-migration.env` et enregistrer en UTF‑8.
+
+PowerShell (Windows), avec le fichier d'URL :
 
 ```powershell
 docker run --rm --env-file ntic-migration.env -v "${PWD}:/work" -w /work postgres:18 bash infra/render/consolidate-into-ntic.sh --check juriscoach
