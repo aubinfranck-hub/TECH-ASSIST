@@ -1,13 +1,13 @@
 {
   "windows": {
-    "version": "1.5.0",
-    "sha256": "8555777215510d83d2d61c9dc984e4fcc838bd7e79f9d18a42585431f5e8bb47",
+    "version": "1.5.1",
+    "sha256": "319206042390ebfcba934cf0baa2f612f34de463c78c843b7cb8c22097c4bf7b",
     "filename": "rustdesk-windows.exe"
   },
   "android": {
-    "version": "1.5.0",
-    "sha256": "dc37d05c0d382455e19cf9acc9dc89f7f8cf01264b2643fb4f71f6bb15bf9b4f",
+    "version": "1.5.1",
+    "sha256": "cfc44193ef96dd601d25c9a29f1aa5385effdbaae33d2abbb1d88495797f6b84",
     "filename": "rustdesk-android.apk"
   },
-  "publishedAt": "2026-10-26T12:28:08Z"
+  "publishedAt": "2026-11-02T15:02:14Z"
 }
