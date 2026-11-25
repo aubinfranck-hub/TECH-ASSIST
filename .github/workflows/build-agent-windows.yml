@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
     paths: ['apps/agent/**', '.github/workflows/build-agent-windows.yml']
+  pull_request:
+    paths: ['apps/agent/**', '.github/workflows/build-agent-windows.yml']
   workflow_dispatch:
 
 permissions:
@@ -67,6 +69,7 @@ jobs:
           "
           cat latest.json
       - name: Publier
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: agent-latest
