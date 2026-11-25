@@ -84,7 +84,7 @@ export interface Slide {
 const IMAGE_PATH = /^\/img\/[A-Za-z0-9._-]{1,60}\.(jpg|jpeg|png|webp)$/;
 const MAX_SLIDES = 10;
 const MAX_IMAGE_BYTES = 800_000;
-export const DEFAULT_SITE = 'https://tech-assist-web.onrender.com';
+export const DEFAULT_SITE = 'https://techassist.62.171.184.248.sslip.io';
 
 const str = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim().length > 0 && v.length <= max ? v.trim() : null);
 

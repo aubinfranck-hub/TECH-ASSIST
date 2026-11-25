@@ -1,7 +1,8 @@
 name: TechAssist Android
 on:
   push:
-    branches: ["claude/ecstatic-maxwell-z0gk4g"]
+    branches: ["main"]
+    paths: ['apps/android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 jobs:
   build:

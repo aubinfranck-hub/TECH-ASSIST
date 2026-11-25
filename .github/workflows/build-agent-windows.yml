@@ -4,7 +4,7 @@ name: Agent Windows (.exe)
 # Le fichier est publié dans la release fixe « agent-latest » : le lien de téléchargement ne change jamais.
 on:
   push:
-    branches: [claude/ecstatic-maxwell-z0gk4g]
+    branches: [main]
     paths: ['apps/agent/**', '.github/workflows/build-agent-windows.yml']
   workflow_dispatch:
 
