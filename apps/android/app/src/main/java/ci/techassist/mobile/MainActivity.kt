@@ -11,7 +11,7 @@ import android.widget.*
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
-    private val api = ApiClient("https://tech-assist-api.onrender.com")
+    private val api = ApiClient("https://techassist-api.62.171.184.248.sslip.io")
     private val io = Executors.newSingleThreadExecutor()
     private var sessionId: String? = null
     private var sessionCode: String? = null

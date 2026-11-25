@@ -6,7 +6,7 @@ import { guarded, readScript } from './skills/common.js';
 import type { CommandRunner, ConversationUi } from './types.js';
 
 /** Adresse du serveur Tech Assist : fixée à la fabrication du programme, modifiable pour les essais. */
-export const DEFAULT_API_BASE = 'https://tech-assist-api.onrender.com';
+export const DEFAULT_API_BASE = 'https://techassist-api.62.171.184.248.sslip.io';
 
 export interface SavedAccount {
   installId: string;
